@@ -103,7 +103,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .attr('font-size', '10px')
       .attr('transform', (d) => `rotate(${90 - (d.x * 180) / Math.PI})`)
       .text((d) => d.data.full_name || d.data.label || 'Unknown');
-  }, [data]);
+  }, [data, onPersonClick]);
 
   return (
     <Box ref={containerRef} sx={{ width: '100%', height: '100%', overflow: 'auto' }}>

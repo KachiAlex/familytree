@@ -14,6 +14,8 @@ import {
   AppBar,
   Toolbar,
   IconButton,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -31,6 +33,7 @@ const FamilySettings = () => {
   const [family, setFamily] = useState(null);
   const [members, setMembers] = useState([]);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   useEffect(() => {
     fetchFamilyDetails();
@@ -58,7 +61,11 @@ const FamilySettings = () => {
 
     // In client-only mode, we don't implement email invitations yet.
     // You can manually invite relatives by helping them register and create/join families.
-    alert('Invitations are not implemented yet in client-only mode. This will be added when backend functions are enabled.');
+    setSnackbar({ 
+      open: true, 
+      message: 'Invitations are not implemented yet in client-only mode. This will be added when backend functions are enabled.', 
+      severity: 'info' 
+    });
   };
 
   if (!family) {
@@ -164,6 +171,21 @@ const FamilySettings = () => {
           </List>
         </Paper>
       </Container>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 };

@@ -29,6 +29,7 @@ import {
 import { ArrowBack as ArrowBackIcon, Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon } from '@mui/icons-material';
 import { db, storage } from '../firebase';
 import { exportPersonProfileToPDF } from '../utils/pdfExport';
+import { compressImage } from '../utils/imageCompression';
 import { useAuth } from '../contexts/AuthContext';
 import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
 import {
@@ -528,7 +529,7 @@ const PersonDetail = () => {
 
   const handleCreateNewPerson = async () => {
     if (!person || !newPersonValues.full_name.trim()) {
-      alert('Please provide at least a full name.');
+      setSnackbar({ open: true, message: 'Please provide at least a full name.', severity: 'warning' });
       return;
     }
     try {
@@ -782,10 +783,12 @@ const PersonDetail = () => {
                       }
                       setUploadingProfilePicture(true);
                       try {
-                        const fileExt = file.name.split('.').pop();
+                        // Compress image before upload
+                        const compressedFile = await compressImage(file, 1920, 1920, 0.8);
+                        const fileExt = compressedFile.name.split('.').pop();
                         const fileName = `profile_${person.person_id}_${Date.now()}.${fileExt}`;
                         const storageRef = ref(storage, `profiles/${person.family_id}/${fileName}`);
-                        const snapshot = await uploadBytes(storageRef, file);
+                        const snapshot = await uploadBytes(storageRef, compressedFile);
                         const photoUrl = await getDownloadURL(snapshot.ref);
                         await updateDoc(doc(db, 'persons', person.person_id), {
                           profile_photo_url: photoUrl,
@@ -846,6 +849,17 @@ const PersonDetail = () => {
                       onClick={() => setDeleteDialogOpen(true)}
                     >
                       Delete
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      color="success"
+                      startIcon={<CheckCircleIcon />}
+                      onClick={() => {
+                        setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' });
+                      }}
+                    >
+                      Verify
                     </Button>
                   </>
                 )}
@@ -1213,7 +1227,7 @@ const PersonDetail = () => {
                                   await fetchDocuments(person.person_id, person.family_id);
                                 } catch (error) {
                                   console.error('Failed to delete document:', error);
-                                  alert('Failed to delete document');
+                                  setSnackbar({ open: true, message: 'Failed to delete document', severity: 'error' });
                                 }
                               }
                             }}
@@ -1433,7 +1447,7 @@ const PersonDetail = () => {
                 if (file) {
                   // Check file size (max 50MB for audio)
                   if (file.size > 50 * 1024 * 1024) {
-                    alert('Audio file size must be less than 50MB');
+                    setSnackbar({ open: true, message: 'Audio file size must be less than 50MB', severity: 'error' });
                     return;
                   }
                   setStoryAudioFile(file);
@@ -1845,7 +1859,7 @@ const PersonDetail = () => {
                   
                   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                   if (!emailRegex.test(inviteEmail)) {
-                    alert('Please enter a valid email address');
+                    setSnackbar({ open: true, message: 'Please enter a valid email address', severity: 'warning' });
                     return;
                   }
 
@@ -1875,7 +1889,7 @@ const PersonDetail = () => {
                     setInviteSuccess(true);
                   } catch (error) {
                     console.error('Failed to create invitation:', error);
-                    alert('Failed to create invitation. Please try again.');
+                    setSnackbar({ open: true, message: 'Failed to create invitation. Please try again.', severity: 'error' });
                   } finally {
                     setInviteSending(false);
                   }
@@ -1948,7 +1962,7 @@ const PersonDetail = () => {
                 if (file) {
                   // Check file size (max 10MB)
                   if (file.size > 10 * 1024 * 1024) {
-                    alert('File size must be less than 10MB');
+                    setSnackbar({ open: true, message: 'File size must be less than 10MB', severity: 'error' });
                     return;
                   }
                   setUploadFile(file);
@@ -1994,13 +2008,18 @@ const PersonDetail = () => {
               
               setUploading(true);
               try {
+                let fileToUpload = uploadFile;
+                // Compress images before upload
+                if (uploadType === 'photo' && uploadFile.type.startsWith('image/')) {
+                  fileToUpload = await compressImage(uploadFile, 1920, 1920, 0.8);
+                }
                 // Create unique filename
-                const fileExt = uploadFile.name.split('.').pop();
+                const fileExt = fileToUpload.name.split('.').pop();
                 const fileName = `${person.person_id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
                 const storageRef = ref(storage, `documents/${person.family_id}/${fileName}`);
 
                 // Upload file to Firebase Storage
-                const snapshot = await uploadBytes(storageRef, uploadFile);
+                const snapshot = await uploadBytes(storageRef, fileToUpload);
                 const downloadURL = await getDownloadURL(snapshot.ref);
 
                 // Create document record in Firestore
@@ -2031,7 +2050,7 @@ const PersonDetail = () => {
                 setUploadType('photo');
               } catch (error) {
                 console.error('Failed to upload document:', error);
-                alert('Failed to upload document. Please try again.');
+                setSnackbar({ open: true, message: 'Failed to upload document. Please try again.', severity: 'error' });
               } finally {
                 setUploading(false);
               }

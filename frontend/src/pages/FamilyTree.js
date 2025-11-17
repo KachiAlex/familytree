@@ -10,7 +10,6 @@ import {
   Tabs,
   Tab,
   Paper,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -385,7 +384,7 @@ const FamilyTree = () => {
         setExportMenuAnchor(null);
       } catch (error) {
         console.error('Failed to export tree:', error);
-        alert('Failed to export family data. Please try again.');
+        setSnackbar({ open: true, message: 'Failed to export family data. Please try again.', severity: 'error' });
       }
     },
     [filteredTreeData, familyId, familyInfo]

@@ -187,7 +187,7 @@ const Dashboard = () => {
     try {
       const userId = user?.user_id || user?.userId || user?.uid;
       if (!userId) {
-        alert('Unable to determine user. Please re-login.');
+        setError('Unable to determine user. Please re-login.');
         return;
       }
 

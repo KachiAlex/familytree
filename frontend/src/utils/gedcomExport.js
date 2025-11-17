@@ -102,7 +102,7 @@ export const generateGEDCOM = (treeData, familyInfo) => {
     const parentId = personIdMap.get(rel.source);
     
     // Find which family this child belongs to
-    for (const [familyId, family] of familyMap.entries()) {
+    for (const [, family] of familyMap.entries()) {
       if (family.husband === parentId || family.wife === parentId) {
         if (!family.children.includes(childId)) {
           family.children.push(childId);
@@ -251,7 +251,6 @@ export const parseGEDCOM = (gedcomContent) => {
   const familyMap = new Map();
 
   let currentRecord = null;
-  let currentLevel = -1;
   let currentTag = null;
 
   lines.forEach((line) => {
@@ -278,7 +277,6 @@ export const parseGEDCOM = (gedcomContent) => {
       } else {
         currentRecord = null;
       }
-      currentLevel = 0;
       return;
     }
 
