@@ -1,0 +1,179 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // A user is considered the owner of a family if they created it.
+    function isFamilyOwner(familyId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/families/$(familyId))
+             .data.created_by_user_id == request.auth.uid;
+    }
+
+    // A user is a family member if they are the owner OR have a familyMembers entry
+    function isFamilyMember(familyId) {
+      return isSignedIn() && (
+        isFamilyOwner(familyId) ||
+        exists(/databases/$(database)/documents/familyMembers/$(familyId + '_' + request.auth.uid)) ||
+        exists(/databases/$(database)/documents/familyMembers/$(request.auth.uid + '_' + familyId))
+      );
+    }
+
+    // USERS: each user can only read/update their own profile.
+    match /users/{userId} {
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // FAMILY MEMBERS: track who has access to a family
+    // Document ID format: {familyId}_{userId}
+    match /familyMembers/{memberId} {
+      // Create: family owner can add members, or user can add themselves if invited
+      allow create: if isSignedIn()
+        && (isFamilyOwner(request.resource.data.family_id)
+            || request.resource.data.user_id == request.auth.uid);
+
+      // Read: family members can see who else is in their family
+      allow read: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+
+      // Update: family owner can update roles, or user can update their own status
+      allow update: if isSignedIn()
+        && (isFamilyOwner(resource.data.family_id)
+            || resource.data.user_id == request.auth.uid);
+
+      // Delete: family owner can remove members
+      allow delete: if isSignedIn()
+        && isFamilyOwner(resource.data.family_id);
+    }
+
+    // FAMILIES: family members can see and edit their families.
+    match /families/{familyId} {
+      // Create: authenticated user creating a family they own
+      allow create: if isSignedIn()
+        && request.resource.data.created_by_user_id == request.auth.uid;
+
+      // Read / update: family members
+      allow read, update: if isFamilyMember(familyId);
+
+      // No direct delete for now
+      allow delete: if false;
+    }
+
+    // PERSONS: belong to a family via family_id.
+    // Read: family members can read all persons in their family.
+    // Update/delete: family members OR person owner (ownerUserId).
+    match /persons/{personId} {
+      // Create: require auth and that the user is a member of the target family
+      allow create: if isSignedIn()
+        && isFamilyMember(request.resource.data.family_id);
+
+      // Read: family members can read all persons in their family
+      allow read: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+
+      // Update/delete: family members or claimed owner of that person
+      allow update, delete: if isSignedIn()
+        && (isFamilyMember(resource.data.family_id)
+          || resource.data.ownerUserId == request.auth.uid);
+    }
+
+    // USER RELATIONSHIPS: how a given person relates to the current user
+    match /userRelationships/{relId} {
+      // Read/write: user can manage their own relationships, or family members can manage any in their family
+      allow read, write: if isSignedIn()
+        && (request.auth.uid == resource.data.user_id
+          || request.auth.uid == request.resource.data.user_id
+          || isFamilyMember(resource.data.family_id));
+    }
+
+    // RELATIONSHIPS: simple parent-child relationships within a family.
+    match /relationships/{relId} {
+      // Create: require auth and membership in the family
+      allow create: if isSignedIn()
+        && isFamilyMember(request.resource.data.family_id);
+
+      // Read/update/delete: family members
+      allow read, update, delete: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+    }
+
+    // SPOUSE RELATIONSHIPS: spouse relationships within a family.
+    match /spouseRelationships/{relId} {
+      // Create: require auth and membership in the family
+      allow create: if isSignedIn()
+        && isFamilyMember(request.resource.data.family_id);
+
+      // Read/update/delete: family members
+      allow read, update, delete: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+    }
+
+    // PERSON INVITATIONS: invitations to claim a person's profile
+    match /personInvitations/{invitationId} {
+      // Create: family owner can create invitations for persons in their family
+      allow create: if isSignedIn()
+        && isFamilyOwner(request.resource.data.family_id);
+
+      // Read: allow reading invitations (token is in URL, so this is acceptable)
+      // In production, you might want to restrict this further
+      allow read: if true;
+
+      // Update: only to mark as accepted/claimed (by the invited user)
+      allow update: if isSignedIn()
+        && (isFamilyOwner(resource.data.family_id)
+          || (request.auth.token.email != null
+            && request.auth.token.email.lower() == resource.data.email.lower()
+            && request.resource.data.status == 'accepted'
+            && resource.data.status == 'pending'));
+
+      // Delete: family owner can delete invitations
+      allow delete: if isSignedIn()
+        && isFamilyOwner(resource.data.family_id);
+    }
+
+    // DOCUMENTS: photos, certificates, audio, video files
+    match /documents/{documentId} {
+      // Create: family members can create documents for persons in their family
+      allow create: if isSignedIn()
+        && isFamilyMember(request.resource.data.family_id);
+
+      // Read: family members can read all documents in their family
+      allow read: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+
+      // Update: family members can update documents
+      allow update: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+
+      // Delete: family members can delete documents
+      allow delete: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+    }
+
+    // STORIES: oral history and family stories
+    match /stories/{storyId} {
+      // Create: family members can create stories for persons in their family
+      allow create: if isSignedIn()
+        && isFamilyMember(request.resource.data.family_id);
+
+      // Read: family members can read all stories in their family
+      allow read: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+
+      // Update: family members can update stories
+      allow update: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+
+      // Delete: family members can delete stories
+      allow delete: if isSignedIn()
+        && isFamilyMember(resource.data.family_id);
+    }
+  }
+}
+
+
