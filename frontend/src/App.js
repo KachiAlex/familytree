@@ -1,10 +1,13 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeModeProvider } from './contexts/ThemeModeContext';
 import PrivateRoute from './components/PrivateRoute';
-import Login from './pages/Login';
-import Register from './pages/Register';
+import Home from './pages/Home';
+import SignIn from './pages/SignIn';
+import SignUp from './pages/SignUp';
+import Login from './pages/Login'; // Keep for backward compatibility
+import Register from './pages/Register'; // Keep for backward compatibility
 import Dashboard from './pages/Dashboard';
 import FamilyTree from './pages/FamilyTree';
 import PersonDetail from './pages/PersonDetail';
@@ -19,8 +22,14 @@ function App() {
       <AuthProvider>
         <Router>
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<SignIn />} />
+            <Route path="/signin" element={<SignIn />} />
+            <Route path="/register" element={<SignUp />} />
+            <Route path="/signup" element={<SignUp />} />
+            {/* Keep old routes for backward compatibility */}
+            <Route path="/old-login" element={<Login />} />
+            <Route path="/old-register" element={<Register />} />
             <Route
               path="/dashboard"
               element={
@@ -73,7 +82,6 @@ function App() {
               path="/claim/:token"
               element={<ClaimPerson />}
             />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Router>
       </AuthProvider>
