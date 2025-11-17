@@ -10,13 +10,17 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
   const treeStructure = useMemo(() => {
     if (!data || !data.nodes || data.nodes.length === 0) return null;
 
-    const nodeMap = new Map(data.nodes.filter(node => node && node.id).map((node) => [String(node.id), node]));
+    // Filter out invalid nodes first
+    const validNodes = data.nodes.filter((node) => node && node.id != null);
+    if (validNodes.length === 0) return null;
+
+    const nodeMap = new Map(validNodes.map((node) => [String(node.id), node]));
     const childrenMap = new Map();
     const spouseMap = new Map(); // Map person to their spouse
     const hasParent = new Set();
 
     // Build parent-child relationships
-    data.edges.forEach((edge) => {
+    (data.edges || []).forEach((edge) => {
       if (!edge || !edge.source || !edge.target) return; // Skip invalid edges
       if (edge.type === 'parent') {
         hasParent.add(String(edge.target));
@@ -31,7 +35,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       }
     });
 
-    const rootNodes = data.nodes.filter((node) => node && node.id && !hasParent.has(String(node.id)));
+    const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
 
     const buildTree = (nodeId, visited = new Set()) => {
       if (!nodeId) return null;
@@ -85,11 +89,11 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       };
     }
 
+    if (rootNodes.length === 0) return null;
+
     const rootData = rootNodes.length > 0
       ? buildTree(rootNodes[0].id)
-      : (data.nodes.length > 0 && data.nodes[0] && data.nodes[0].id
-          ? { id: data.nodes[0].id, ...(data.nodes[0].data || {}), children: [] }
-          : null);
+      : (validNodes[0] ? { id: validNodes[0].id, ...(validNodes[0].data || {}), children: [] } : null);
 
     return rootData;
   }, [data]);

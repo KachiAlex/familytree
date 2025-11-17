@@ -24,38 +24,46 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .append('g')
       .attr('transform', `translate(${width / 2},${height / 2})`);
 
-    // Build hierarchy
-    const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
+    // Build hierarchy - filter out invalid nodes first
+    const validNodes = (data.nodes || []).filter((node) => node && node.id != null);
+    if (validNodes.length === 0) return;
+
+    const nodeMap = new Map(validNodes.map((node) => [node.id, node]));
     const childrenMap = new Map();
     const hasParent = new Set();
 
-    data.edges.forEach((edge) => {
-      if (edge.type === 'parent') {
-        hasParent.add(edge.target);
-        if (!childrenMap.has(edge.source)) {
-          childrenMap.set(edge.source, []);
-        }
-        childrenMap.get(edge.source).push(edge.target);
+    // Process edges - filter out invalid edges
+    (data.edges || []).forEach((edge) => {
+      if (!edge || edge.type !== 'parent' || !edge.source || !edge.target) return;
+      hasParent.add(edge.target);
+      if (!childrenMap.has(edge.source)) {
+        childrenMap.set(edge.source, []);
       }
+      childrenMap.get(edge.source).push(edge.target);
     });
 
-    const rootNodes = data.nodes.filter((node) => !hasParent.has(node.id.toString()));
+    const rootNodes = validNodes.filter((node) => !hasParent.has(node.id.toString()));
 
     const buildTree = (nodeId) => {
+      if (nodeId == null) return null;
       const node = nodeMap.get(parseInt(nodeId));
-      if (!node) return null;
+      if (!node || !node.id) return null;
 
       const children = childrenMap.get(nodeId) || [];
       return {
-        ...node.data,
+        ...(node.data || {}),
         id: node.id,
         children: children.map((childId) => buildTree(childId)).filter(Boolean),
       };
     };
 
+    if (rootNodes.length === 0) return;
+
     const rootData = rootNodes.length > 0
       ? buildTree(rootNodes[0].id)
-      : { id: data.nodes[0].id, ...data.nodes[0].data, children: [] };
+      : (validNodes[0] ? { id: validNodes[0].id, ...(validNodes[0].data || {}), children: [] } : null);
+    
+    if (!rootData) return;
 
     const root = d3.hierarchy(rootData);
 

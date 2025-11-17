@@ -86,23 +86,32 @@ function Tree3D({ data, onPersonClick }) {
       return { nodes: [], connections: [] };
     }
 
-    const nodeMap = new Map(data.nodes.map((node) => [String(node.id), node]));
+    // Filter out invalid nodes first
+    const validNodes = data.nodes.filter((node) => node && node.id != null);
+    if (validNodes.length === 0) {
+      return { nodes: [], connections: [] };
+    }
+
+    const nodeMap = new Map(validNodes.map((node) => [String(node.id), node]));
     const childrenMap = new Map();
     const hasParent = new Set();
 
-    // Build parent-child relationships
+    // Build parent-child relationships - filter out invalid edges
     data.edges.forEach((edge) => {
-      if (edge.type === 'parent') {
-        hasParent.add(String(edge.target));
-        if (!childrenMap.has(String(edge.source))) {
-          childrenMap.set(String(edge.source), []);
-        }
-        childrenMap.get(String(edge.source)).push(String(edge.target));
+      if (!edge || !edge.source || !edge.target || edge.type !== 'parent') return;
+      hasParent.add(String(edge.target));
+      if (!childrenMap.has(String(edge.source))) {
+        childrenMap.set(String(edge.source), []);
       }
+      childrenMap.get(String(edge.source)).push(String(edge.target));
     });
 
     // Find root nodes
-    const rootNodes = data.nodes.filter((node) => !hasParent.has(String(node.id)));
+    const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
+
+    if (rootNodes.length === 0) {
+      return { nodes: [], connections: [] };
+    }
 
     // Calculate positions using a hierarchical layout
     const positions = new Map();
@@ -111,13 +120,17 @@ function Tree3D({ data, onPersonClick }) {
 
     // Calculate depth for each node
     const calculateDepth = (nodeId, depth = 0) => {
-      if (nodeDepths.has(String(nodeId))) return;
+      if (nodeId == null || nodeDepths.has(String(nodeId))) return;
       nodeDepths.set(String(nodeId), depth);
       const children = childrenMap.get(String(nodeId)) || [];
       children.forEach((childId) => calculateDepth(childId, depth + 1));
     };
 
-    rootNodes.forEach((root) => calculateDepth(root.id, 0));
+    rootNodes.forEach((root) => {
+      if (root && root.id != null) {
+        calculateDepth(root.id, 0);
+      }
+    });
 
     // Calculate positions level by level
     const levelNodes = new Map();
