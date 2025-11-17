@@ -37,9 +37,11 @@ service cloud.firestore {
         && (isFamilyOwner(request.resource.data.family_id)
             || request.resource.data.user_id == request.auth.uid);
 
-      // Read: family members can see who else is in their family
+      // Read: users can read their own memberships, or family members can see who else is in their family
+      // Note: We allow reading own memberships first to avoid circular dependency in queries
       allow read: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (resource.data.user_id == request.auth.uid
+            || isFamilyMember(resource.data.family_id));
 
       // Update: family owner can update roles, or user can update their own status
       allow update: if isSignedIn()
