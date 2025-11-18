@@ -211,35 +211,35 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       visitedNodes.add(node.id);
       
       const nodeWidth = 180; // Width per node
-      const nodeHeight = 120; // Vertical spacing between generations
+      const nodeHeight = 150; // Vertical spacing between generations
       const spouseSpacing = 30; // Space between married spouses
       const divorcedSpacing = 100; // Extra space for divorced couples
-      const siblingSpacing = 40; // Space between sibling families
+      const siblingSpacing = 60; // Space between sibling families
       
       const positions = [];
       
-      // Calculate children positions first (bottom-up approach)
+      // First, layout all children to determine their total width
       let childrenPositions = [];
-      let currentX = x;
+      let childrenStartX = x;
       
       if (node.children && node.children.length > 0) {
+        // Calculate positions for all children first
         node.children.forEach((child) => {
           if (!child || !child.id) return;
           const childTreeWidth = getTreeWidth(child);
-          // Share visitedNodes across siblings to prevent duplicates
-          const childPositions = layoutTree(child, currentX, y + nodeHeight, depth + 1, visitedNodes);
+          const childPositions = layoutTree(child, childrenStartX, y + nodeHeight, depth + 1, new Set(visitedNodes));
           childrenPositions = childrenPositions.concat(childPositions);
-          currentX += childTreeWidth + siblingSpacing;
+          childrenStartX += childTreeWidth + siblingSpacing;
         });
-        if (node.children.length > 0) {
-          currentX -= siblingSpacing; // Remove last spacing
-        }
       }
       
-      // Position main node centered above its children
-      const mainX = childrenPositions.length > 0 
-        ? (Math.min(...childrenPositions.map(p => p.x)) + Math.max(...childrenPositions.map(p => p.x))) / 2
-        : x;
+      // Calculate center position for this node based on children
+      let mainX = x;
+      if (childrenPositions.length > 0) {
+        const minChildX = Math.min(...childrenPositions.map(p => p.x));
+        const maxChildX = Math.max(...childrenPositions.map(p => p.x));
+        mainX = (minChildX + maxChildX) / 2;
+      }
       
       const maritalStatus = node.marital_status || 'married';
       const isDivorced = maritalStatus === 'divorced';
@@ -305,10 +305,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       seenIds.add(p.id);
       return true;
     });
-    
-    console.log('Tree structure:', treeStructure);
-    console.log('All positions:', allPositions.length);
-    console.log('Unique positions:', uniquePositions.length);
     
     if (uniquePositions.length === 0) {
       console.warn('No positions generated for tree');

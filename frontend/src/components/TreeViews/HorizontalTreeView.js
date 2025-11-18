@@ -208,35 +208,35 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       visitedNodes.add(node.id);
       
       const nodeWidth = 180; // Width per node
-      const nodeHeight = 150; // Horizontal spacing between generations (left to right)
+      const nodeHeight = 200; // Horizontal spacing between generations (left to right)
       const spouseSpacing = 30; // Space between married spouses (vertical)
       const divorcedSpacing = 100; // Extra space for divorced couples (vertical)
-      const siblingSpacing = 40; // Space between sibling families (vertical)
+      const siblingSpacing = 60; // Space between sibling families (vertical)
       
       const positions = [];
       
-      // Calculate children positions first (left to right)
+      // First, layout all children to determine their total height
       let childrenPositions = [];
-      let currentY = y;
+      let childrenStartY = y;
       
       if (node.children && node.children.length > 0) {
+        // Calculate positions for all children first
         node.children.forEach((child) => {
           if (!child || !child.id) return;
           const childTreeHeight = getTreeHeight(child);
-          // Share visitedNodes across siblings to prevent duplicates
-          const childPositions = layoutTree(child, x + nodeHeight, currentY, depth + 1, visitedNodes);
+          const childPositions = layoutTree(child, x + nodeHeight, childrenStartY, depth + 1, new Set(visitedNodes));
           childrenPositions = childrenPositions.concat(childPositions);
-          currentY += childTreeHeight + siblingSpacing;
+          childrenStartY += childTreeHeight + siblingSpacing;
         });
-        if (node.children.length > 0) {
-          currentY -= siblingSpacing; // Remove last spacing
-        }
       }
       
-      // Position main node centered vertically above its children
-      const mainY = childrenPositions.length > 0 
-        ? (Math.min(...childrenPositions.map(p => p.y)) + Math.max(...childrenPositions.map(p => p.y))) / 2
-        : y;
+      // Calculate center position for this node based on children
+      let mainY = y;
+      if (childrenPositions.length > 0) {
+        const minChildY = Math.min(...childrenPositions.map(p => p.y));
+        const maxChildY = Math.max(...childrenPositions.map(p => p.y));
+        mainY = (minChildY + maxChildY) / 2;
+      }
       
       const maritalStatus = node.marital_status || 'married';
       const isDivorced = maritalStatus === 'divorced';
@@ -302,10 +302,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       seenIds.add(p.id);
       return true;
     });
-    
-    console.log('Tree structure:', treeStructure);
-    console.log('All positions:', allPositions.length);
-    console.log('Unique positions:', uniquePositions.length);
     
     if (uniquePositions.length === 0) {
       console.warn('No positions generated for tree');
