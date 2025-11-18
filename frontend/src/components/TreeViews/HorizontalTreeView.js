@@ -252,107 +252,199 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       // Calculate X position for this generation (left to right)
       const x = 100 + (maxDepth - depth) * nodeHeight;
       
-      // Group nodes by their parent pairs to position siblings together
-      const nodeGroups = [];
+      // Build map: which nodes are siblings (share same parents)
+      // Map: parent pair key -> children IDs (siblings)
+      const parentPairToChildren = new Map();
+      const childToParentPair = new Map();
+      
+      // For each node at this depth, if it has children, identify the sibling groups
+      nodesAtDepth.forEach((node) => {
+        if (node.children && node.children.length > 0) {
+          const childrenIds = node.children.map(c => c.id).filter(Boolean);
+          if (childrenIds.length > 0) {
+            // Create parent pair key
+            const spouseInfo = node.spouse ? node.spouse.id : null;
+            const parentKey = spouseInfo 
+              ? [node.id, spouseInfo].sort().join('_')
+              : node.id + '_';
+            
+            if (!parentPairToChildren.has(parentKey)) {
+              parentPairToChildren.set(parentKey, []);
+            }
+            parentPairToChildren.get(parentKey).push(...childrenIds);
+            
+            // Map each child to its parent pair
+            childrenIds.forEach(childId => {
+              childToParentPair.set(childId, parentKey);
+            });
+          }
+        }
+      });
+      
+      // Group nodes at this depth: siblings together, then parents
+      const siblingGroups = new Map(); // parent key -> siblings array
+      const parentNodes = []; // nodes that are parents (have children)
+      const leafNodes = []; // nodes without children
       const processed = new Set();
       
       nodesAtDepth.forEach((node) => {
         if (processed.has(node.id)) return;
-        processed.add(node.id);
         
-        const group = [node];
+        // Check if this node is a child (has parents at depth-1)
+        const parentKey = childToParentPair.get(node.id);
         
-        // Add spouse to same group if exists
-        if (node.spouse && node.spouse.id && !processed.has(node.spouse.id)) {
-          const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
-          if (spouseNode) {
-            group.push(spouseNode);
-            processed.add(spouseNode.id);
+        if (parentKey) {
+          // This is a sibling - group with other siblings
+          if (!siblingGroups.has(parentKey)) {
+            siblingGroups.set(parentKey, []);
           }
-        } else if (node.isSpouse && node.spouseOf) {
-          // This is a spouse, find its partner
-          const partnerNode = nodesAtDepth.find(n => n.id === node.spouseOf);
-          if (partnerNode && !processed.has(partnerNode.id)) {
-            group.unshift(partnerNode);
-            processed.add(partnerNode.id);
+          siblingGroups.get(parentKey).push(node);
+          processed.add(node.id);
+        } else if (node.children && node.children.length > 0) {
+          // This is a parent node
+          parentNodes.push(node);
+          processed.add(node.id);
+          
+          // Add spouse if exists
+          if (node.spouse && node.spouse.id && !processed.has(node.spouse.id)) {
+            const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
+            if (spouseNode) {
+              parentNodes.push(spouseNode);
+              processed.add(spouseNode.id);
+            }
+          }
+        } else {
+          // Leaf node (no children, no parents at this level)
+          leafNodes.push(node);
+          processed.add(node.id);
+          
+          // Add spouse if exists
+          if (node.spouse && node.spouse.id && !processed.has(node.spouse.id)) {
+            const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
+            if (spouseNode) {
+              leafNodes.push(spouseNode);
+              processed.add(spouseNode.id);
+            }
           }
         }
-        
-        nodeGroups.push(group);
       });
       
-      // Calculate Y positions for each group
+      // Calculate Y positions
       const groupPositions = [];
-      const tempPositions = [];
+      let currentY = 100;
       
-      nodeGroups.forEach((group) => {
-        const mainNode = group[0];
-        const spouseNode = group.length > 1 ? group[1] : null;
-        
-        // If this node has children, center it vertically above them
-        let centerY = 0;
-        let hasChildren = false;
-        
-        if (mainNode.children && mainNode.children.length > 0) {
-          // Find children positions from allPositions (already calculated for deeper generations)
-          const childPositions = allPositions.filter(p => {
-            if (!mainNode.children) return false;
-            return mainNode.children.some(child => child && child.id === p.id);
+      // First, position siblings together horizontally (vertically for horizontal view)
+      siblingGroups.forEach((siblings, parentKey) => {
+        siblings.forEach((sibling, idx) => {
+          const maritalStatus = sibling.marital_status || 'married';
+          groupPositions.push({
+            id: sibling.id,
+            x: x,
+            y: currentY,
+            data: sibling,
+            hasSpouse: false,
+            marital_status: maritalStatus,
           });
+          currentY += nodeWidth + siblingSpacing;
+        });
+        // Add extra spacing after sibling group
+        currentY += siblingSpacing;
+      });
+      
+      // Then, position parents - center them above their children
+      const processedParents = new Set();
+      parentNodes.forEach((node) => {
+        if (processedParents.has(node.id)) return;
+        
+        // Check if this node has children
+        if (node.children && node.children.length > 0) {
+          const childrenIds = node.children.map(c => c.id).filter(Boolean);
+          const childPositions = allPositions.filter(p => childrenIds.includes(p.id));
           
+          let centerY = currentY;
           if (childPositions.length > 0) {
             const minChildY = Math.min(...childPositions.map(p => p.y));
             const maxChildY = Math.max(...childPositions.map(p => p.y));
             centerY = (minChildY + maxChildY) / 2;
-            hasChildren = true;
           }
-        }
-        
-        // If no children, position sequentially
-        if (!hasChildren) {
-          if (tempPositions.length > 0) {
-            const lastPos = tempPositions[tempPositions.length - 1];
-            const lastGroupHeight = lastPos.hasSpouse 
-              ? (lastPos.marital_status === 'divorced' ? nodeWidth * 2 + divorcedSpacing : nodeWidth * 2 + spouseSpacing)
-              : nodeWidth;
-            centerY = lastPos.y + lastGroupHeight + siblingSpacing;
-          } else {
-            centerY = 100;
+          
+          const maritalStatus = node.marital_status || 'married';
+          const isDivorced = maritalStatus === 'divorced';
+          
+          // Position parent
+          groupPositions.push({
+            id: node.id,
+            x: x,
+            y: centerY,
+            data: node,
+            hasSpouse: !!node.spouse,
+            marital_status: maritalStatus,
+          });
+          processedParents.add(node.id);
+          
+          // Position spouse if exists
+          if (node.spouse && node.spouse.id && !processedParents.has(node.spouse.id)) {
+            const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
+            if (spouseNode) {
+              const spouseY = isDivorced
+                ? centerY + nodeWidth + divorcedSpacing
+                : centerY + nodeWidth + spouseSpacing;
+              
+              groupPositions.push({
+                id: spouseNode.id,
+                x: x,
+                y: spouseY,
+                data: spouseNode,
+                hasSpouse: true,
+                isSpouse: true,
+                marital_status: maritalStatus,
+              });
+              processedParents.add(spouseNode.id);
+            }
           }
+          
+          currentY = Math.max(currentY, centerY + (node.spouse ? nodeWidth * 2 + spouseSpacing : nodeWidth) + siblingSpacing);
         }
+      });
+      
+      // Finally, position leaf nodes (nodes without children)
+      leafNodes.forEach((node) => {
+        if (processedParents.has(node.id)) return;
         
-        const maritalStatus = mainNode.marital_status || 'married';
+        const maritalStatus = node.marital_status || 'married';
         const isDivorced = maritalStatus === 'divorced';
         
-        // Position main node
-        const mainPos = {
-          id: mainNode.id,
+        groupPositions.push({
+          id: node.id,
           x: x,
-          y: centerY,
-          data: mainNode,
-          hasSpouse: !!spouseNode,
+          y: currentY,
+          data: node,
+          hasSpouse: !!node.spouse,
           marital_status: maritalStatus,
-        };
-        groupPositions.push(mainPos);
-        tempPositions.push(mainPos);
+        });
         
-        // Position spouse if exists
-        if (spouseNode) {
-          const spouseY = isDivorced
-            ? centerY + nodeWidth + divorcedSpacing
-            : centerY + nodeWidth + spouseSpacing;
-          
-          const spousePos = {
-            id: spouseNode.id,
-            x: x,
-            y: spouseY,
-            data: spouseNode,
-            hasSpouse: true,
-            isSpouse: true,
-            marital_status: maritalStatus,
-          };
-          groupPositions.push(spousePos);
-          tempPositions.push(spousePos);
+        if (node.spouse && node.spouse.id && !processedParents.has(node.spouse.id)) {
+          const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
+          if (spouseNode) {
+            const spouseY = isDivorced
+              ? currentY + nodeWidth + divorcedSpacing
+              : currentY + nodeWidth + spouseSpacing;
+            
+            groupPositions.push({
+              id: spouseNode.id,
+              x: x,
+              y: spouseY,
+              data: spouseNode,
+              hasSpouse: true,
+              isSpouse: true,
+              marital_status: maritalStatus,
+            });
+            currentY = spouseY + nodeWidth + siblingSpacing;
+          } else {
+            currentY += nodeWidth + siblingSpacing;
+          }
+        } else {
+          currentY += nodeWidth + siblingSpacing;
         }
       });
       
