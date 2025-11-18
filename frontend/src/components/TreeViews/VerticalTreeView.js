@@ -216,18 +216,24 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       if (node && node.spouse && node.spouse.id) {
         const spousePos = positionMap.get(node.spouse.id);
         if (spousePos) {
+          const maritalStatus = node.spouse.marital_status || 'married';
+          const isDivorced = maritalStatus === 'divorced';
+          const isWidowed = maritalStatus === 'widowed';
+          
+          // Draw spouse connection line with different styles based on status
           g.append('line')
             .attr('x1', parentPos.x)
             .attr('y1', parentPos.y)
             .attr('x2', spousePos.x)
             .attr('y2', spousePos.y)
-            .attr('stroke', '#ff9800')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '5,5');
+            .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
+            .attr('stroke-width', isDivorced ? 2.5 : 3)
+            .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none')
+            .attr('opacity', isDivorced ? 0.7 : 1);
         }
       }
       
-      // Draw links to children
+      // Draw links to children with better styling
       if (node.children && node.children.length > 0) {
         node.children.forEach((child) => {
           if (!child || !child.id) return; // Skip invalid children
@@ -240,11 +246,25 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
               ? (parentPos.x + spousePos.x) / 2
               : parentPos.x;
             
-            g.append('path')
-              .attr('d', `M ${parentCenterX} ${parentPos.y + 30} L ${parentCenterX} ${childPos.y - 30} L ${childPos.x} ${childPos.y - 30}`)
-              .attr('fill', 'none')
-              .attr('stroke', '#999')
-              .attr('stroke-width', 2);
+            // Draw vertical line from parent(s) down
+            g.append('line')
+              .attr('x1', parentCenterX)
+              .attr('y1', parentPos.y + 35)
+              .attr('x2', parentCenterX)
+              .attr('y2', childPos.y - 35)
+              .attr('stroke', '#424242')
+              .attr('stroke-width', 2.5)
+              .attr('opacity', 0.8);
+            
+            // Draw horizontal line to child
+            g.append('line')
+              .attr('x1', parentCenterX)
+              .attr('y1', childPos.y - 35)
+              .attr('x2', childPos.x)
+              .attr('y2', childPos.y - 35)
+              .attr('stroke', '#424242')
+              .attr('stroke-width', 2.5)
+              .attr('opacity', 0.8);
           }
           drawLinks(child);
         });
@@ -268,17 +288,36 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         }
       });
 
-    // Add rectangles for nodes
+    // Add rectangles for nodes with better styling
     nodes
       .append('rect')
-      .attr('width', 140)
-      .attr('height', 70)
-      .attr('x', -70)
-      .attr('y', -35)
-      .attr('rx', 5)
-      .attr('fill', (d) => d.hasSpouse ? '#fff3e0' : '#fff')
-      .attr('stroke', (d) => d.hasSpouse ? '#ff9800' : '#1976d2')
-      .attr('stroke-width', 2);
+      .attr('width', 160)
+      .attr('height', 80)
+      .attr('x', -80)
+      .attr('y', -40)
+      .attr('rx', 8)
+      .attr('fill', (d) => {
+        if (d.hasSpouse) {
+          // Check if this node has marital status, or if its spouse has it
+          const maritalStatus = d.data?.marital_status || d.data?.spouse?.marital_status || 'married';
+          if (maritalStatus === 'divorced') return '#ffebee';
+          if (maritalStatus === 'widowed') return '#f5f5f5';
+          return '#fff3e0';
+        }
+        return '#ffffff';
+      })
+      .attr('stroke', (d) => {
+        if (d.hasSpouse) {
+          // Check if this node has marital status, or if its spouse has it
+          const maritalStatus = d.data?.marital_status || d.data?.spouse?.marital_status || 'married';
+          if (maritalStatus === 'divorced') return '#d32f2f';
+          if (maritalStatus === 'widowed') return '#757575';
+          return '#ff9800';
+        }
+        return '#1976d2';
+      })
+      .attr('stroke-width', 3)
+      .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
 
     // Add text with word wrapping
     nodes.each(function(d) {

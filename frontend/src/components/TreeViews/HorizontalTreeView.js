@@ -213,22 +213,27 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       const parentPos = positionMap.get(node.id);
       if (!parentPos) return;
       
-      // Draw link to spouse if exists (horizontal line)
+      // Draw link to spouse if exists (horizontal line) with status-based styling
       if (node.spouse && node.spouse.id) {
         const spousePos = positionMap.get(node.spouse.id);
         if (spousePos) {
+          const maritalStatus = node.spouse.marital_status || 'married';
+          const isDivorced = maritalStatus === 'divorced';
+          const isWidowed = maritalStatus === 'widowed';
+          
           g.append('line')
             .attr('x1', parentPos.x)
             .attr('y1', parentPos.y)
             .attr('x2', spousePos.x)
             .attr('y2', spousePos.y)
-            .attr('stroke', '#ff9800')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '5,5');
+            .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
+            .attr('stroke-width', isDivorced ? 2.5 : 3)
+            .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none')
+            .attr('opacity', isDivorced ? 0.7 : 1);
         }
       }
       
-      // Draw links to children (from parent center to children)
+      // Draw links to children with better styling
       if (node.children) {
         node.children.forEach((child) => {
           if (!child || !child.id) return; // Skip invalid children
@@ -238,11 +243,25 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
               ? (parentPos.y + (positionMap.get(node.spouse.id)?.y || parentPos.y)) / 2
               : parentPos.y;
             
-            g.append('path')
-              .attr('d', `M ${parentPos.x + 75} ${parentCenterY} L ${childPos.x - 75} ${parentCenterY} L ${childPos.x - 75} ${childPos.y}`)
-              .attr('fill', 'none')
-              .attr('stroke', '#999')
-              .attr('stroke-width', 2);
+            // Draw horizontal line from parent(s) to right
+            g.append('line')
+              .attr('x1', parentPos.x + 80)
+              .attr('y1', parentCenterY)
+              .attr('x2', childPos.x - 80)
+              .attr('y2', parentCenterY)
+              .attr('stroke', '#424242')
+              .attr('stroke-width', 2.5)
+              .attr('opacity', 0.8);
+            
+            // Draw vertical line down to child
+            g.append('line')
+              .attr('x1', childPos.x - 80)
+              .attr('y1', parentCenterY)
+              .attr('x2', childPos.x - 80)
+              .attr('y2', childPos.y)
+              .attr('stroke', '#424242')
+              .attr('stroke-width', 2.5)
+              .attr('opacity', 0.8);
           }
           drawLinks(child);
         });
@@ -267,17 +286,36 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
     // Skip rendering the dummy root node
     const visibleNodes = nodes.filter((d) => d.id !== '__root__');
 
-    // Add rectangles for nodes
+    // Add rectangles for nodes with better styling
     visibleNodes
       .append('rect')
-      .attr('width', 150)
-      .attr('height', 60)
-      .attr('x', -75)
-      .attr('y', -30)
-      .attr('rx', 5)
-      .attr('fill', (d) => d.hasSpouse ? '#fff3e0' : '#fff')
-      .attr('stroke', (d) => d.hasSpouse ? '#ff9800' : '#1976d2')
-      .attr('stroke-width', 2);
+      .attr('width', 160)
+      .attr('height', 80)
+      .attr('x', -80)
+      .attr('y', -40)
+      .attr('rx', 8)
+      .attr('fill', (d) => {
+        if (d.hasSpouse) {
+          // Check if this node has marital status, or if its spouse has it
+          const maritalStatus = d.data?.marital_status || d.data?.spouse?.marital_status || 'married';
+          if (maritalStatus === 'divorced') return '#ffebee';
+          if (maritalStatus === 'widowed') return '#f5f5f5';
+          return '#fff3e0';
+        }
+        return '#ffffff';
+      })
+      .attr('stroke', (d) => {
+        if (d.hasSpouse) {
+          // Check if this node has marital status, or if its spouse has it
+          const maritalStatus = d.data?.marital_status || d.data?.spouse?.marital_status || 'married';
+          if (maritalStatus === 'divorced') return '#d32f2f';
+          if (maritalStatus === 'widowed') return '#757575';
+          return '#ff9800';
+        }
+        return '#1976d2';
+      })
+      .attr('stroke-width', 3)
+      .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
 
     // Add text with word wrapping
     visibleNodes.each(function(d) {

@@ -73,6 +73,9 @@ const PersonDetail = () => {
   const [relationSaving, setRelationSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editValues, setEditValues] = useState(null);
+  const [editMaritalStatusOpen, setEditMaritalStatusOpen] = useState(false);
+  const [editingSpouseRel, setEditingSpouseRel] = useState(null);
+  const [editingMaritalStatus, setEditingMaritalStatus] = useState('married');
   const [addNewPersonOpen, setAddNewPersonOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -638,6 +641,31 @@ const PersonDetail = () => {
     }
   };
 
+  const handleEditMaritalStatus = (spouse) => {
+    setEditingSpouseRel(spouse);
+    setEditingMaritalStatus(spouse.marital_status || 'married');
+    setEditMaritalStatusOpen(true);
+  };
+
+  const handleSaveMaritalStatus = async () => {
+    if (!editingSpouseRel || !editingSpouseRel.relationship_id) return;
+    
+    try {
+      const spouseRef = doc(db, 'spouseRelationships', editingSpouseRel.relationship_id);
+      await updateDoc(spouseRef, {
+        marital_status: editingMaritalStatus,
+      });
+      
+      await fetchRelationships(person);
+      setEditMaritalStatusOpen(false);
+      setEditingSpouseRel(null);
+      setSnackbar({ open: true, message: 'Marital status updated successfully', severity: 'success' });
+    } catch (error) {
+      console.error('Failed to update marital status:', error);
+      setSnackbar({ open: true, message: 'Failed to update marital status. Please try again.', severity: 'error' });
+    }
+  };
+
   const handleDeletePerson = async () => {
     if (!person || !canEdit) return;
 
@@ -1162,21 +1190,38 @@ const PersonDetail = () => {
                         size="small"
                         variant="outlined"
                         sx={{ mr: canEdit ? 0.5 : 0 }}
+                        onClick={canEdit ? () => handleEditMaritalStatus(s) : undefined}
+                        style={canEdit ? { cursor: 'pointer' } : {}}
                       />
                       {canEdit && s.relationship_id && (
-                        <Tooltip title="Remove relationship">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteRelationship(s.relationship_id, 'spouse');
-                            }}
-                            sx={{ ml: 0.5 }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        <>
+                          <Tooltip title="Edit marital status">
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditMaritalStatus(s);
+                              }}
+                              sx={{ ml: 0.5 }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Remove relationship">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteRelationship(s.relationship_id, 'spouse');
+                              }}
+                              sx={{ ml: 0.5 }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
                       )}
                     </Box>
                   );
@@ -2249,6 +2294,35 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Snackbar for notifications */}
+      {/* Edit Marital Status Dialog */}
+      <Dialog open={editMaritalStatusOpen} onClose={() => setEditMaritalStatusOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit Marital Status</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Update the marital status for {editingSpouseRel?.full_name || 'this spouse'}.
+          </Typography>
+          <TextField
+            select
+            label="Marital Status"
+            fullWidth
+            margin="normal"
+            value={editingMaritalStatus}
+            onChange={(e) => setEditingMaritalStatus(e.target.value)}
+          >
+            <MenuItem value="married">Married</MenuItem>
+            <MenuItem value="divorced">Divorced</MenuItem>
+            <MenuItem value="widowed">Widowed</MenuItem>
+            <MenuItem value="separated">Separated</MenuItem>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditMaritalStatusOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveMaritalStatus} variant="contained" color="primary">
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
