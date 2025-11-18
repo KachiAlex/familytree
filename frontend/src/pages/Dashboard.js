@@ -45,6 +45,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -264,10 +265,25 @@ const Dashboard = () => {
     setDeleting(true);
     try {
       const familyId = familyToDelete.family_id;
+      const userId = user?.user_id || user?.userId || user?.uid;
+      
+      // Verify ownership before attempting deletion
+      const familyRef = doc(db, 'families', familyId);
+      const familySnap = await getDoc(familyRef);
+      
+      if (!familySnap.exists()) {
+        throw new Error('Family not found');
+      }
+      
+      const familyData = familySnap.data();
+      if (familyData.created_by_user_id !== userId) {
+        throw new Error('You do not have permission to delete this family. Only the family owner can delete it.');
+      }
+      
       const BATCH_LIMIT = 500; // Firestore batch limit
       const allRefs = [];
 
-      // Collect all document references to delete
+      // Collect all document references to delete (excluding family document)
       const collections = [
         { name: 'persons', query: query(collection(db, 'persons'), where('family_id', '==', familyId)) },
         { name: 'relationships', query: query(collection(db, 'relationships'), where('family_id', '==', familyId)) },
@@ -279,19 +295,20 @@ const Dashboard = () => {
         { name: 'personInvitations', query: query(collection(db, 'personInvitations'), where('family_id', '==', familyId)) },
       ];
 
-      // Fetch all documents
+      // Fetch all related documents
       for (const coll of collections) {
-        const snap = await getDocs(coll.query);
-        snap.docs.forEach((docSnap) => {
-          allRefs.push(docSnap.ref);
-        });
+        try {
+          const snap = await getDocs(coll.query);
+          snap.docs.forEach((docSnap) => {
+            allRefs.push(docSnap.ref);
+          });
+        } catch (error) {
+          console.warn(`Error fetching ${coll.name}:`, error);
+          // Continue with other collections even if one fails
+        }
       }
 
-      // Add the family document itself
-      const familyRef = doc(db, 'families', familyId);
-      allRefs.push(familyRef);
-
-      // Delete in batches
+      // Delete all related documents in batches first
       for (let i = 0; i < allRefs.length; i += BATCH_LIMIT) {
         const batch = writeBatch(db);
         const batchRefs = allRefs.slice(i, i + BATCH_LIMIT);
@@ -300,6 +317,10 @@ const Dashboard = () => {
         });
         await batch.commit();
       }
+
+      // Delete the family document itself last (separate operation)
+      // This ensures the isFamilyOwner() check can still read the family document
+      await deleteDoc(familyRef);
 
       setSnackbar({ 
         open: true, 
@@ -418,7 +439,8 @@ const Dashboard = () => {
         ) : (
           <Grid container spacing={3}>
             {families.map((family) => {
-              const isOwner = family.user_role === 'admin' || family.created_by_user_id === (user?.user_id || user?.userId || user?.uid);
+              const userId = user?.user_id || user?.userId || user?.uid;
+              const isOwner = family.user_role === 'admin' || family.created_by_user_id === userId;
               return (
                 <Grid item xs={12} sm={6} md={4} key={family.family_id}>
                   <Card
