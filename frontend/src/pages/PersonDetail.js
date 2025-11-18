@@ -68,6 +68,7 @@ const PersonDetail = () => {
   const [addFamilyOpen, setAddFamilyOpen] = useState(false);
   const [familyRelType, setFamilyRelType] = useState('parent'); // 'parent' | 'child' | 'spouse'
   const [selectedFamilyPersonId, setSelectedFamilyPersonId] = useState('');
+  const [maritalStatus, setMaritalStatus] = useState('married'); // 'married' | 'divorced' | 'widowed' | 'separated'
   const [selfRelation, setSelfRelation] = useState(null);
   const [relationSaving, setRelationSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -360,6 +361,7 @@ const PersonDetail = () => {
           spousePersons.push({
             person_id: spousePersonSnap.id,
             relationship_id: relDoc.id, // Store relationship ID for deletion
+            marital_status: rel.marital_status || 'married', // Include marital status
             ...spousePersonSnap.data(),
           });
         }
@@ -373,6 +375,7 @@ const PersonDetail = () => {
           spousePersons.push({
             person_id: spousePersonSnap.id,
             relationship_id: relDoc.id, // Store relationship ID for deletion
+            marital_status: rel.marital_status || 'married', // Include marital status
             ...spousePersonSnap.data(),
           });
         }
@@ -586,6 +589,7 @@ const PersonDetail = () => {
           family_id: person.family_id,
           spouse1_id: person.person_id,
           spouse2_id: targetPersonId,
+          marital_status: maritalStatus || 'married',
           created_at: serverTimestamp(),
         });
       } else {
@@ -1131,30 +1135,52 @@ const PersonDetail = () => {
                   No spouses linked yet.
                 </Typography>
               ) : (
-                spouses.filter(s => s && s.person_id).map((s) => (
-                  <Box key={s.person_id} sx={{ display: 'inline-flex', alignItems: 'center', mr: 1, mb: 1 }}>
-                    <Chip
-                      label={s.full_name}
-                      onClick={() => navigate(`/person/${s.person_id}`)}
-                      sx={{ mr: canEdit ? 0.5 : 0 }}
-                    />
-                    {canEdit && s.relationship_id && (
-                      <Tooltip title="Remove relationship">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteRelationship(s.relationship_id, 'spouse');
-                          }}
-                          sx={{ ml: 0.5 }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                ))
+                spouses.filter(s => s && s.person_id).map((s) => {
+                  const statusLabels = {
+                    married: 'Married',
+                    divorced: 'Divorced',
+                    widowed: 'Widowed',
+                    separated: 'Separated',
+                  };
+                  const statusColors = {
+                    married: 'success',
+                    divorced: 'error',
+                    widowed: 'default',
+                    separated: 'warning',
+                  };
+                  const maritalStatus = s.marital_status || 'married';
+                  return (
+                    <Box key={s.person_id} sx={{ display: 'inline-flex', alignItems: 'center', mr: 1, mb: 1 }}>
+                      <Chip
+                        label={s.full_name}
+                        onClick={() => navigate(`/person/${s.person_id}`)}
+                        sx={{ mr: 0.5 }}
+                      />
+                      <Chip
+                        label={statusLabels[maritalStatus] || 'Married'}
+                        color={statusColors[maritalStatus] || 'default'}
+                        size="small"
+                        variant="outlined"
+                        sx={{ mr: canEdit ? 0.5 : 0 }}
+                      />
+                      {canEdit && s.relationship_id && (
+                        <Tooltip title="Remove relationship">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteRelationship(s.relationship_id, 'spouse');
+                            }}
+                            sx={{ ml: 0.5 }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  );
+                })
               )}
             </Box>
           </Paper>
@@ -1605,12 +1631,29 @@ const PersonDetail = () => {
             onChange={(e) => {
               setFamilyRelType(e.target.value);
               setSelectedFamilyPersonId(''); // Reset selection when type changes
+              setMaritalStatus('married'); // Reset marital status when type changes
             }}
           >
             <MenuItem value="parent">Parent of this person</MenuItem>
             <MenuItem value="child">Child of this person</MenuItem>
             <MenuItem value="spouse">Spouse of this person</MenuItem>
           </TextField>
+          {familyRelType === 'spouse' && (
+            <TextField
+              select
+              label="Marital Status"
+              fullWidth
+              margin="normal"
+              value={maritalStatus}
+              onChange={(e) => setMaritalStatus(e.target.value)}
+              helperText="Select the current status of this marriage"
+            >
+              <MenuItem value="married">Married</MenuItem>
+              <MenuItem value="divorced">Divorced</MenuItem>
+              <MenuItem value="widowed">Widowed</MenuItem>
+              <MenuItem value="separated">Separated</MenuItem>
+            </TextField>
+          )}
           <TextField
             select
             label="Family member"
@@ -1646,6 +1689,7 @@ const PersonDetail = () => {
                 await handleAddFamilyRelationship(selectedFamilyPersonId);
                 setAddFamilyOpen(false);
                 setSelectedFamilyPersonId('');
+                setMaritalStatus('married'); // Reset marital status
                 setSnackbar({ open: true, message: 'Family relationship added successfully', severity: 'success' });
               } catch (error) {
                 console.error('Failed to add family relationship:', error);

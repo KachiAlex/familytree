@@ -143,6 +143,7 @@ const FamilyTree = () => {
           type: 'spouse',
           verified: false,
           label: 'spouse',
+          marital_status: spouse.marital_status || 'married', // Include marital status
         };
       });
 
@@ -447,6 +448,7 @@ const FamilyTree = () => {
             family_id: familyId,
             spouse1_id: spouse1Id,
             spouse2_id: spouse2Id,
+            marital_status: spouseRel.marital_status || 'married',
             created_at: serverTimestamp(),
           });
         }

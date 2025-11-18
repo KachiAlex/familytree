@@ -93,6 +93,7 @@ export const generateGEDCOM = (treeData, familyInfo) => {
       husband,
       wife,
       children: [],
+      marital_status: spouseRel.marital_status || 'married', // Store marital status
     });
   });
 
@@ -209,6 +210,22 @@ export const generateGEDCOM = (treeData, familyInfo) => {
       lines.push(`1 WIFE @I${family.wife}@`);
     }
 
+    // Add marital status
+    const maritalStatus = family.marital_status || 'married';
+    if (maritalStatus === 'married') {
+      lines.push('1 MARR');
+    } else if (maritalStatus === 'divorced') {
+      lines.push('1 DIV');
+    } else if (maritalStatus === 'widowed') {
+      lines.push('1 MARR');
+      lines.push('1 EVEN');
+      lines.push('2 TYPE Widowed');
+    } else if (maritalStatus === 'separated') {
+      lines.push('1 MARR');
+      lines.push('1 EVEN');
+      lines.push('2 TYPE Separated');
+    }
+
     family.children.forEach((childId) => {
       lines.push(`1 CHIL @I${childId}@`);
     });
@@ -312,6 +329,10 @@ export const parseGEDCOM = (gedcomContent) => {
             currentRecord.data.children = [];
           }
           currentRecord.data.children.push(value.trim());
+        } else if (tag === 'MARR') {
+          currentRecord.data.marital_status = 'married';
+        } else if (tag === 'DIV') {
+          currentRecord.data.marital_status = 'divorced';
         }
       }
     } else if (level === 2 && currentTag) {
@@ -346,6 +367,7 @@ export const parseGEDCOM = (gedcomContent) => {
       spouseRelationships.push({
         spouse1_id: husband,
         spouse2_id: wife,
+        marital_status: family.data.marital_status || 'married',
       });
     }
 

@@ -29,9 +29,16 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         }
         childrenMap.get(String(edge.source)).push(String(edge.target));
       } else if (edge.type === 'spouse') {
-        // Build spouse map (bidirectional)
-        spouseMap.set(String(edge.source), String(edge.target));
-        spouseMap.set(String(edge.target), String(edge.source));
+        // Build spouse map (bidirectional) with marital status
+        const maritalStatus = edge.marital_status || 'married';
+        spouseMap.set(String(edge.source), { 
+          spouseId: String(edge.target),
+          marital_status: maritalStatus 
+        });
+        spouseMap.set(String(edge.target), { 
+          spouseId: String(edge.source),
+          marital_status: maritalStatus 
+        });
       }
     });
 
@@ -46,24 +53,25 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       if (!node) return null;
 
       // Get spouse if exists
-      const spouseId = spouseMap.get(key);
+      const spouseInfo = spouseMap.get(key);
       let spouse = null;
-      if (spouseId && !visited.has(spouseId)) {
-        const spouseNode = nodeMap.get(spouseId);
+      if (spouseInfo && !visited.has(spouseInfo.spouseId)) {
+        const spouseNode = nodeMap.get(spouseInfo.spouseId);
         if (spouseNode) {
           spouse = {
             ...spouseNode.data,
             id: spouseNode.id,
             spouse: null, // Prevent infinite recursion
             children: [],
+            marital_status: spouseInfo.marital_status || 'married', // Include marital status
           };
         }
       }
 
       // Get children (union of both parents' children)
       const children = new Set(childrenMap.get(key) || []);
-      if (spouseId) {
-        const spouseChildren = childrenMap.get(spouseId) || [];
+      if (spouseInfo && spouseInfo.spouseId) {
+        const spouseChildren = childrenMap.get(spouseInfo.spouseId) || [];
         spouseChildren.forEach((childId) => children.add(childId));
       }
 
@@ -119,42 +127,53 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
     const g = svg.append('g').attr('transform', 'translate(50,50)');
 
+    // Calculate tree height for proper spacing
+    const getTreeHeight = (node) => {
+      if (!node || !node.id) return 0;
+      if (!node.children || node.children.length === 0) {
+        return node.spouse ? 180 : 160;
+      }
+      let maxChildHeight = 0;
+      let totalHeight = 0;
+      node.children.forEach((child) => {
+        const childHeight = getTreeHeight(child);
+        maxChildHeight = Math.max(maxChildHeight, childHeight);
+        totalHeight += childHeight;
+      });
+      return Math.max(totalHeight, node.spouse ? 180 : 160);
+    };
+
     // Custom layout function to handle spouses side by side (horizontal: left to right)
     const layoutTree = (node, x = 0, y = 0, depth = 0) => {
-      if (!node) return [];
+      if (!node || !node.id) return [];
       
       const nodeWidth = 160; // Width per node including spacing
-      const nodeHeight = 100; // Horizontal spacing between levels (left to right)
+      const nodeHeight = 120; // Horizontal spacing between levels (left to right)
       const spouseSpacing = 20; // Space between spouses (vertical)
+      const siblingSpacing = 20; // Space between sibling families
       
       const positions = [];
       
       // Calculate children positions first to determine parent position
       let childrenPositions = [];
+      let currentY = y;
+      
       if (node.children && node.children.length > 0) {
-        let childY = 0;
         node.children.forEach((child) => {
           if (!child || !child.id) return; // Skip invalid children
-          const childPositions = layoutTree(child, x + nodeHeight, childY, depth + 1);
+          const childTreeHeight = getTreeHeight(child);
+          const childPositions = layoutTree(child, x + nodeHeight, currentY, depth + 1);
           childrenPositions = childrenPositions.concat(childPositions);
-          if (childPositions.length > 0) {
-            const childHeight = child && child.spouse 
-              ? nodeWidth * 2 + spouseSpacing 
-              : nodeWidth;
-            childY += childHeight;
-          }
+          currentY += childTreeHeight + siblingSpacing;
         });
+        // Remove last spacing
+        currentY -= siblingSpacing;
       }
       
       // Position main node (x is horizontal position, y is vertical)
       const mainY = childrenPositions.length > 0 
         ? (Math.min(...childrenPositions.map(p => p.y)) + Math.max(...childrenPositions.map(p => p.y))) / 2
         : y;
-      
-      // Ensure node exists and has id
-      if (!node || !node.id) {
-        return positions.concat(childrenPositions);
-      }
       
       positions.push({
         id: node.id,
@@ -179,20 +198,24 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       return positions.concat(childrenPositions);
     };
 
+    // Calculate total tree height and center it
+    const treeHeight = getTreeHeight(treeStructure);
+    const startY = Math.max(0, (height - treeHeight) / 2);
+    
     // Build flat position array
-    const allPositions = layoutTree(treeStructure, 0, height / 2);
+    const allPositions = layoutTree(treeStructure, 0, startY);
     const positionMap = new Map(allPositions.map(p => [p.id, p]));
 
     // Draw links for parent-child and spouse relationships
     const drawLinks = (node) => {
-      if (!node || !node.data || !node.data.id || node.data.id === '__root__') return;
+      if (!node || !node.id || node.id === '__root__') return;
       
-      const parentPos = positionMap.get(node.data.id);
+      const parentPos = positionMap.get(node.id);
       if (!parentPos) return;
       
       // Draw link to spouse if exists (horizontal line)
-      if (node.data.spouse && node.data.spouse.id) {
-        const spousePos = positionMap.get(node.data.spouse.id);
+      if (node.spouse && node.spouse.id) {
+        const spousePos = positionMap.get(node.spouse.id);
         if (spousePos) {
           g.append('line')
             .attr('x1', parentPos.x)
@@ -208,11 +231,11 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       // Draw links to children (from parent center to children)
       if (node.children) {
         node.children.forEach((child) => {
-          if (!child || !child.data || !child.data.id) return; // Skip invalid children
-          const childPos = positionMap.get(child.data.id);
+          if (!child || !child.id) return; // Skip invalid children
+          const childPos = positionMap.get(child.id);
           if (childPos) {
-            const parentCenterY = node.data.spouse && node.data.spouse.id
-              ? (parentPos.y + (positionMap.get(node.data.spouse.id)?.y || parentPos.y)) / 2
+            const parentCenterY = node.spouse && node.spouse.id
+              ? (parentPos.y + (positionMap.get(node.spouse.id)?.y || parentPos.y)) / 2
               : parentPos.y;
             
             g.append('path')
@@ -242,7 +265,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       });
 
     // Skip rendering the dummy root node
-    const visibleNodes = nodes.filter((d) => d.data.id !== '__root__');
+    const visibleNodes = nodes.filter((d) => d.id !== '__root__');
 
     // Add rectangles for nodes
     visibleNodes
@@ -256,31 +279,64 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       .attr('stroke', (d) => d.hasSpouse ? '#ff9800' : '#1976d2')
       .attr('stroke-width', 2);
 
-    // Add text
-    visibleNodes
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', -8)
-      .attr('font-size', '12px')
-      .attr('font-weight', 'bold')
-      .attr('fill', '#333')
-      .text((d) => d.data.full_name || d.data.label || 'Unknown');
-
-    visibleNodes
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', 8)
-      .attr('font-size', '10px')
-      .attr('fill', '#666')
-      .text((d) => {
-        if (d.data.date_of_birth) {
-          const year = new Date(d.data.date_of_birth).getFullYear();
-          return d.data.date_of_death
-            ? `${year} - ${new Date(d.data.date_of_death).getFullYear()}`
-            : `b. ${year}`;
+    // Add text with word wrapping
+    visibleNodes.each(function(d) {
+      const nodeGroup = d3.select(this);
+      const name = d.data.full_name || d.data.label || 'Unknown';
+      
+      // Split long names into multiple lines
+      const maxCharsPerLine = 18;
+      const words = name.split(' ');
+      let lines = [];
+      let currentLine = '';
+      
+      words.forEach((word, i) => {
+        if ((currentLine + word).length <= maxCharsPerLine) {
+          currentLine += (currentLine ? ' ' : '') + word;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
         }
-        return '';
+        if (i === words.length - 1 && currentLine) {
+          lines.push(currentLine);
+        }
       });
+      
+      if (lines.length === 0) lines = [name.substring(0, maxCharsPerLine)];
+      
+      // Add name text (up to 2 lines)
+      lines.slice(0, 2).forEach((line, i) => {
+        nodeGroup
+          .append('text')
+          .attr('text-anchor', 'middle')
+          .attr('dy', i === 0 ? -8 : 4)
+          .attr('font-size', '11px')
+          .attr('font-weight', 'bold')
+          .attr('fill', '#333')
+          .text(line.length > maxCharsPerLine ? line.substring(0, maxCharsPerLine - 3) + '...' : line);
+      });
+      
+      // Add date text
+      if (d.data.date_of_birth) {
+        try {
+          const year = new Date(d.data.date_of_birth).getFullYear();
+          if (!isNaN(year)) {
+            const dateText = d.data.date_of_death
+              ? `${year} - ${new Date(d.data.date_of_death).getFullYear()}`
+              : `b. ${year}`;
+            nodeGroup
+              .append('text')
+              .attr('text-anchor', 'middle')
+              .attr('dy', 18)
+              .attr('font-size', '10px')
+              .attr('fill', '#666')
+              .text(dateText);
+          }
+        } catch (e) {
+          // Ignore date errors
+        }
+      }
+    });
 
     // Center the tree vertically
     if (allPositions.length > 0) {
@@ -300,8 +356,8 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
   }, [treeStructure, data, handleNodeClick, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', overflow: 'auto' }}>
-      <svg ref={svgRef} style={{ display: 'block' }}></svg>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5' }}>
+      <svg ref={svgRef} style={{ display: 'block', width: '100%', height: '100%' }}></svg>
     </Box>
   );
 };
