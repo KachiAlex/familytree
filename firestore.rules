@@ -68,7 +68,7 @@ service cloud.firestore {
 
     // PERSONS: belong to a family via family_id.
     // Read: family members can read all persons in their family.
-    // Update/delete: family members OR person owner (ownerUserId).
+    // Update/delete: family members OR person owner (ownerUserId) OR family owner.
     match /persons/{personId} {
       // Create: require auth and that the user is a member of the target family
       allow create: if isSignedIn()
@@ -78,10 +78,11 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && isFamilyMember(resource.data.family_id);
 
-      // Update/delete: family members or claimed owner of that person
+      // Update/delete: family members, claimed owner of that person, or family owner
       allow update, delete: if isSignedIn()
         && (isFamilyMember(resource.data.family_id)
-          || resource.data.ownerUserId == request.auth.uid);
+          || resource.data.ownerUserId == request.auth.uid
+          || isFamilyOwner(resource.data.family_id));
     }
 
     // USER RELATIONSHIPS: how a given person relates to the current user
@@ -99,9 +100,10 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isFamilyMember(request.resource.data.family_id);
 
-      // Read/update/delete: family members
+      // Read/update/delete: family members or family owner
       allow read, update, delete: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (isFamilyMember(resource.data.family_id)
+          || isFamilyOwner(resource.data.family_id));
     }
 
     // SPOUSE RELATIONSHIPS: spouse relationships within a family.
@@ -110,9 +112,10 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isFamilyMember(request.resource.data.family_id);
 
-      // Read/update/delete: family members
+      // Read/update/delete: family members or family owner
       allow read, update, delete: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (isFamilyMember(resource.data.family_id)
+          || isFamilyOwner(resource.data.family_id));
     }
 
     // PERSON INVITATIONS: invitations to claim a person's profile
@@ -148,13 +151,15 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && isFamilyMember(resource.data.family_id);
 
-      // Update: family members can update documents
+      // Update: family members or family owner can update documents
       allow update: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (isFamilyMember(resource.data.family_id)
+          || isFamilyOwner(resource.data.family_id));
 
-      // Delete: family members can delete documents
+      // Delete: family members or family owner can delete documents
       allow delete: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (isFamilyMember(resource.data.family_id)
+          || isFamilyOwner(resource.data.family_id));
     }
 
     // STORIES: oral history and family stories
@@ -167,13 +172,15 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && isFamilyMember(resource.data.family_id);
 
-      // Update: family members can update stories
+      // Update: family members or family owner can update stories
       allow update: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (isFamilyMember(resource.data.family_id)
+          || isFamilyOwner(resource.data.family_id));
 
-      // Delete: family members can delete stories
+      // Delete: family members or family owner can delete stories
       allow delete: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+        && (isFamilyMember(resource.data.family_id)
+          || isFamilyOwner(resource.data.family_id));
     }
   }
 
