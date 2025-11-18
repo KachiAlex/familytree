@@ -134,10 +134,11 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       if (node.children && node.children.length > 0) {
         let childY = 0;
         node.children.forEach((child) => {
+          if (!child || !child.id) return; // Skip invalid children
           const childPositions = layoutTree(child, x + nodeHeight, childY, depth + 1);
           childrenPositions = childrenPositions.concat(childPositions);
           if (childPositions.length > 0) {
-            const childHeight = child.data.spouse 
+            const childHeight = child && child.spouse 
               ? nodeWidth * 2 + spouseSpacing 
               : nodeWidth;
             childY += childHeight;
@@ -150,21 +151,26 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         ? (Math.min(...childrenPositions.map(p => p.y)) + Math.max(...childrenPositions.map(p => p.y))) / 2
         : y;
       
+      // Ensure node exists and has id
+      if (!node || !node.id) {
+        return positions.concat(childrenPositions);
+      }
+      
       positions.push({
-        id: node.data.id,
+        id: node.id,
         x: x, // Horizontal position (left to right)
         y: mainY, // Vertical position (top to bottom)
-        data: node.data,
-        hasSpouse: !!node.data.spouse,
+        data: node,
+        hasSpouse: !!(node && node.spouse),
       });
       
       // Position spouse next to main node horizontally (side by side)
-      if (node.data.spouse) {
+      if (node.spouse && node.spouse.id) {
         positions.push({
-          id: node.data.spouse.id,
+          id: node.spouse.id,
           x: x, // Same horizontal position (left to right)
           y: mainY + nodeWidth + spouseSpacing, // Next to main node vertically (side by side when viewing)
-          data: node.data.spouse,
+          data: node.spouse,
           hasSpouse: true,
           isSpouse: true,
         });
@@ -179,13 +185,13 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
     // Draw links for parent-child and spouse relationships
     const drawLinks = (node) => {
-      if (!node || node.data.id === '__root__') return;
+      if (!node || !node.data || !node.data.id || node.data.id === '__root__') return;
       
       const parentPos = positionMap.get(node.data.id);
       if (!parentPos) return;
       
       // Draw link to spouse if exists (horizontal line)
-      if (node.data.spouse) {
+      if (node.data.spouse && node.data.spouse.id) {
         const spousePos = positionMap.get(node.data.spouse.id);
         if (spousePos) {
           g.append('line')
@@ -202,10 +208,11 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       // Draw links to children (from parent center to children)
       if (node.children) {
         node.children.forEach((child) => {
+          if (!child || !child.data || !child.data.id) return; // Skip invalid children
           const childPos = positionMap.get(child.data.id);
           if (childPos) {
-            const parentCenterY = node.data.spouse 
-              ? (parentPos.y + positionMap.get(node.data.spouse.id).y) / 2
+            const parentCenterY = node.data.spouse && node.data.spouse.id
+              ? (parentPos.y + (positionMap.get(node.data.spouse.id)?.y || parentPos.y)) / 2
               : parentPos.y;
             
             g.append('path')
