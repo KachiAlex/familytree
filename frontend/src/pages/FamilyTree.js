@@ -25,6 +25,7 @@ import {
   Snackbar,
   Alert,
   Skeleton,
+  Collapse,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -35,6 +36,8 @@ import {
   FileDownload as FileDownloadIcon,
   PictureAsPdf as PdfIcon,
   Upload as UploadIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { db } from '../firebase';
 import {
@@ -77,6 +80,7 @@ const FamilyTree = () => {
   const [gedcomImportOpen, setGedcomImportOpen] = useState(false);
   const [importingGedcom, setImportingGedcom] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [insightsExpanded, setInsightsExpanded] = useState(false); // Default to collapsed
 
   // Only fetch when familyId changes, not when viewType changes
   useEffect(() => {
@@ -593,64 +597,87 @@ const FamilyTree = () => {
         </Box>
       </Box>
 
-      {/* Statistics Panel */}
+      {/* Statistics Panel - Collapsible */}
       {stats && (
-        <Box sx={{ p: 2, bgcolor: '#f9fafb', borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-            Family Insights
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-            <Paper sx={{ p: 2, flex: '1 1 200px' }}>
-              <Typography variant="body2" color="text.secondary">
-                Total Persons
-              </Typography>
-              <Typography variant="h5">{stats.total}</Typography>
-            </Paper>
-            <Paper sx={{ p: 2, flex: '1 1 200px' }}>
-              <Typography variant="body2" color="text.secondary">
-                Gender Distribution
-              </Typography>
-              <Typography variant="body1">
-                Male: {stats.maleCount} • Female: {stats.femaleCount} • Other: {stats.otherCount}
-              </Typography>
-            </Paper>
-            <Paper sx={{ p: 2, flex: '1 1 300px' }}>
-              <Typography variant="body2" color="text.secondary">
-                Top Clans
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                {Object.entries(stats.clanCounts)
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 3)
-                  .map(([clan, count]) => (
-                    <Chip key={clan} label={`${clan} (${count})`} size="small" />
-                  ))}
-                {Object.keys(stats.clanCounts).length === 0 && (
-                  <Typography variant="body2" color="text.secondary">
-                    No clan data yet
-                  </Typography>
-                )}
-              </Box>
-            </Paper>
-            <Paper sx={{ p: 2, flex: '1 1 300px' }}>
-              <Typography variant="body2" color="text.secondary">
-                Top Villages/Towns
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                {Object.entries(stats.villageCounts)
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 3)
-                  .map(([village, count]) => (
-                    <Chip key={village} label={`${village} (${count})`} size="small" />
-                  ))}
-                {Object.keys(stats.villageCounts).length === 0 && (
-                  <Typography variant="body2" color="text.secondary">
-                    No village data yet
-                  </Typography>
-                )}
-              </Box>
-            </Paper>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Box 
+            sx={{ 
+              p: 2, 
+              bgcolor: '#f9fafb', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              cursor: 'pointer',
+            }}
+            onClick={() => setInsightsExpanded(!insightsExpanded)}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Family Insights
+            </Typography>
+            <IconButton 
+              size="small" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setInsightsExpanded(!insightsExpanded);
+              }}
+            >
+              {insightsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
           </Box>
+          <Collapse in={insightsExpanded}>
+            <Box sx={{ p: 2, bgcolor: '#f9fafb', display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              <Paper sx={{ p: 2, flex: '1 1 200px' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Total Persons
+                </Typography>
+                <Typography variant="h5">{stats.total}</Typography>
+              </Paper>
+              <Paper sx={{ p: 2, flex: '1 1 200px' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Gender Distribution
+                </Typography>
+                <Typography variant="body1">
+                  Male: {stats.maleCount} • Female: {stats.femaleCount} • Other: {stats.otherCount}
+                </Typography>
+              </Paper>
+              <Paper sx={{ p: 2, flex: '1 1 300px' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Top Clans
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                  {Object.entries(stats.clanCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([clan, count]) => (
+                      <Chip key={clan} label={`${clan} (${count})`} size="small" />
+                    ))}
+                  {Object.keys(stats.clanCounts).length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      No clan data yet
+                    </Typography>
+                  )}
+                </Box>
+              </Paper>
+              <Paper sx={{ p: 2, flex: '1 1 300px' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Top Villages/Towns
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                  {Object.entries(stats.villageCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([village, count]) => (
+                      <Chip key={village} label={`${village} (${count})`} size="small" />
+                    ))}
+                  {Object.keys(stats.villageCounts).length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      No village data yet
+                    </Typography>
+                  )}
+                </Box>
+              </Paper>
+            </Box>
+          </Collapse>
         </Box>
       )}
 
@@ -670,7 +697,7 @@ const FamilyTree = () => {
         </Tabs>
       </Paper>
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 0, position: 'relative' }}>
         {renderTreeView}
       </Box>
 

@@ -338,7 +338,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       }
     });
 
-    // Center the tree vertically
+    // Update SVG dimensions to fit content with padding
     if (allPositions.length > 0) {
       const bounds = allPositions.reduce((acc, p) => {
         if (p.id === '__root__') return acc;
@@ -350,14 +350,23 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         };
       }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
 
-      const offsetY = (height - (bounds.maxY - bounds.minY)) / 2 - bounds.minY;
-      g.attr('transform', `translate(50,${offsetY + 50})`);
+      const padding = 100;
+      const contentWidth = bounds.maxX - bounds.minX + padding * 2;
+      const contentHeight = bounds.maxY - bounds.minY + padding * 2;
+      
+      svg.attr('width', Math.max(width, contentWidth))
+         .attr('height', Math.max(height, contentHeight));
+      
+      // Center the tree
+      const offsetX = Math.max(0, (Math.max(width, contentWidth) - (bounds.maxX - bounds.minX)) / 2 - bounds.minX);
+      const offsetY = Math.max(0, (Math.max(height, contentHeight) - (bounds.maxY - bounds.minY)) / 2 - bounds.minY);
+      g.attr('transform', `translate(${offsetX + padding},${offsetY + padding})`);
     }
   }, [treeStructure, data, handleNodeClick, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5' }}>
-      <svg ref={svgRef} style={{ display: 'block', width: '100%', height: '100%' }}></svg>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', overflow: 'auto', bgcolor: '#f5f5f5' }}>
+      <svg ref={svgRef} style={{ display: 'block' }}></svg>
     </Box>
   );
 };

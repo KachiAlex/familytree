@@ -367,8 +367,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
   }, [treeStructure, data, handleNodeClick, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5' }}>
-      <svg ref={svgRef} style={{ display: 'block', width: '100%', height: '100%' }}></svg>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', overflow: 'auto', bgcolor: '#f5f5f5' }}>
+      <svg ref={svgRef} style={{ display: 'block' }}></svg>
     </Box>
   );
 };
