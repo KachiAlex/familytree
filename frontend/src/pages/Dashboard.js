@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardActions,
   Grid,
   AppBar,
   Toolbar,
@@ -17,6 +18,11 @@ import {
   Snackbar,
   Alert,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -24,6 +30,7 @@ import {
   Logout as LogoutIcon,
   FamilyRestroom as FamilyIcon,
   Refresh as RefreshIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import ThemeToggleButton from '../components/ThemeToggleButton';
@@ -38,6 +45,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 
 const Dashboard = () => {
@@ -46,6 +54,10 @@ const Dashboard = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [error, setError] = useState(null);
   const [retrying, setRetrying] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [familyToDelete, setFamilyToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const { user, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -240,6 +252,80 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  const handleDeleteClick = (e, family) => {
+    e.stopPropagation(); // Prevent card click navigation
+    setFamilyToDelete(family);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!familyToDelete) return;
+
+    setDeleting(true);
+    try {
+      const familyId = familyToDelete.family_id;
+      const BATCH_LIMIT = 500; // Firestore batch limit
+      const allRefs = [];
+
+      // Collect all document references to delete
+      const collections = [
+        { name: 'persons', query: query(collection(db, 'persons'), where('family_id', '==', familyId)) },
+        { name: 'relationships', query: query(collection(db, 'relationships'), where('family_id', '==', familyId)) },
+        { name: 'spouseRelationships', query: query(collection(db, 'spouseRelationships'), where('family_id', '==', familyId)) },
+        { name: 'familyMembers', query: query(collection(db, 'familyMembers'), where('family_id', '==', familyId)) },
+        { name: 'documents', query: query(collection(db, 'documents'), where('family_id', '==', familyId)) },
+        { name: 'stories', query: query(collection(db, 'stories'), where('family_id', '==', familyId)) },
+        { name: 'verifications', query: query(collection(db, 'verifications'), where('family_id', '==', familyId)) },
+        { name: 'personInvitations', query: query(collection(db, 'personInvitations'), where('family_id', '==', familyId)) },
+      ];
+
+      // Fetch all documents
+      for (const coll of collections) {
+        const snap = await getDocs(coll.query);
+        snap.docs.forEach((docSnap) => {
+          allRefs.push(docSnap.ref);
+        });
+      }
+
+      // Add the family document itself
+      const familyRef = doc(db, 'families', familyId);
+      allRefs.push(familyRef);
+
+      // Delete in batches
+      for (let i = 0; i < allRefs.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        const batchRefs = allRefs.slice(i, i + BATCH_LIMIT);
+        batchRefs.forEach((ref) => {
+          batch.delete(ref);
+        });
+        await batch.commit();
+      }
+
+      setSnackbar({ 
+        open: true, 
+        message: `Family "${familyToDelete.family_name}" deleted successfully`, 
+        severity: 'success' 
+      });
+      setDeleteDialogOpen(false);
+      setFamilyToDelete(null);
+      await fetchFamilies();
+    } catch (error) {
+      console.error('Failed to delete family:', error);
+      setSnackbar({ 
+        open: true, 
+        message: `Failed to delete family: ${error.message || 'Unknown error'}`, 
+        severity: 'error' 
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setFamilyToDelete(null);
+  };
+
   return (
     <>
       <AppBar position="static">
@@ -331,33 +417,49 @@ const Dashboard = () => {
           </Card>
         ) : (
           <Grid container spacing={3}>
-            {families.map((family) => (
-              <Grid item xs={12} sm={6} md={4} key={family.family_id}>
-                <Card
-                  sx={{ cursor: 'pointer', height: '100%' }}
-                  onClick={() => navigate(`/family/${family.family_id}/tree`)}
-                >
-                  <CardContent>
-                    <Typography variant="h5" component="h2" gutterBottom>
-                      {family.family_name}
-                    </Typography>
-                    {family.clan_name && (
-                      <Typography color="text.secondary" gutterBottom>
-                        Clan: {family.clan_name}
+            {families.map((family) => {
+              const isOwner = family.user_role === 'admin' || family.created_by_user_id === (user?.user_id || user?.userId || user?.uid);
+              return (
+                <Grid item xs={12} sm={6} md={4} key={family.family_id}>
+                  <Card
+                    sx={{ cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column' }}
+                    onClick={() => navigate(`/family/${family.family_id}/tree`)}
+                  >
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography variant="h5" component="h2" gutterBottom>
+                        {family.family_name}
                       </Typography>
-                    )}
-                    {family.village_origin && (
-                      <Typography color="text.secondary" gutterBottom>
-                        Origin: {family.village_origin}
+                      {family.clan_name && (
+                        <Typography color="text.secondary" gutterBottom>
+                          Clan: {family.clan_name}
+                        </Typography>
+                      )}
+                      {family.village_origin && (
+                        <Typography color="text.secondary" gutterBottom>
+                          Origin: {family.village_origin}
+                        </Typography>
+                      )}
+                      <Typography variant="body2" color="text.secondary">
+                        Role: {family.user_role}
                       </Typography>
+                    </CardContent>
+                    {isOwner && (
+                      <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+                        <Button
+                          size="small"
+                          color="error"
+                          startIcon={<DeleteIcon />}
+                          onClick={(e) => handleDeleteClick(e, family)}
+                          disabled={deleting}
+                        >
+                          Delete
+                        </Button>
+                      </CardActions>
                     )}
-                    <Typography variant="body2" color="text.secondary">
-                      Role: {family.user_role}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
         )}
       </Container>
@@ -372,6 +474,54 @@ const Dashboard = () => {
           {error}
         </Alert>
       </Snackbar>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity} 
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Delete Family Tree?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to permanently delete <strong>{familyToDelete?.family_name}</strong>? 
+            This will delete all persons, relationships, documents, stories, and other data associated with this family tree. 
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

@@ -62,8 +62,8 @@ service cloud.firestore {
       // Read / update: family members
       allow read, update: if isFamilyMember(familyId);
 
-      // No direct delete for now
-      allow delete: if false;
+      // Delete: only family owner can delete
+      allow delete: if isFamilyOwner(familyId);
     }
 
     // PERSONS: belong to a family via family_id.
