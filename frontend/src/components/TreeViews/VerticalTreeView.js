@@ -165,7 +165,17 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
   }, [onPersonClick]);
 
   useEffect(() => {
-    if (!treeStructure || !data) return;
+    if (!treeStructure || !data) {
+      // Set minimum dimensions even if no data
+      if (svgRef.current && containerRef.current) {
+        const width = containerRef.current?.clientWidth || 800;
+        const height = 600;
+        d3.select(svgRef.current)
+          .attr('width', width)
+          .attr('height', height);
+      }
+      return;
+    }
 
     const width = containerRef.current?.clientWidth || 800;
     const nodeCount = data.nodes?.length || 0;
@@ -468,24 +478,36 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         };
       }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
 
-      // Update SVG dimensions to fit content with padding
-      const padding = 100;
-      const contentWidth = bounds.maxX - bounds.minX + padding * 2;
-      const contentHeight = bounds.maxY - bounds.minY + padding * 2;
-      
-      svg.attr('width', Math.max(width, contentWidth))
-         .attr('height', Math.max(height, contentHeight));
-      
-      // Center the tree
-      const offsetX = Math.max(0, (Math.max(width, contentWidth) - (bounds.maxX - bounds.minX)) / 2 - bounds.minX);
-      const offsetY = Math.max(0, (Math.max(height, contentHeight) - (bounds.maxY - bounds.minY)) / 2 - bounds.minY);
-      g.attr('transform', `translate(${offsetX + padding},${offsetY + padding})`);
+      // Check if bounds are valid
+      if (bounds.minX !== Infinity && bounds.maxX !== -Infinity && 
+          bounds.minY !== Infinity && bounds.maxY !== -Infinity) {
+        // Update SVG dimensions to fit content with padding
+        const padding = 100;
+        const contentWidth = bounds.maxX - bounds.minX + padding * 2;
+        const contentHeight = bounds.maxY - bounds.minY + padding * 2;
+        
+        svg.attr('width', Math.max(width, contentWidth))
+           .attr('height', Math.max(height, contentHeight));
+        
+        // Center the tree
+        const offsetX = Math.max(0, (Math.max(width, contentWidth) - (bounds.maxX - bounds.minX)) / 2 - bounds.minX);
+        const offsetY = Math.max(0, (Math.max(height, contentHeight) - (bounds.maxY - bounds.minY)) / 2 - bounds.minY);
+        g.attr('transform', `translate(${offsetX + padding},${offsetY + padding})`);
+      } else {
+        // Fallback: ensure minimum dimensions
+        svg.attr('width', width).attr('height', height);
+        g.attr('transform', `translate(${width / 2},${height / 2})`);
+      }
+    } else {
+      // No positions - ensure minimum dimensions
+      svg.attr('width', width).attr('height', height);
+      g.attr('transform', `translate(${width / 2},${height / 2})`);
     }
   }, [treeStructure, data, handleNodeClick, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', overflow: 'auto', bgcolor: '#f5f5f5' }}>
-      <svg ref={svgRef} style={{ display: 'block' }}></svg>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5' }}>
+      <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
     </Box>
   );
 };
