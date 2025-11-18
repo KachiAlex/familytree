@@ -20,6 +20,8 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
     const hasParent = new Set();
 
     // Build parent-child and spouse relationships - filter out invalid edges
+    const parentPairMap = new Map(); // Map parent pair (sorted IDs) to children
+    
     (data.edges || []).forEach((edge) => {
       if (!edge || !edge.source || !edge.target) return;
       if (edge.type === 'parent') {
@@ -41,12 +43,51 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         });
       }
     });
+    
+    // Build parent pair map - group children by their parent pairs
+    childrenMap.forEach((childIds, parentId) => {
+      childIds.forEach(childId => {
+        // Check if this child has another parent (spouse of parentId)
+        const otherParentIds = [];
+        childrenMap.forEach((otherChildIds, otherParentId) => {
+          if (otherParentId !== parentId && otherChildIds.includes(childId)) {
+            otherParentIds.push(otherParentId);
+          }
+        });
+        
+        // Find if any of the other parents is a spouse of parentId
+        const spouseInfo = spouseMap.get(parentId);
+        let pairKey = null;
+        
+        if (spouseInfo && otherParentIds.includes(spouseInfo.spouseId)) {
+          // This child has both parents - group by parent pair
+          pairKey = [parentId, spouseInfo.spouseId].sort().join('_');
+        } else if (otherParentIds.length === 0) {
+          // Single parent - create a pair key with just this parent
+          pairKey = parentId + '_';
+        } else {
+          // Child has other parent(s) but not the spouse - use single parent key
+          pairKey = parentId + '_';
+        }
+        
+        if (pairKey) {
+          if (!parentPairMap.has(pairKey)) {
+            if (spouseInfo && otherParentIds.includes(spouseInfo.spouseId)) {
+              parentPairMap.set(pairKey, { parents: [parentId, spouseInfo.spouseId], children: new Set() });
+            } else {
+              parentPairMap.set(pairKey, { parents: [parentId], children: new Set() });
+            }
+          }
+          parentPairMap.get(pairKey).children.add(childId);
+        }
+      });
+    });
 
     const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
 
     const buildTree = (nodeId, visited = new Set()) => {
       const key = String(nodeId);
-      if (visited.has(key)) return null; // Prevent cycles
+      if (visited.has(key)) return null; // Prevent cycles - each person appears only once
       visited.add(key);
 
       const node = nodeMap.get(key);
@@ -55,24 +96,31 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       // Get spouse if exists
       const spouseInfo = spouseMap.get(key);
       let spouse = null;
+      let maritalStatus = 'married';
+      
       if (spouseInfo && !visited.has(spouseInfo.spouseId)) {
         const spouseNode = nodeMap.get(spouseInfo.spouseId);
         if (spouseNode) {
+          maritalStatus = spouseInfo.marital_status || 'married';
           spouse = {
             ...spouseNode.data,
             id: spouseNode.id,
             spouse: null, // Prevent infinite recursion
             children: [],
-            marital_status: spouseInfo.marital_status || 'married', // Include marital status
+            marital_status: maritalStatus,
           };
+          visited.add(spouseInfo.spouseId); // Mark spouse as visited to prevent duplicates
         }
       }
 
-      // Get children (union of both parents' children)
-      const children = new Set(childrenMap.get(key) || []);
-      if (spouseInfo && spouseInfo.spouseId) {
-        const spouseChildren = childrenMap.get(spouseInfo.spouseId) || [];
-        spouseChildren.forEach((childId) => children.add(childId));
+      // Get children for this parent pair (or single parent)
+      const children = new Set();
+      const pairKey = spouseInfo 
+        ? [key, spouseInfo.spouseId].sort().join('_')
+        : key + '_';
+      
+      if (parentPairMap.has(pairKey)) {
+        parentPairMap.get(pairKey).children.forEach(childId => children.add(childId));
       }
 
       const childrenArray = Array.from(children)
@@ -143,55 +191,74 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       return Math.max(totalHeight, node.spouse ? 180 : 160);
     };
 
-    // Custom layout function to handle spouses side by side (horizontal: left to right)
-    const layoutTree = (node, x = 0, y = 0, depth = 0) => {
-      if (!node || !node.id) return [];
+    // Custom layout function - generations left to right, spouses side by side
+    const layoutTree = (node, x = 0, y = 0, depth = 0, visitedNodes = new Set()) => {
+      if (!node || !node.id || node.id === '__root__') return [];
+      if (visitedNodes.has(node.id)) return []; // Prevent duplicates
+      visitedNodes.add(node.id);
       
-      const nodeWidth = 160; // Width per node including spacing
-      const nodeHeight = 120; // Horizontal spacing between levels (left to right)
-      const spouseSpacing = 20; // Space between spouses (vertical)
-      const siblingSpacing = 20; // Space between sibling families
+      const nodeWidth = 180; // Width per node
+      const nodeHeight = 150; // Horizontal spacing between generations (left to right)
+      const spouseSpacing = 30; // Space between married spouses (vertical)
+      const divorcedSpacing = 100; // Extra space for divorced couples (vertical)
+      const siblingSpacing = 40; // Space between sibling families (vertical)
       
       const positions = [];
       
-      // Calculate children positions first to determine parent position
+      // Calculate children positions first (left to right)
       let childrenPositions = [];
       let currentY = y;
       
       if (node.children && node.children.length > 0) {
         node.children.forEach((child) => {
-          if (!child || !child.id) return; // Skip invalid children
+          if (!child || !child.id) return;
           const childTreeHeight = getTreeHeight(child);
-          const childPositions = layoutTree(child, x + nodeHeight, currentY, depth + 1);
+          // Share visitedNodes across siblings to prevent duplicates
+          const childPositions = layoutTree(child, x + nodeHeight, currentY, depth + 1, visitedNodes);
           childrenPositions = childrenPositions.concat(childPositions);
           currentY += childTreeHeight + siblingSpacing;
         });
-        // Remove last spacing
-        currentY -= siblingSpacing;
+        if (node.children.length > 0) {
+          currentY -= siblingSpacing; // Remove last spacing
+        }
       }
       
-      // Position main node (x is horizontal position, y is vertical)
+      // Position main node centered vertically above its children
       const mainY = childrenPositions.length > 0 
         ? (Math.min(...childrenPositions.map(p => p.y)) + Math.max(...childrenPositions.map(p => p.y))) / 2
         : y;
       
+      const maritalStatus = node.marital_status || 'married';
+      const isDivorced = maritalStatus === 'divorced';
+      
+      // Position main node
       positions.push({
         id: node.id,
-        x: x, // Horizontal position (left to right)
+        x: x, // Horizontal position (left to right - generation)
         y: mainY, // Vertical position (top to bottom)
         data: node,
         hasSpouse: !!(node && node.spouse),
+        marital_status: maritalStatus,
       });
       
-      // Position spouse next to main node horizontally (side by side)
-      if (node.spouse && node.spouse.id) {
+      // Position spouse next to main node if exists (vertically)
+      if (node && node.spouse && node.spouse.id && !visitedNodes.has(node.spouse.id)) {
+        visitedNodes.add(node.spouse.id);
+        const spouseY = isDivorced 
+          ? mainY + nodeWidth + divorcedSpacing // More space for divorced
+          : mainY + nodeWidth + spouseSpacing; // Close together for married
+        
         positions.push({
           id: node.spouse.id,
-          x: x, // Same horizontal position (left to right)
-          y: mainY + nodeWidth + spouseSpacing, // Next to main node vertically (side by side when viewing)
-          data: node.spouse,
+          x: x, // Same horizontal position (same generation)
+          y: spouseY, // Next to main node vertically
+          data: {
+            ...node.spouse,
+            marital_status: maritalStatus,
+          },
           hasSpouse: true,
           isSpouse: true,
+          marital_status: maritalStatus,
         });
       }
       
@@ -202,9 +269,16 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
     const treeHeight = getTreeHeight(treeStructure);
     const startY = Math.max(0, (height - treeHeight) / 2);
     
-    // Build flat position array
-    const allPositions = layoutTree(treeStructure, 0, startY);
-    const positionMap = new Map(allPositions.map(p => [p.id, p]));
+    // Build flat position array - use visited set to prevent duplicates
+    const allPositions = layoutTree(treeStructure, 0, startY, 0, new Set());
+    // Filter out duplicates by keeping only first occurrence of each ID
+    const seenIds = new Set();
+    const uniquePositions = allPositions.filter(p => {
+      if (!p || !p.id || seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    });
+    const positionMap = new Map(uniquePositions.map(p => [p.id, p]));
 
     // Draw links for parent-child and spouse relationships
     const drawLinks = (node) => {
@@ -213,18 +287,18 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       const parentPos = positionMap.get(node.id);
       if (!parentPos) return;
       
-      // Draw link to spouse if exists (horizontal line) with status-based styling
-      if (node.spouse && node.spouse.id) {
+      // Draw link to spouse if exists (only draw once per pair)
+      if (node.spouse && node.spouse.id && node.id < node.spouse.id) {
         const spousePos = positionMap.get(node.spouse.id);
         if (spousePos) {
-          const maritalStatus = node.spouse.marital_status || 'married';
+          const maritalStatus = node.spouse.marital_status || node.marital_status || 'married';
           const isDivorced = maritalStatus === 'divorced';
           const isWidowed = maritalStatus === 'widowed';
           
           g.append('line')
-            .attr('x1', parentPos.x)
+            .attr('x1', parentPos.x + 90) // Start from right edge of first node
             .attr('y1', parentPos.y)
-            .attr('x2', spousePos.x)
+            .attr('x2', spousePos.x + 90) // End at right edge of second node (same x for horizontal)
             .attr('y2', spousePos.y)
             .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
             .attr('stroke-width', isDivorced ? 2.5 : 3)
@@ -270,17 +344,19 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
     drawLinks(treeStructure);
 
-    // Draw nodes
+    // Draw nodes - use unique positions to prevent duplicates
     const nodes = g
       .selectAll('.node')
-      .data(allPositions.filter(p => p.id !== '__root__'))
+      .data(uniquePositions.filter(p => p && p.id && p.id !== '__root__'))
       .enter()
       .append('g')
       .attr('class', 'node')
       .attr('transform', (d) => `translate(${d.x},${d.y})`)
       .style('cursor', onPersonClick ? 'pointer' : 'default')
       .on('click', (event, d) => {
-        handleNodeClick(d.data.id);
+        if (d && d.data && d.data.id) {
+          handleNodeClick(d.data.id);
+        }
       });
 
     // Skip rendering the dummy root node

@@ -19,7 +19,9 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const spouseMap = new Map(); // Map person to their spouse
     const hasParent = new Set();
 
-    // Build parent-child relationships
+    // Build parent-child relationships - group by parent pairs
+    const parentPairMap = new Map(); // Map parent pair (sorted IDs) to children
+    
     (data.edges || []).forEach((edge) => {
       if (!edge || !edge.source || !edge.target) return; // Skip invalid edges
       if (edge.type === 'parent') {
@@ -41,13 +43,54 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         });
       }
     });
+    
+    // Build parent pair map - group children by their parent pairs
+    // A child belongs to a parent pair if BOTH parents are listed as parents of that child
+    childrenMap.forEach((childIds, parentId) => {
+      childIds.forEach(childId => {
+        // Check if this child has another parent (spouse of parentId)
+        const otherParentIds = [];
+        childrenMap.forEach((otherChildIds, otherParentId) => {
+          if (otherParentId !== parentId && otherChildIds.includes(childId)) {
+            otherParentIds.push(otherParentId);
+          }
+        });
+        
+        // Find if any of the other parents is a spouse of parentId
+        const spouseInfo = spouseMap.get(parentId);
+        let pairKey = null;
+        
+        if (spouseInfo && otherParentIds.includes(spouseInfo.spouseId)) {
+          // This child has both parents - group by parent pair
+          pairKey = [parentId, spouseInfo.spouseId].sort().join('_');
+        } else if (otherParentIds.length === 0) {
+          // Single parent - create a pair key with just this parent
+          pairKey = parentId + '_';
+        } else {
+          // Child has other parent(s) but not the spouse - use single parent key
+          pairKey = parentId + '_';
+        }
+        
+        if (pairKey) {
+          if (!parentPairMap.has(pairKey)) {
+            if (spouseInfo && otherParentIds.includes(spouseInfo.spouseId)) {
+              parentPairMap.set(pairKey, { parents: [parentId, spouseInfo.spouseId], children: new Set() });
+            } else {
+              parentPairMap.set(pairKey, { parents: [parentId], children: new Set() });
+            }
+          }
+          parentPairMap.get(pairKey).children.add(childId);
+        }
+      });
+    });
 
     const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
 
+    // Build tree structure with proper parent-child grouping
     const buildTree = (nodeId, visited = new Set()) => {
       if (!nodeId) return null;
       const key = String(nodeId);
-      if (visited.has(key)) return null; // Prevent cycles
+      if (visited.has(key)) return null; // Prevent cycles - each person appears only once
       visited.add(key);
 
       const node = nodeMap.get(key);
@@ -56,26 +99,34 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       // Get spouse if exists
       const spouseInfo = spouseMap.get(key);
       let spouse = null;
+      let maritalStatus = 'married';
+      
       if (spouseInfo && !visited.has(spouseInfo.spouseId)) {
         const spouseNode = nodeMap.get(spouseInfo.spouseId);
         if (spouseNode && spouseNode.id) {
+          maritalStatus = spouseInfo.marital_status || 'married';
           spouse = {
             ...(spouseNode.data || {}),
             id: spouseNode.id,
             spouse: null, // Prevent infinite recursion
             children: [],
-            marital_status: spouseInfo.marital_status || 'married', // Include marital status
+            marital_status: maritalStatus,
           };
+          visited.add(spouseInfo.spouseId); // Mark spouse as visited to prevent duplicates
         }
       }
 
-      // Get children (union of both parents' children)
-      const children = new Set(childrenMap.get(key) || []);
-      if (spouseInfo && spouseInfo.spouseId) {
-        const spouseChildren = childrenMap.get(spouseInfo.spouseId) || [];
-        spouseChildren.forEach((childId) => children.add(childId));
+      // Get children for this parent pair (or single parent)
+      const children = new Set();
+      const pairKey = spouseInfo 
+        ? [key, spouseInfo.spouseId].sort().join('_')
+        : key + '_';
+      
+      if (parentPairMap.has(pairKey)) {
+        parentPairMap.get(pairKey).children.forEach(childId => children.add(childId));
       }
 
+      // Build children recursively
       const childrenArray = Array.from(children)
         .map((childId) => buildTree(childId, new Set(visited)))
         .filter(Boolean);
@@ -85,6 +136,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         id: node.id,
         spouse: spouse,
         children: childrenArray,
+        marital_status: maritalStatus,
       };
     };
 
@@ -142,18 +194,21 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       return Math.max(totalWidth, node.spouse ? 160 : 140);
     };
 
-    // Custom layout function to handle spouses side by side
-    const layoutTree = (node, x = 0, y = 0, depth = 0) => {
-      if (!node || !node.id) return [];
+    // Custom layout function - parents above children, spouses side by side
+    const layoutTree = (node, x = 0, y = 0, depth = 0, visitedNodes = new Set()) => {
+      if (!node || !node.id || node.id === '__root__') return [];
+      if (visitedNodes.has(node.id)) return []; // Prevent duplicates
+      visitedNodes.add(node.id);
       
-      const nodeWidth = 140; // Width per node
-      const nodeHeight = 100; // Vertical spacing between levels
-      const spouseSpacing = 20; // Space between spouses
-      const siblingSpacing = 20; // Space between sibling families
+      const nodeWidth = 180; // Width per node
+      const nodeHeight = 120; // Vertical spacing between generations
+      const spouseSpacing = 30; // Space between married spouses
+      const divorcedSpacing = 100; // Extra space for divorced couples
+      const siblingSpacing = 40; // Space between sibling families
       
       const positions = [];
       
-      // Calculate children positions first
+      // Calculate children positions first (bottom-up approach)
       let childrenPositions = [];
       let currentX = x;
       
@@ -161,36 +216,52 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         node.children.forEach((child) => {
           if (!child || !child.id) return;
           const childTreeWidth = getTreeWidth(child);
-          const childPositions = layoutTree(child, currentX, y + nodeHeight, depth + 1);
+          // Share visitedNodes across siblings to prevent duplicates
+          const childPositions = layoutTree(child, currentX, y + nodeHeight, depth + 1, visitedNodes);
           childrenPositions = childrenPositions.concat(childPositions);
           currentX += childTreeWidth + siblingSpacing;
         });
-        // Remove last spacing
-        currentX -= siblingSpacing;
+        if (node.children.length > 0) {
+          currentX -= siblingSpacing; // Remove last spacing
+        }
       }
       
-      // Position main node centered above children
+      // Position main node centered above its children
       const mainX = childrenPositions.length > 0 
         ? (Math.min(...childrenPositions.map(p => p.x)) + Math.max(...childrenPositions.map(p => p.x))) / 2
         : x;
       
+      const maritalStatus = node.marital_status || 'married';
+      const isDivorced = maritalStatus === 'divorced';
+      
+      // Position main node
       positions.push({
         id: node.id,
         x: mainX,
         y: y,
         data: node,
         hasSpouse: !!(node && node.spouse),
+        marital_status: maritalStatus,
       });
       
       // Position spouse next to main node if exists
-      if (node && node.spouse && node.spouse.id) {
+      if (node && node.spouse && node.spouse.id && !visitedNodes.has(node.spouse.id)) {
+        visitedNodes.add(node.spouse.id);
+        const spouseX = isDivorced 
+          ? mainX + nodeWidth + divorcedSpacing // More space for divorced
+          : mainX + nodeWidth + spouseSpacing; // Close together for married
+        
         positions.push({
           id: node.spouse.id,
-          x: mainX + nodeWidth + spouseSpacing,
+          x: spouseX,
           y: y,
-          data: node.spouse,
+          data: {
+            ...node.spouse,
+            marital_status: maritalStatus,
+          },
           hasSpouse: true,
           isSpouse: true,
+          marital_status: maritalStatus,
         });
       }
       
@@ -201,9 +272,16 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const treeWidth = getTreeWidth(treeStructure);
     const startX = Math.max(0, (width - treeWidth) / 2);
     
-    // Build flat position array
-    const allPositions = layoutTree(treeStructure, startX, 50);
-    const positionMap = new Map(allPositions.filter(p => p && p.id).map(p => [p.id, p]));
+    // Build flat position array - use visited set to prevent duplicates
+    const allPositions = layoutTree(treeStructure, startX, 50, 0, new Set());
+    // Filter out duplicates by keeping only first occurrence of each ID
+    const seenIds = new Set();
+    const uniquePositions = allPositions.filter(p => {
+      if (!p || !p.id || seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    });
+    const positionMap = new Map(uniquePositions.map(p => [p.id, p]));
 
     // Draw links for parent-child relationships
     const drawLinks = (node) => {
@@ -212,19 +290,19 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       const parentPos = positionMap.get(node.id);
       if (!parentPos) return;
       
-      // Draw link to spouse if exists
-      if (node && node.spouse && node.spouse.id) {
+      // Draw link to spouse if exists (only draw once per pair)
+      if (node && node.spouse && node.spouse.id && node.id < node.spouse.id) {
         const spousePos = positionMap.get(node.spouse.id);
         if (spousePos) {
-          const maritalStatus = node.spouse.marital_status || 'married';
+          const maritalStatus = node.spouse.marital_status || node.marital_status || 'married';
           const isDivorced = maritalStatus === 'divorced';
           const isWidowed = maritalStatus === 'widowed';
           
           // Draw spouse connection line with different styles based on status
           g.append('line')
-            .attr('x1', parentPos.x)
+            .attr('x1', parentPos.x + 90) // Start from right edge of first node
             .attr('y1', parentPos.y)
-            .attr('x2', spousePos.x)
+            .attr('x2', spousePos.x - 90) // End at left edge of second node
             .attr('y2', spousePos.y)
             .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
             .attr('stroke-width', isDivorced ? 2.5 : 3)
@@ -246,22 +324,22 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
               ? (parentPos.x + spousePos.x) / 2
               : parentPos.x;
             
-            // Draw vertical line from parent(s) down
+            // Draw vertical line from parent(s) down to child level
             g.append('line')
               .attr('x1', parentCenterX)
-              .attr('y1', parentPos.y + 35)
+              .attr('y1', parentPos.y + 40)
               .attr('x2', parentCenterX)
-              .attr('y2', childPos.y - 35)
+              .attr('y2', childPos.y - 40)
               .attr('stroke', '#424242')
               .attr('stroke-width', 2.5)
               .attr('opacity', 0.8);
             
-            // Draw horizontal line to child
+            // Draw horizontal line from center to child
             g.append('line')
               .attr('x1', parentCenterX)
-              .attr('y1', childPos.y - 35)
+              .attr('y1', childPos.y - 40)
               .attr('x2', childPos.x)
-              .attr('y2', childPos.y - 35)
+              .attr('y2', childPos.y - 40)
               .attr('stroke', '#424242')
               .attr('stroke-width', 2.5)
               .attr('opacity', 0.8);
@@ -273,10 +351,10 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
     drawLinks(treeStructure);
 
-    // Draw nodes
+    // Draw nodes - use unique positions to prevent duplicates
     const nodes = g
       .selectAll('.node')
-      .data(allPositions.filter(p => p && p.id && p.id !== '__root__' && p.data))
+      .data(uniquePositions.filter(p => p && p.id && p.id !== '__root__' && p.data))
       .enter()
       .append('g')
       .attr('class', 'node')
