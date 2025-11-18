@@ -283,7 +283,21 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const startX = Math.max(0, (width - treeWidth) / 2);
     
     // Build flat position array - use visited set to prevent duplicates
-    const allPositions = layoutTree(treeStructure, startX, 50, 0, new Set());
+    let allPositions = [];
+    try {
+      // If treeStructure has __root__, layout its children instead
+      if (treeStructure && treeStructure.id === '__root__' && treeStructure.children) {
+        treeStructure.children.forEach((child) => {
+          const childPositions = layoutTree(child, startX, 50, 0, new Set());
+          allPositions = allPositions.concat(childPositions);
+        });
+      } else {
+        allPositions = layoutTree(treeStructure, startX, 50, 0, new Set());
+      }
+    } catch (error) {
+      console.error('Error in layoutTree:', error);
+    }
+    
     // Filter out duplicates by keeping only first occurrence of each ID
     const seenIds = new Set();
     const uniquePositions = allPositions.filter(p => {
@@ -291,11 +305,27 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       seenIds.add(p.id);
       return true;
     });
+    
+    console.log('Tree structure:', treeStructure);
+    console.log('All positions:', allPositions.length);
+    console.log('Unique positions:', uniquePositions.length);
+    
+    if (uniquePositions.length === 0) {
+      console.warn('No positions generated for tree');
+      return; // Exit early if no positions
+    }
+    
     const positionMap = new Map(uniquePositions.map(p => [p.id, p]));
 
     // Draw links for parent-child relationships
     const drawLinks = (node) => {
-      if (!node || !node.id || node.id === '__root__') return;
+      if (!node || !node.id || node.id === '__root__') {
+        // If root node, draw links for its children
+        if (node && node.id === '__root__' && node.children) {
+          node.children.forEach((child) => drawLinks(child));
+        }
+        return;
+      }
       
       const parentPos = positionMap.get(node.id);
       if (!parentPos) return;
