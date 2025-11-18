@@ -185,114 +185,178 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
     const g = svg.append('g').attr('transform', 'translate(50,50)');
 
-    // Calculate tree height for proper spacing
-    const getTreeHeight = (node) => {
-      if (!node || !node.id) return 0;
-      if (!node.children || node.children.length === 0) {
-        return node.spouse ? 180 : 160;
+    // First, organize nodes by generation/depth
+    const organizeByGeneration = (node, depth = 0, visited = new Set(), generationMap = new Map()) => {
+      if (!node || !node.id || node.id === '__root__') return generationMap;
+      if (visited.has(node.id)) return generationMap;
+      visited.add(node.id);
+      
+      // Add node to its generation level
+      if (!generationMap.has(depth)) {
+        generationMap.set(depth, []);
       }
-      let maxChildHeight = 0;
-      let totalHeight = 0;
-      node.children.forEach((child) => {
-        const childHeight = getTreeHeight(child);
-        maxChildHeight = Math.max(maxChildHeight, childHeight);
-        totalHeight += childHeight;
-      });
-      return Math.max(totalHeight, node.spouse ? 180 : 160);
-    };
-
-    // Custom layout function - generations left to right, spouses side by side
-    const layoutTree = (node, x = 0, y = 0, depth = 0, visitedNodes = new Set()) => {
-      if (!node || !node.id || node.id === '__root__') return [];
-      if (visitedNodes.has(node.id)) return []; // Prevent duplicates
-      visitedNodes.add(node.id);
+      generationMap.get(depth).push(node);
       
-      const nodeWidth = 180; // Width per node
-      const nodeHeight = 200; // Horizontal spacing between generations (left to right)
-      const spouseSpacing = 30; // Space between married spouses (vertical)
-      const divorcedSpacing = 100; // Extra space for divorced couples (vertical)
-      const siblingSpacing = 60; // Space between sibling families (vertical)
-      
-      const positions = [];
-      
-      // First, layout all children to determine their total height
-      let childrenPositions = [];
-      let childrenStartY = y;
-      
-      if (node.children && node.children.length > 0) {
-        // Calculate positions for all children first
-        node.children.forEach((child) => {
-          if (!child || !child.id) return;
-          const childTreeHeight = getTreeHeight(child);
-          const childPositions = layoutTree(child, x + nodeHeight, childrenStartY, depth + 1, new Set(visitedNodes));
-          childrenPositions = childrenPositions.concat(childPositions);
-          childrenStartY += childTreeHeight + siblingSpacing;
-        });
-      }
-      
-      // Calculate center position for this node based on children
-      let mainY = y;
-      if (childrenPositions.length > 0) {
-        const minChildY = Math.min(...childrenPositions.map(p => p.y));
-        const maxChildY = Math.max(...childrenPositions.map(p => p.y));
-        mainY = (minChildY + maxChildY) / 2;
-      }
-      
-      const maritalStatus = node.marital_status || 'married';
-      const isDivorced = maritalStatus === 'divorced';
-      
-      // Position main node
-      positions.push({
-        id: node.id,
-        x: x, // Horizontal position (left to right - generation)
-        y: mainY, // Vertical position (top to bottom)
-        data: node,
-        hasSpouse: !!(node && node.spouse),
-        marital_status: maritalStatus,
-      });
-      
-      // Position spouse next to main node if exists (vertically)
-      if (node && node.spouse && node.spouse.id && !visitedNodes.has(node.spouse.id)) {
-        visitedNodes.add(node.spouse.id);
-        const spouseY = isDivorced 
-          ? mainY + nodeWidth + divorcedSpacing // More space for divorced
-          : mainY + nodeWidth + spouseSpacing; // Close together for married
-        
-        positions.push({
-          id: node.spouse.id,
-          x: x, // Same horizontal position (same generation)
-          y: spouseY, // Next to main node vertically
-          data: {
-            ...node.spouse,
-            marital_status: maritalStatus,
-          },
-          hasSpouse: true,
+      // Add spouse to same generation
+      if (node.spouse && node.spouse.id && !visited.has(node.spouse.id)) {
+        visited.add(node.spouse.id);
+        generationMap.get(depth).push({
+          ...node.spouse,
           isSpouse: true,
-          marital_status: maritalStatus,
+          spouseOf: node.id,
         });
       }
       
-      return positions.concat(childrenPositions);
-    };
-
-    // Calculate total tree height and center it
-    const treeHeight = getTreeHeight(treeStructure);
-    const startY = Math.max(0, (height - treeHeight) / 2);
-    
-    // Build flat position array - use visited set to prevent duplicates
-    let allPositions = [];
-    try {
-      // If treeStructure has __root__, layout its children instead
-      if (treeStructure && treeStructure.id === '__root__' && treeStructure.children) {
-        treeStructure.children.forEach((child) => {
-          const childPositions = layoutTree(child, 0, startY, 0, new Set());
-          allPositions = allPositions.concat(childPositions);
+      // Process children at next generation level
+      if (node.children && node.children.length > 0) {
+        node.children.forEach((child) => {
+          organizeByGeneration(child, depth + 1, new Set(visited), generationMap);
         });
-      } else {
-        allPositions = layoutTree(treeStructure, 0, startY, 0, new Set());
       }
-    } catch (error) {
-      console.error('Error in layoutTree:', error);
+      
+      return generationMap;
+    };
+    
+    // Get all root nodes (if __root__ exists, use its children)
+    const rootNodes = treeStructure && treeStructure.id === '__root__' && treeStructure.children
+      ? treeStructure.children
+      : [treeStructure].filter(Boolean);
+    
+    // Organize all nodes by generation
+    const generationMap = new Map();
+    rootNodes.forEach((root) => {
+      organizeByGeneration(root, 0, new Set(), generationMap);
+    });
+    
+    // Layout parameters
+    const nodeWidth = 180;
+    const nodeHeight = 200; // Horizontal spacing between generations (left to right)
+    const spouseSpacing = 30;
+    const divorcedSpacing = 100;
+    const siblingSpacing = 60;
+    
+    // Calculate positions for each generation
+    const allPositions = [];
+    const depths = Array.from(generationMap.keys());
+    if (depths.length === 0) {
+      console.warn('No generations found in tree');
+      return;
+    }
+    const maxDepth = Math.max(...depths);
+    
+    // Start from the deepest generation and work up (right to left for horizontal view)
+    for (let depth = maxDepth; depth >= 0; depth--) {
+      const nodesAtDepth = generationMap.get(depth) || [];
+      if (nodesAtDepth.length === 0) continue;
+      
+      // Calculate X position for this generation (left to right)
+      const x = 100 + (maxDepth - depth) * nodeHeight;
+      
+      // Group nodes by their parent pairs to position siblings together
+      const nodeGroups = [];
+      const processed = new Set();
+      
+      nodesAtDepth.forEach((node) => {
+        if (processed.has(node.id)) return;
+        processed.add(node.id);
+        
+        const group = [node];
+        
+        // Add spouse to same group if exists
+        if (node.spouse && node.spouse.id && !processed.has(node.spouse.id)) {
+          const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
+          if (spouseNode) {
+            group.push(spouseNode);
+            processed.add(spouseNode.id);
+          }
+        } else if (node.isSpouse && node.spouseOf) {
+          // This is a spouse, find its partner
+          const partnerNode = nodesAtDepth.find(n => n.id === node.spouseOf);
+          if (partnerNode && !processed.has(partnerNode.id)) {
+            group.unshift(partnerNode);
+            processed.add(partnerNode.id);
+          }
+        }
+        
+        nodeGroups.push(group);
+      });
+      
+      // Calculate Y positions for each group
+      const groupPositions = [];
+      const tempPositions = [];
+      
+      nodeGroups.forEach((group) => {
+        const mainNode = group[0];
+        const spouseNode = group.length > 1 ? group[1] : null;
+        
+        // If this node has children, center it vertically above them
+        let centerY = 0;
+        let hasChildren = false;
+        
+        if (mainNode.children && mainNode.children.length > 0) {
+          // Find children positions from allPositions (already calculated for deeper generations)
+          const childPositions = allPositions.filter(p => {
+            if (!mainNode.children) return false;
+            return mainNode.children.some(child => child && child.id === p.id);
+          });
+          
+          if (childPositions.length > 0) {
+            const minChildY = Math.min(...childPositions.map(p => p.y));
+            const maxChildY = Math.max(...childPositions.map(p => p.y));
+            centerY = (minChildY + maxChildY) / 2;
+            hasChildren = true;
+          }
+        }
+        
+        // If no children, position sequentially
+        if (!hasChildren) {
+          if (tempPositions.length > 0) {
+            const lastPos = tempPositions[tempPositions.length - 1];
+            const lastGroupHeight = lastPos.hasSpouse 
+              ? (lastPos.marital_status === 'divorced' ? nodeWidth * 2 + divorcedSpacing : nodeWidth * 2 + spouseSpacing)
+              : nodeWidth;
+            centerY = lastPos.y + lastGroupHeight + siblingSpacing;
+          } else {
+            centerY = 100;
+          }
+        }
+        
+        const maritalStatus = mainNode.marital_status || 'married';
+        const isDivorced = maritalStatus === 'divorced';
+        
+        // Position main node
+        const mainPos = {
+          id: mainNode.id,
+          x: x,
+          y: centerY,
+          data: mainNode,
+          hasSpouse: !!spouseNode,
+          marital_status: maritalStatus,
+        };
+        groupPositions.push(mainPos);
+        tempPositions.push(mainPos);
+        
+        // Position spouse if exists
+        if (spouseNode) {
+          const spouseY = isDivorced
+            ? centerY + nodeWidth + divorcedSpacing
+            : centerY + nodeWidth + spouseSpacing;
+          
+          const spousePos = {
+            id: spouseNode.id,
+            x: x,
+            y: spouseY,
+            data: spouseNode,
+            hasSpouse: true,
+            isSpouse: true,
+            marital_status: maritalStatus,
+          };
+          groupPositions.push(spousePos);
+          tempPositions.push(spousePos);
+        }
+      });
+      
+      allPositions.push(...groupPositions);
     }
     
     // Filter out duplicates by keeping only first occurrence of each ID
