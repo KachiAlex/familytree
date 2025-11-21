@@ -1661,7 +1661,7 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Add Family Relationship Dialog */}
-      <Dialog open={addFamilyOpen} onClose={() => setAddFamilyOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={addFamilyOpen} onClose={() => setAddFamilyOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
         <DialogTitle>Add family relationship for {person.full_name}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
@@ -1758,6 +1758,7 @@ const PersonDetail = () => {
         }}
         fullWidth
         maxWidth="sm"
+        disableEnforceFocus
       >
         <DialogTitle>Add New Family Member</DialogTitle>
         <DialogContent>
@@ -1814,21 +1815,69 @@ const PersonDetail = () => {
               value={newPersonValues.occupation}
               onChange={handleNewPersonChange}
             />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Clan Name"
-              name="clan_name"
-              value={newPersonValues.clan_name}
-              onChange={handleNewPersonChange}
+            <Autocomplete
+              freeSolo
+              options={commonValues.clan_names}
+              value={newPersonValues.clan_name || null}
+              onChange={(event, newValue) => {
+                handleNewPersonChange({ target: { name: 'clan_name', value: newValue || '' } });
+              }}
+              onInputChange={(event, newInputValue) => {
+                handleNewPersonChange({ target: { name: 'clan_name', value: newInputValue } });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  margin="normal"
+                  label="Clan Name"
+                  name="clan_name"
+                  placeholder="Select or type a new clan name"
+                  helperText={
+                    commonValues.clan_names.length > 0
+                      ? `Select from family: ${commonValues.clan_names.slice(0, 3).join(', ')}${commonValues.clan_names.length > 3 ? '...' : ''} or type a new one`
+                      : 'Type a clan name (e.g., Umunna, Idile)'
+                  }
+                />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option}>
+                  {option}
+                </li>
+              )}
+              noOptionsText="Type to add a new clan name"
             />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Village/Town Origin"
-              name="village_origin"
-              value={newPersonValues.village_origin}
-              onChange={handleNewPersonChange}
+            <Autocomplete
+              freeSolo
+              options={commonValues.village_origins}
+              value={newPersonValues.village_origin || null}
+              onChange={(event, newValue) => {
+                handleNewPersonChange({ target: { name: 'village_origin', value: newValue || '' } });
+              }}
+              onInputChange={(event, newInputValue) => {
+                handleNewPersonChange({ target: { name: 'village_origin', value: newInputValue } });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  margin="normal"
+                  label="Village/Town Origin"
+                  name="village_origin"
+                  placeholder="Select or type a new village/town"
+                  helperText={
+                    commonValues.village_origins.length > 0
+                      ? `Select from family: ${commonValues.village_origins.slice(0, 3).join(', ')}${commonValues.village_origins.length > 3 ? '...' : ''} or type a new one`
+                      : 'Type a village or town name'
+                  }
+                />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option}>
+                  {option}
+                </li>
+              )}
+              noOptionsText="Type to add a new village/town name"
             />
             <TextField
               fullWidth
@@ -2006,7 +2055,7 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Upload Document Dialog */}
-      <Dialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
         <DialogTitle>Upload Document or Photo</DialogTitle>
         <DialogContent>
           <TextField
@@ -2154,7 +2203,7 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Edit Person Dialog */}
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
         <DialogTitle>Edit {person.full_name}</DialogTitle>
         <DialogContent>
           {editValues && (
@@ -2243,6 +2292,9 @@ const PersonDetail = () => {
                 onChange={(event, newValue) => {
                   handleEditChange({ target: { name: 'clan_name', value: newValue || '' } });
                 }}
+                onInputChange={(event, newInputValue) => {
+                  handleEditChange({ target: { name: 'clan_name', value: newInputValue } });
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -2250,9 +2302,20 @@ const PersonDetail = () => {
                     margin="normal"
                     label="Clan Name"
                     name="clan_name"
-                    helperText={commonValues.clan_names.length > 0 ? `Common in family: ${commonValues.clan_names.join(', ')}` : ''}
+                    placeholder="Select or type a new clan name"
+                    helperText={
+                      commonValues.clan_names.length > 0
+                        ? `Select from family: ${commonValues.clan_names.slice(0, 3).join(', ')}${commonValues.clan_names.length > 3 ? '...' : ''} or type a new one`
+                        : 'Type a clan name (e.g., Umunna, Idile)'
+                    }
                   />
                 )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option}>
+                    {option}
+                  </li>
+                )}
+                noOptionsText="Type to add a new clan name"
               />
               <Autocomplete
                 freeSolo
@@ -2261,6 +2324,9 @@ const PersonDetail = () => {
                 onChange={(event, newValue) => {
                   handleEditChange({ target: { name: 'village_origin', value: newValue || '' } });
                 }}
+                onInputChange={(event, newInputValue) => {
+                  handleEditChange({ target: { name: 'village_origin', value: newInputValue } });
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -2268,9 +2334,20 @@ const PersonDetail = () => {
                     margin="normal"
                     label="Village/Town Origin"
                     name="village_origin"
-                    helperText={commonValues.village_origins.length > 0 ? `Common in family: ${commonValues.village_origins.join(', ')}` : ''}
+                    placeholder="Select or type a new village/town"
+                    helperText={
+                      commonValues.village_origins.length > 0
+                        ? `Select from family: ${commonValues.village_origins.slice(0, 3).join(', ')}${commonValues.village_origins.length > 3 ? '...' : ''} or type a new one`
+                        : 'Type a village or town name'
+                    }
                   />
                 )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option}>
+                    {option}
+                  </li>
+                )}
+                noOptionsText="Type to add a new village/town name"
               />
               <TextField
                 fullWidth
@@ -2295,7 +2372,7 @@ const PersonDetail = () => {
 
       {/* Snackbar for notifications */}
       {/* Edit Marital Status Dialog */}
-      <Dialog open={editMaritalStatusOpen} onClose={() => setEditMaritalStatusOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={editMaritalStatusOpen} onClose={() => setEditMaritalStatusOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
         <DialogTitle>Edit Marital Status</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>

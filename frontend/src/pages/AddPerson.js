@@ -269,16 +269,29 @@ const AddPerson = () => {
                 onChange={(event, newValue) => {
                   setFormData({ ...formData, clan_name: newValue || '' });
                 }}
+                onInputChange={(event, newInputValue) => {
+                  setFormData({ ...formData, clan_name: newInputValue });
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
                     fullWidth
                     label="Clan Name"
                     name="clan_name"
-                    placeholder="e.g., Umunna, Idile"
-                    helperText={commonValues.clan_names.length > 0 ? `Common in family: ${commonValues.clan_names.join(', ')}` : ''}
+                    placeholder="Select or type a new clan name"
+                    helperText={
+                      commonValues.clan_names.length > 0
+                        ? `Select from family: ${commonValues.clan_names.slice(0, 3).join(', ')}${commonValues.clan_names.length > 3 ? '...' : ''} or type a new one`
+                        : 'Type a clan name (e.g., Umunna, Idile)'
+                    }
                   />
                 )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option}>
+                    {option}
+                  </li>
+                )}
+                noOptionsText="Type to add a new clan name"
               />
             </Grid>
 
@@ -290,15 +303,29 @@ const AddPerson = () => {
                 onChange={(event, newValue) => {
                   setFormData({ ...formData, village_origin: newValue || '' });
                 }}
+                onInputChange={(event, newInputValue) => {
+                  setFormData({ ...formData, village_origin: newInputValue });
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
                     fullWidth
                     label="Village/Town Origin"
                     name="village_origin"
-                    helperText={commonValues.village_origins.length > 0 ? `Common in family: ${commonValues.village_origins.join(', ')}` : ''}
+                    placeholder="Select or type a new village/town"
+                    helperText={
+                      commonValues.village_origins.length > 0
+                        ? `Select from family: ${commonValues.village_origins.slice(0, 3).join(', ')}${commonValues.village_origins.length > 3 ? '...' : ''} or type a new one`
+                        : 'Type a village or town name'
+                    }
                   />
                 )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option}>
+                    {option}
+                  </li>
+                )}
+                noOptionsText="Type to add a new village/town name"
               />
             </Grid>
 

@@ -238,10 +238,55 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     // Layout parameters
     const nodeWidth = 160;
     const levelSpacing = 200;
-    const siblingSpacing = 40;
-    const spouseSpacing = 40;
-    const divorcedSpacing = 120;
+    const siblingSpacing = 50; // Spacing between siblings (increased for clarity)
+    const spouseSpacing = 25; // Spacing between spouses (closer together)
+    const divorcedSpacing = 100; // Spacing for divorced spouses (more distance)
+    const familyUnitGap = 100; // Gap between different family units on same level
     const padding = 150;
+    
+    // Identify family units: person + their spouses grouped together
+    const familyUnits = new Map(); // personId -> { personId, spouseIds: [], isRoot: boolean }
+    const personToUnit = new Map(); // personId -> unit personId
+    
+    persons.forEach((person, id) => {
+      const spouseInfo = spouses.get(id);
+      if (spouseInfo) {
+        const spouseId = spouseInfo.spouseId;
+        // Check if either person is already in a unit
+        if (personToUnit.has(id) || personToUnit.has(spouseId)) {
+          // Add to existing unit
+          const unitId = personToUnit.get(id) || personToUnit.get(spouseId);
+          const unit = familyUnits.get(unitId);
+          if (!unit.spouseIds.includes(spouseId) && unit.personId !== spouseId) {
+            unit.spouseIds.push(spouseId);
+            personToUnit.set(spouseId, unitId);
+          }
+          if (!unit.spouseIds.includes(id) && unit.personId !== id) {
+            unit.spouseIds.push(id);
+            personToUnit.set(id, unitId);
+          }
+        } else {
+          // Create new family unit - use the person with lower ID as the unit root
+          const unitId = id < spouseId ? id : spouseId;
+          const otherId = id < spouseId ? spouseId : id;
+          familyUnits.set(unitId, {
+            personId: unitId,
+            spouseIds: [otherId],
+            isRoot: false
+          });
+          personToUnit.set(unitId, unitId);
+          personToUnit.set(otherId, unitId);
+        }
+      } else if (!personToUnit.has(id)) {
+        // Person with no spouse - they are their own unit
+        familyUnits.set(id, {
+          personId: id,
+          spouseIds: [],
+          isRoot: false
+        });
+        personToUnit.set(id, id);
+      }
+    });
 
     // Group children by their mother
     const childrenByMother = new Map(); // motherId -> [childIds]
@@ -396,34 +441,113 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       });
     });
     
-    // STEP 3: Position spouses beside their partners
+    // STEP 3: Position family units as groups (person + spouses together)
     sortedLevels.forEach((level) => {
       const personIds = levelMap.get(level);
+      let unitX = padding;
+      
+      // Group people at this level by their family units
+      const unitsAtLevel = new Map(); // unitId -> { personId, spouseIds: [] }
+      const processed = new Set();
       
       personIds.forEach((id) => {
-        const pos = positions.get(id);
-        if (!pos) return;
+        if (processed.has(id)) return;
         
-        const spouseInfo = spouses.get(id);
-        if (spouseInfo) {
-          const spouseId = spouseInfo.spouseId;
-          const spouseLevel = levels.get(spouseId);
+        const unitId = personToUnit.get(id);
+        if (!unitId) return;
+        
+        const unit = familyUnits.get(unitId);
+        if (!unit) return;
+        
+        // Check if all members of this unit are at this level
+        const unitMembers = [unit.personId, ...unit.spouseIds];
+        const membersAtLevel = unitMembers.filter(mid => {
+          const memberLevel = levels.get(mid);
+          return memberLevel === level;
+        });
+        
+        if (membersAtLevel.length > 0) {
+          unitsAtLevel.set(unitId, {
+            personId: unit.personId,
+            spouseIds: unit.spouseIds.filter(sid => {
+              const spouseLevel = levels.get(sid);
+              return spouseLevel === level;
+            })
+          });
           
-          // Only position if spouse is on same level and not positioned yet
-          if (spouseLevel === level && !positions.has(spouseId)) {
-            const maritalStatus = spouseInfo.marital_status || 'married';
-            const spacing = maritalStatus === 'divorced' ? divorcedSpacing : spouseSpacing;
-            
-            // Position spouse beside person
-            const spouseX = pos.x + nodeWidth + spacing;
-            positions.set(spouseId, {
-              x: spouseX,
-              y: pos.y,
-              level: pos.level,
-            });
-            console.log(`[STEP 3] Positioned spouse: ${persons.get(spouseId)?.name || spouseId} beside ${persons.get(id)?.name || id} at X:${spouseX}`);
-          }
+          // Mark all members as processed
+          unitMembers.forEach(mid => processed.add(mid));
         }
+      });
+      
+      // Position each family unit
+      unitsAtLevel.forEach((unit, unitId) => {
+        // Get the main person's position (should already be positioned)
+        let mainPersonX = unitX;
+        const mainPersonPos = positions.get(unit.personId);
+        if (mainPersonPos) {
+          mainPersonX = mainPersonPos.x;
+        } else {
+          // Position main person if not positioned
+          positions.set(unit.personId, {
+            x: mainPersonX,
+            y: padding + level * levelSpacing,
+            level
+          });
+        }
+        
+        // Separate spouses by marital status
+        const divorcedSpouses = [];
+        const marriedSpouses = [];
+        
+        unit.spouseIds.forEach(spouseId => {
+          const spouseInfo = spouses.get(unit.personId);
+          if (spouseInfo && spouseInfo.spouseId === spouseId) {
+            const maritalStatus = spouseInfo.marital_status || 'married';
+            if (maritalStatus === 'divorced') {
+              divorcedSpouses.push(spouseId);
+            } else {
+              marriedSpouses.push(spouseId);
+            }
+          } else {
+            // Check reverse direction
+            const reverseSpouseInfo = spouses.get(spouseId);
+            if (reverseSpouseInfo && reverseSpouseInfo.spouseId === unit.personId) {
+              const maritalStatus = reverseSpouseInfo.marital_status || 'married';
+              if (maritalStatus === 'divorced') {
+                divorcedSpouses.push(spouseId);
+              } else {
+                marriedSpouses.push(spouseId);
+              }
+            }
+          }
+        });
+        
+        // Position divorced spouses to the LEFT (more spacing for visual separation)
+        let leftX = mainPersonX;
+        divorcedSpouses.forEach((spouseId) => {
+          leftX = leftX - nodeWidth - divorcedSpacing;
+          positions.set(spouseId, {
+            x: leftX,
+            y: padding + level * levelSpacing,
+            level
+          });
+        });
+        
+        // Position married spouses to the RIGHT (closer spacing)
+        let rightX = mainPersonX;
+        marriedSpouses.forEach((spouseId) => {
+          rightX = rightX + nodeWidth + spouseSpacing;
+          positions.set(spouseId, {
+            x: rightX,
+            y: padding + level * levelSpacing,
+            level
+          });
+        });
+        
+        // Calculate unit width and move to next position
+        const unitRight = Math.max(mainPersonX, rightX);
+        unitX = unitRight + familyUnitGap;
       });
     });
     
@@ -506,6 +630,76 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const g = svg.append('g');
     const xOffset = padding - minX;
     const yOffset = padding - minY;
+
+    // Draw family unit containers (background grouping for spouses)
+    const { persons: personsDataMap, spouses: spousesDataMap } = personsData;
+    const familyUnitsMap = new Map();
+    const personToUnitMap = new Map();
+    
+    // Rebuild family units for rendering
+    personsDataMap.forEach((person, id) => {
+      const spouseInfo = spousesDataMap.get(id);
+      if (spouseInfo) {
+        const spouseId = spouseInfo.spouseId;
+        if (personToUnitMap.has(id) || personToUnitMap.has(spouseId)) {
+          const unitId = personToUnitMap.get(id) || personToUnitMap.get(spouseId);
+          const unit = familyUnitsMap.get(unitId);
+          if (!unit.spouseIds.includes(spouseId) && unit.personId !== spouseId) {
+            unit.spouseIds.push(spouseId);
+            personToUnitMap.set(spouseId, unitId);
+          }
+          if (!unit.spouseIds.includes(id) && unit.personId !== id) {
+            unit.spouseIds.push(id);
+            personToUnitMap.set(id, unitId);
+          }
+        } else {
+          const unitId = id < spouseId ? id : spouseId;
+          const otherId = id < spouseId ? spouseId : id;
+          familyUnitsMap.set(unitId, {
+            personId: unitId,
+            spouseIds: [otherId]
+          });
+          personToUnitMap.set(unitId, unitId);
+          personToUnitMap.set(otherId, unitId);
+        }
+      } else if (!personToUnitMap.has(id)) {
+        personToUnitMap.set(id, id);
+      }
+    });
+    
+    // Draw containers for family units with multiple members
+    familyUnitsMap.forEach((unit, unitId) => {
+      if (unit.spouseIds.length === 0) return; // Skip single-person units
+      
+      const unitMembers = [unit.personId, ...unit.spouseIds];
+      const memberPositions = unitMembers
+        .map(mid => ({ id: mid, pos: positions.get(mid) }))
+        .filter(m => m.pos);
+      
+      if (memberPositions.length < 2) return; // Need at least 2 for a container
+      
+      const minX = Math.min(...memberPositions.map(m => m.pos.x));
+      const maxX = Math.max(...memberPositions.map(m => m.pos.x));
+      const y = memberPositions[0].pos.y;
+      
+      // Draw rounded rectangle container
+      const containerPadding = 15;
+      const containerWidth = maxX - minX + nodeWidth + containerPadding * 2;
+      const containerHeight = nodeHeight + containerPadding * 2;
+      
+      g.append('rect')
+        .attr('x', minX + xOffset - nodeWidth / 2 - containerPadding)
+        .attr('y', y + yOffset - nodeHeight / 2 - containerPadding)
+        .attr('width', containerWidth)
+        .attr('height', containerHeight)
+        .attr('rx', 12)
+        .attr('ry', 12)
+        .attr('fill', 'rgba(255, 152, 0, 0.08)') // Light orange tint
+        .attr('stroke', 'rgba(255, 152, 0, 0.3)') // Light orange border
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '5,5')
+        .lower(); // Send to back
+    });
 
     // Helper function to determine which parent is the mother
     const getMotherId = (parentIds) => {
@@ -609,7 +803,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     });
 
     // Draw spouse connections with X symbol for divorced
-    spouses.forEach((spouseInfo, personId) => {
+    const { spouses: spousesForRendering } = personsData;
+    spousesForRendering.forEach((spouseInfo, personId) => {
       const personPos = positions.get(personId);
       const spousePos = positions.get(spouseInfo.spouseId);
       if (!personPos || !spousePos) return;
@@ -619,11 +814,14 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       const isDivorced = maritalStatus === 'divorced';
       const isWidowed = maritalStatus === 'widowed';
 
-      const x1 = personPos.x + xOffset + nodeWidth / 2;
-      const x2 = spousePos.x + xOffset - nodeWidth / 2;
+      // Determine which person is on left and right
+      const personCenterX = personPos.x + xOffset + nodeWidth / 2;
+      const spouseCenterX = spousePos.x + xOffset + nodeWidth / 2;
+      const x1 = Math.min(personCenterX, spouseCenterX);
+      const x2 = Math.max(personCenterX, spouseCenterX);
       const y = personPos.y + yOffset;
 
-      // Draw double line for marriage
+      // Draw double line for marriage (connecting the centers of the nodes)
       g.append('line')
         .attr('x1', x1)
         .attr('y1', y - 2)
@@ -642,18 +840,41 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
-      // Add X symbol for divorced
+      // Add X symbol for divorced (cancel icon on the line)
       if (isDivorced) {
         const midX = (x1 + x2) / 2;
-        g.append('text')
-          .attr('x', midX)
-          .attr('y', y)
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'middle')
-          .attr('font-size', '20px')
-          .attr('font-weight', 'bold')
-          .attr('fill', '#d32f2f')
-          .text('✕');
+        const iconSize = 16;
+        
+        // Draw a circle background for better visibility
+        g.append('circle')
+          .attr('cx', midX)
+          .attr('cy', y)
+          .attr('r', iconSize + 2)
+          .attr('fill', '#ffffff')
+          .attr('stroke', '#d32f2f')
+          .attr('stroke-width', 2.5);
+        
+        // Draw X symbol using lines (more reliable than text)
+        const offset = iconSize * 0.7;
+        // Top-left to bottom-right line
+        g.append('line')
+          .attr('x1', midX - offset)
+          .attr('y1', y - offset)
+          .attr('x2', midX + offset)
+          .attr('y2', y + offset)
+          .attr('stroke', '#d32f2f')
+          .attr('stroke-width', 3)
+          .attr('stroke-linecap', 'round');
+        
+        // Top-right to bottom-left line
+        g.append('line')
+          .attr('x1', midX + offset)
+          .attr('y1', y - offset)
+          .attr('x2', midX - offset)
+          .attr('y2', y + offset)
+          .attr('stroke', '#d32f2f')
+          .attr('stroke-width', 3)
+          .attr('stroke-linecap', 'round');
       }
     });
 

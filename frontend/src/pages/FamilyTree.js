@@ -81,6 +81,7 @@ const FamilyTree = () => {
   const [importingGedcom, setImportingGedcom] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [insightsExpanded, setInsightsExpanded] = useState(false); // Default to collapsed
+  const [searchFiltersExpanded, setSearchFiltersExpanded] = useState(false); // Default to collapsed
 
   // Only fetch when familyId changes, not when viewType changes
   useEffect(() => {
@@ -517,84 +518,124 @@ const FamilyTree = () => {
         </Toolbar>
       </AppBar>
 
-      {/* Search Bar */}
-      <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Search by name, clan, village, occupation..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-            endAdornment: searchQuery && (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  onClick={() => setSearchQuery('')}
-                  edge="end"
-                >
-                  <ClearIcon />
-                </IconButton>
-              </InputAdornment>
-            ),
+      {/* Search and Filters - Collapsible */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Box 
+          sx={{ 
+            p: 1.5, 
+            bgcolor: 'background.paper', 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            cursor: 'pointer',
+            gap: 2,
           }}
-        />
-        {searchQuery && filteredTreeData && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Found {filteredTreeData.nodes.length} person{filteredTreeData.nodes.length !== 1 ? 's' : ''} matching "{searchQuery}"
-          </Typography>
-        )}
-        <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <Autocomplete
-            options={clanOptions}
-            value={clanFilter || null}
-            onChange={(e, value) => setClanFilter(value || '')}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Filter by Clan"
-                variant="outlined"
-                placeholder="Select clan"
-              />
-            )}
-            sx={{ minWidth: 250 }}
-            clearOnEscape
-            freeSolo={false}
-          />
-          <Autocomplete
-            options={villageOptions}
-            value={villageFilter || null}
-            onChange={(e, value) => setVillageFilter(value || '')}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Filter by Village/Town"
-                variant="outlined"
-                placeholder="Select village"
-              />
-            )}
-            sx={{ minWidth: 250 }}
-            clearOnEscape
-            freeSolo={false}
-          />
-          {(clanFilter || villageFilter || searchQuery) && (
-            <Button
-              startIcon={<ClearIcon />}
-              onClick={() => {
-                setSearchQuery('');
-                setClanFilter('');
-                setVillageFilter('');
-              }}
-            >
-              Clear Filters
-            </Button>
-          )}
+          onClick={() => setSearchFiltersExpanded(!searchFiltersExpanded)}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+            <SearchIcon sx={{ color: 'text.secondary' }} />
+            <Typography variant="body2" sx={{ color: 'text.secondary', flex: 1, minWidth: 0 }}>
+              {searchQuery || clanFilter || villageFilter 
+                ? `Search: ${searchQuery || ''} ${clanFilter ? `| Clan: ${clanFilter}` : ''} ${villageFilter ? `| Village: ${villageFilter}` : ''}`
+                : 'Search and Filters'
+              }
+            </Typography>
+          </Box>
+          <IconButton 
+            size="small" 
+            onClick={(e) => {
+              e.stopPropagation();
+              setSearchFiltersExpanded(!searchFiltersExpanded);
+            }}
+          >
+            {searchFiltersExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
         </Box>
+        <Collapse in={searchFiltersExpanded}>
+          <Box sx={{ p: 2, bgcolor: 'background.paper' }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Search by name, clan, village, occupation..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: searchQuery && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={() => setSearchQuery('')}
+                      edge="end"
+                    >
+                      <ClearIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            {searchQuery && filteredTreeData && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Found {filteredTreeData.nodes.length} person{filteredTreeData.nodes.length !== 1 ? 's' : ''} matching "{searchQuery}"
+              </Typography>
+            )}
+            <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Autocomplete
+                options={clanOptions}
+                value={clanFilter || null}
+                onChange={(e, value) => setClanFilter(value || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Filter by Clan"
+                    variant="outlined"
+                    placeholder="Select clan"
+                    size="small"
+                  />
+                )}
+                sx={{ minWidth: 200, flex: '1 1 200px' }}
+                clearOnEscape
+                freeSolo={false}
+              />
+              <Autocomplete
+                options={villageOptions}
+                value={villageFilter || null}
+                onChange={(e, value) => setVillageFilter(value || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Filter by Village/Town"
+                    variant="outlined"
+                    placeholder="Select village"
+                    size="small"
+                  />
+                )}
+                sx={{ minWidth: 200, flex: '1 1 200px' }}
+                clearOnEscape
+                freeSolo={false}
+              />
+              {(clanFilter || villageFilter || searchQuery) && (
+                <Button
+                  startIcon={<ClearIcon />}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setClanFilter('');
+                    setVillageFilter('');
+                  }}
+                  size="small"
+                  variant="outlined"
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </Box>
+          </Box>
+        </Collapse>
       </Box>
 
       {/* Statistics Panel - Collapsible */}
