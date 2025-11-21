@@ -1,0 +1,158 @@
+================================================================================
+FAMILY TREE VERTICAL LAYOUT - EXACT STRUCTURE
+================================================================================
+
+Y=0 (TOP)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Dike Onumaegbu Akoma                                │
+│                        (Great Grandfather)                                  │
+│                        [ISOLATED - no spouse, no siblings]                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ (vertical line, 200px spacing)
+                                    │
+Y=200
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Dr. Ogechukwu Akoma                                 │
+│                        (Son of Dike)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ (vertical line, 200px spacing)
+                                    │
+Y=400
+┌──────────────────────────┐                    ┌──────────────────────────┐
+│   Marycelin Baba         │                    │   Ann Obilor Akoma       │
+│   (Divorced)             │                    │   (Wife)                 │
+└──────────────────────────┘                    └──────────────────────────┘
+         │                                              │
+         │ (120px divorced spacing)                    │ (40px married spacing)
+         │                                              │
+         │ (vertical line, 200px spacing)              │ (vertical line, 200px spacing)
+         │                                              │
+         │                                              │
+Y=600    │                                              │
+┌────────┴──────────┐  ┌──────────────┐  ┌─────────────────────────────────────┐
+│ Chiemele Akoma    │  │ Chinyere     │  │ Onyedikachi Akoma + Esther Isioma    │
+│ b. 1986           │  │ Akoma        │  │ (Mordi) b. 1991                      │
+│                   │  │ b. 1988      │  │ [COLLAPSED: Spouse in same box]     │
+└───────────────────┘  └──────────────┘  └─────────────────────────────────────┘
+                                                      │
+                                                      │ (vertical line, 150px spacing - CLOSER)
+                                                      │
+                                                      │ (centered under couple)
+                                                      │
+Y=750                                                  │
+┌──────────────────────────┐                    ┌──────────────────────────┐
+│ Chimamanda Pandora      │                    │ Ogechukwu King David      │
+│ Akoma b. 2020           │                    │ Akoma b. 2024             │
+└──────────────────────────┘                    └──────────────────────────┘
+         ↑
+         │
+         │ (Children positioned directly under the couple, 150px spacing - CLOSER)
+
+================================================================================
+SPACING SPECIFICATIONS:
+================================================================================
+
+- Level Spacing (vertical): 200px between generations (standard)
+- Direct Parent-Child Spacing: 150px (reduced for closer relationships)
+- Sibling Spacing (horizontal): 40px between siblings
+- Spouse Spacing (married): 40px between married couples (when not collapsed)
+- Divorced Spacing: 120px between divorced couples
+- Node Width: 160px
+- Node Height: 80px
+- Padding: 150px (around entire tree)
+
+================================================================================
+SPOUSE COLLAPSING RULES:
+================================================================================
+
+1. **Husband's Family Tree:**
+   - Spouse (wife) is collapsed INTO the husband's node
+   - Display: "Husband Name + Wife Name" in single box
+   - Example: "Onyedikachi Akoma + Esther Isioma Akoma (Mordi)"
+
+2. **Wife's Family Tree:**
+   - Husband is collapsed INTO the wife's node
+   - Display: "Wife Name + Husband Name" in single box
+   - Example: "Esther Isioma Akoma (Mordi) + Onyedikachi Akoma"
+
+3. **Visual Representation:**
+   - Single box containing both names
+   - Spouse name appears after "+" symbol
+   - Birth year shown for primary person
+   - Connection line comes from the center of the collapsed node
+
+================================================================================
+CONNECTION RULES:
+================================================================================
+
+1. PARENT → CHILD: Vertical line from parent's bottom to horizontal sibling line
+2. SIBLINGS: Horizontal line connecting all siblings at same level
+3. SPOUSES: Horizontal double-line connecting spouses (same Y coordinate)
+   - Married: solid orange line, 40px spacing
+   - Divorced: dashed red line, 120px spacing
+
+================================================================================
+POSITIONING RULES:
+================================================================================
+
+1. Dike Onumaegbu Akoma:
+   - X: centered (or left-aligned if no other nodes)
+   - Y: 0 (top level)
+   - No spouse, no siblings
+
+2. Dr. Ogechukwu Akoma:
+   - X: centered above his children (Marycelin's children)
+   - Y: 200
+
+3. Marycelin Baba:
+   - X: Dr. Ogechukwu's X - (nodeWidth + divorcedSpacing) / 2
+   - Y: 400
+   - Children positioned directly below HER (not centered under couple)
+
+4. Ann Obilor Akoma:
+   - X: Dr. Ogechukwu's X + nodeWidth + spouseSpacing
+   - Y: 400
+
+5. Chiemele, Chinyere, Onyedikachi+Esther (collapsed):
+   - X: Positioned horizontally, starting below Marycelin
+   - Y: 600
+   - Siblings on same row (Chiemele, Chinyere, Onyedikachi are siblings)
+   - Esther is COLLAPSED INTO Onyedikachi's node (husband's family tree)
+   - Display: "Onyedikachi Akoma + Esther Isioma Akoma (Mordi)" in single box
+
+6. Chimamanda & Ogechukwu King David:
+   - X: Positioned horizontally, centered under Onyedikachi+Esther collapsed node
+   - Y: 750 (150px spacing - CLOSER to parents)
+   - Children of Onyedikachi & Esther, positioned directly under the collapsed couple node
+
+================================================================================
+FINAL CORRECTED STRUCTURE:
+================================================================================
+
+Y=600 (Level 3 - Children of Marycelin & Dr. Ogechukwu)
+┌──────────┐  ┌──────────┐  ┌─────────────────────────────────────┐
+│ Chiemele │  │ Chinyere │  │ Onyedikachi Akoma + Esther Isioma  │
+│  Akoma   │  │  Akoma   │  │ Akoma (Mordi)                      │
+│ b. 1986  │  │ b. 1988  │  │ [COLLAPSED: Spouse in same box]   │
+└──────────┘  └──────────┘  └─────────────────────────────────────┘
+     │              │                          │
+     │              │                          │ (vertical line, 150px - CLOSER)
+     │              │                          │ (centered under collapsed node)
+     │              │                          │
+     │              │                          ▼
+Y=750 (Level 4 - Children of Onyedikachi & Esther)
+┌──────────┐                    ┌──────────┐
+│ Chimaman │                    │ Ogechukwu│
+│ da       │                    │ King     │
+│ Pandora  │                    │ David    │
+│ Akoma    │                    │ Akoma    │
+│ b. 2020  │                    │ b. 2024 │
+└──────────┘                    └──────────┘
+
+KEY POINTS:
+1. Spouses are COLLAPSED into single node (husband's family = spouse in husband's box)
+2. Children are positioned DIRECTLY UNDER the collapsed couple node (centered)
+3. Spacing is REDUCED to 150px (instead of 200px) for closer parent-child relationship
+

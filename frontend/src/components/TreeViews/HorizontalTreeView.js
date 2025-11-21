@@ -161,7 +161,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
   useEffect(() => {
     if (!treeStructure || !data) {
-      // Set minimum dimensions even if no data
       if (svgRef.current && containerRef.current) {
         const width = containerRef.current?.clientWidth || 1200;
         const height = 800;
@@ -172,26 +171,24 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       return;
     }
 
-    const width = containerRef.current?.clientWidth || 1200;
-    const height = containerRef.current?.clientHeight || 800;
+    const containerWidth = containerRef.current?.clientWidth || 1200;
+    const containerHeight = containerRef.current?.clientHeight || 800;
+    const nodeWidth = 160;
+    const nodeHeight = 80;
+    const levelSpacingX = 250; // Horizontal spacing between generations (left to right)
+    const siblingSpacingY = 40; // Vertical spacing between siblings
+    const spouseGap = 40;
+    const padding = 150;
 
-    // Clear previous render
-    d3.select(svgRef.current).selectAll('*').remove();
+    const svg = d3.select(svgRef.current);
+    svg.selectAll('*').remove();
 
-    const svg = d3
-      .select(svgRef.current)
-      .attr('width', width)
-      .attr('height', height);
-
-    const g = svg.append('g').attr('transform', 'translate(50,50)');
-
-    // First, organize nodes by generation/depth
+    // Organize nodes by generation (depth)
     const organizeByGeneration = (node, depth = 0, visited = new Set(), generationMap = new Map()) => {
       if (!node || !node.id || node.id === '__root__') return generationMap;
       if (visited.has(node.id)) return generationMap;
       visited.add(node.id);
       
-      // Add node to its generation level
       if (!generationMap.has(depth)) {
         generationMap.set(depth, []);
       }
@@ -217,220 +214,155 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       return generationMap;
     };
     
-    // Get all root nodes (if __root__ exists, use its children)
+    // Get all root nodes
     const rootNodes = treeStructure && treeStructure.id === '__root__' && treeStructure.children
       ? treeStructure.children
       : [treeStructure].filter(Boolean);
     
-    // Organize all nodes by generation
     const generationMap = new Map();
     rootNodes.forEach((root) => {
       organizeByGeneration(root, 0, new Set(), generationMap);
     });
-    
-    // Layout parameters
-    const nodeWidth = 180;
-    const nodeHeight = 200; // Horizontal spacing between generations (left to right)
-    const spouseSpacing = 30;
-    const divorcedSpacing = 100;
-    const siblingSpacing = 60;
-    
-    // Calculate positions for each generation
-    const allPositions = [];
-    const depths = Array.from(generationMap.keys());
+
+    const depths = Array.from(generationMap.keys()).sort((a, b) => a - b);
     if (depths.length === 0) {
-      console.warn('No generations found in tree');
+      svg.attr('width', containerWidth).attr('height', containerHeight);
       return;
     }
-    const maxDepth = Math.max(...depths);
+
+    // Build parent-child mapping for sibling grouping
+    const parentToChildren = new Map();
+    const childToParent = new Map();
     
-    // Start from the deepest generation and work up (right to left for horizontal view)
-    for (let depth = maxDepth; depth >= 0; depth--) {
-      const nodesAtDepth = generationMap.get(depth) || [];
-      if (nodesAtDepth.length === 0) continue;
+    const buildParentChildMap = (node, parentPairKey = null) => {
+      if (!node || !node.id || node.id === '__root__') return;
       
-      // Calculate X position for this generation (left to right)
-      const x = 100 + (maxDepth - depth) * nodeHeight;
-      
-      // Build map: which nodes are siblings (share same parents)
-      // Map: parent pair key -> children IDs (siblings)
-      const parentPairToChildren = new Map();
-      const childToParentPair = new Map();
-      
-      // For each node at this depth, if it has children, identify the sibling groups
-      nodesAtDepth.forEach((node) => {
-        if (node.children && node.children.length > 0) {
-          const childrenIds = node.children.map(c => c.id).filter(Boolean);
-          if (childrenIds.length > 0) {
-            // Create parent pair key
-            const spouseInfo = node.spouse ? node.spouse.id : null;
-            const parentKey = spouseInfo 
-              ? [node.id, spouseInfo].sort().join('_')
-              : node.id + '_';
-            
-            if (!parentPairToChildren.has(parentKey)) {
-              parentPairToChildren.set(parentKey, []);
-            }
-            parentPairToChildren.get(parentKey).push(...childrenIds);
-            
-            // Map each child to its parent pair
-            childrenIds.forEach(childId => {
-              childToParentPair.set(childId, parentKey);
-            });
-          }
+      if (parentPairKey) {
+        if (!parentToChildren.has(parentPairKey)) {
+          parentToChildren.set(parentPairKey, []);
         }
-      });
+        parentToChildren.get(parentPairKey).push(node.id);
+        childToParent.set(node.id, parentPairKey);
+      }
       
-      // Group nodes at this depth: siblings together, then parents
-      const siblingGroups = new Map(); // parent key -> siblings array
-      const parentNodes = []; // nodes that are parents (have children)
-      const leafNodes = []; // nodes without children
+      if (node.children && node.children.length > 0) {
+        const pairKey = node.spouse && node.spouse.id
+          ? [node.id, node.spouse.id].sort().join('_')
+          : node.id + '_';
+        
+        node.children.forEach((child) => {
+          buildParentChildMap(child, pairKey);
+        });
+      }
+    };
+    
+    rootNodes.forEach((root) => buildParentChildMap(root));
+
+    // Calculate positions: right-to-left approach (deepest generation first)
+    const nodePositions = []; // Array of {id, x, y, data, hasSpouse, marital_status}
+    
+    // Process from deepest generation to root (right to left for horizontal view)
+    for (let i = depths.length - 1; i >= 0; i--) {
+      const depth = depths[i];
+      const nodesAtDepth = generationMap.get(depth) || [];
+      const x = padding + depth * levelSpacingX;
+      
+      // Group siblings together
+      const siblingGroups = new Map(); // parentPairKey -> [nodeIds]
       const processed = new Set();
+      const standaloneNodes = [];
       
       nodesAtDepth.forEach((node) => {
         if (processed.has(node.id)) return;
         
-        // Check if this node is a child (has parents at depth-1)
-        const parentKey = childToParentPair.get(node.id);
-        
+        const parentKey = childToParent.get(node.id);
         if (parentKey) {
-          // This is a sibling - group with other siblings
           if (!siblingGroups.has(parentKey)) {
             siblingGroups.set(parentKey, []);
           }
           siblingGroups.get(parentKey).push(node);
           processed.add(node.id);
-        } else if (node.children && node.children.length > 0) {
-          // This is a parent node
-          parentNodes.push(node);
-          processed.add(node.id);
           
           // Add spouse if exists
           if (node.spouse && node.spouse.id && !processed.has(node.spouse.id)) {
             const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
             if (spouseNode) {
-              parentNodes.push(spouseNode);
+              siblingGroups.get(parentKey).push(spouseNode);
               processed.add(spouseNode.id);
             }
           }
         } else {
-          // Leaf node (no children, no parents at this level)
-          leafNodes.push(node);
+          standaloneNodes.push(node);
           processed.add(node.id);
           
           // Add spouse if exists
           if (node.spouse && node.spouse.id && !processed.has(node.spouse.id)) {
             const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
             if (spouseNode) {
-              leafNodes.push(spouseNode);
+              standaloneNodes.push(spouseNode);
               processed.add(spouseNode.id);
             }
           }
         }
       });
       
-      // Calculate Y positions
-      const groupPositions = [];
-      let currentY = 100;
+      // Position siblings vertically, then center parents to their left
+      let currentY = padding;
+      const siblingGroupPositions = [];
       
-      // First, position siblings together horizontally (vertically for horizontal view)
+      // First, position all sibling groups
       siblingGroups.forEach((siblings, parentKey) => {
-        siblings.forEach((sibling, idx) => {
+        siblings.forEach((sibling) => {
           const maritalStatus = sibling.marital_status || 'married';
-          groupPositions.push({
+          siblingGroupPositions.push({
             id: sibling.id,
             x: x,
             y: currentY,
             data: sibling,
-            hasSpouse: false,
+            hasSpouse: !!sibling.spouse,
             marital_status: maritalStatus,
+            parentKey: parentKey,
           });
-          currentY += nodeWidth + siblingSpacing;
+          currentY += nodeHeight + siblingSpacingY;
         });
-        // Add extra spacing after sibling group
-        currentY += siblingSpacing;
+        currentY += siblingSpacingY * 2; // Extra spacing between sibling groups
       });
       
-      // Then, position parents - center them above their children
-      const processedParents = new Set();
-      parentNodes.forEach((node) => {
-        if (processedParents.has(node.id)) return;
-        
-        // Check if this node has children
+      // Position standalone nodes (root nodes or nodes without parents)
+      standaloneNodes.forEach((node) => {
+        // If this node has children, center it to the left of them
+        let y = currentY;
         if (node.children && node.children.length > 0) {
-          const childrenIds = node.children.map(c => c.id).filter(Boolean);
-          const childPositions = allPositions.filter(p => childrenIds.includes(p.id));
+          const pairKey = node.spouse && node.spouse.id
+            ? [node.id, node.spouse.id].sort().join('_')
+            : node.id + '_';
+          const childrenIds = parentToChildren.get(pairKey) || [];
+          const childPositions = nodePositions.filter(p => childrenIds.includes(p.id));
           
-          let centerY = currentY;
           if (childPositions.length > 0) {
             const minChildY = Math.min(...childPositions.map(p => p.y));
             const maxChildY = Math.max(...childPositions.map(p => p.y));
-            centerY = (minChildY + maxChildY) / 2;
+            y = (minChildY + maxChildY) / 2;
           }
-          
-          const maritalStatus = node.marital_status || 'married';
-          const isDivorced = maritalStatus === 'divorced';
-          
-          // Position parent
-          groupPositions.push({
-            id: node.id,
-            x: x,
-            y: centerY,
-            data: node,
-            hasSpouse: !!node.spouse,
-            marital_status: maritalStatus,
-          });
-          processedParents.add(node.id);
-          
-          // Position spouse if exists
-          if (node.spouse && node.spouse.id && !processedParents.has(node.spouse.id)) {
-            const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
-            if (spouseNode) {
-              const spouseY = isDivorced
-                ? centerY + nodeWidth + divorcedSpacing
-                : centerY + nodeWidth + spouseSpacing;
-              
-              groupPositions.push({
-                id: spouseNode.id,
-                x: x,
-                y: spouseY,
-                data: spouseNode,
-                hasSpouse: true,
-                isSpouse: true,
-                marital_status: maritalStatus,
-              });
-              processedParents.add(spouseNode.id);
-            }
-          }
-          
-          currentY = Math.max(currentY, centerY + (node.spouse ? nodeWidth * 2 + spouseSpacing : nodeWidth) + siblingSpacing);
         }
-      });
-      
-      // Finally, position leaf nodes (nodes without children)
-      leafNodes.forEach((node) => {
-        if (processedParents.has(node.id)) return;
         
         const maritalStatus = node.marital_status || 'married';
-        const isDivorced = maritalStatus === 'divorced';
-        
-        groupPositions.push({
+        nodePositions.push({
           id: node.id,
           x: x,
-          y: currentY,
+          y: y,
           data: node,
           hasSpouse: !!node.spouse,
           marital_status: maritalStatus,
         });
         
-        if (node.spouse && node.spouse.id && !processedParents.has(node.spouse.id)) {
+        // Add spouse below node (vertically for horizontal view)
+        if (node.spouse && node.spouse.id) {
           const spouseNode = nodesAtDepth.find(n => n.id === node.spouse.id);
           if (spouseNode) {
-            const spouseY = isDivorced
-              ? currentY + nodeWidth + divorcedSpacing
-              : currentY + nodeWidth + spouseSpacing;
-            
-            groupPositions.push({
+            const isDivorced = maritalStatus === 'divorced';
+            const spouseY = isDivorced ? y + nodeHeight + 60 : y + nodeHeight + spouseGap;
+            nodePositions.push({
               id: spouseNode.id,
               x: x,
               y: spouseY,
@@ -439,37 +371,82 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
               isSpouse: true,
               marital_status: maritalStatus,
             });
-            currentY = spouseY + nodeWidth + siblingSpacing;
-          } else {
-            currentY += nodeWidth + siblingSpacing;
           }
-        } else {
-          currentY += nodeWidth + siblingSpacing;
         }
+        
+        currentY = Math.max(currentY, y + nodeHeight * 2 + spouseGap + siblingSpacingY);
       });
       
-      allPositions.push(...groupPositions);
+      // Add sibling group positions
+      nodePositions.push(...siblingGroupPositions);
     }
     
-    // Filter out duplicates by keeping only first occurrence of each ID
-    const seenIds = new Set();
-    const uniquePositions = allPositions.filter(p => {
-      if (!p || !p.id || seenIds.has(p.id)) return false;
-      seenIds.add(p.id);
-      return true;
-    });
-    
-    if (uniquePositions.length === 0) {
-      console.warn('No positions generated for tree');
-      return; // Exit early if no positions
+    // Update positions for parents to center them to the left of their children
+    for (let i = 0; i < depths.length - 1; i++) {
+      const depth = depths[i];
+      const nodesAtDepth = generationMap.get(depth) || [];
+      
+      nodesAtDepth.forEach((node) => {
+        if (node.children && node.children.length > 0) {
+          const pairKey = node.spouse && node.spouse.id
+            ? [node.id, node.spouse.id].sort().join('_')
+            : node.id + '_';
+          const childrenIds = parentToChildren.get(pairKey) || [];
+          const childPositions = nodePositions.filter(p => childrenIds.includes(p.id));
+          
+          if (childPositions.length > 0) {
+            const minChildY = Math.min(...childPositions.map(p => p.y));
+            const maxChildY = Math.max(...childPositions.map(p => p.y));
+            const centerY = (minChildY + maxChildY) / 2;
+            
+            // Update parent position
+            const parentPos = nodePositions.find(p => p.id === node.id);
+            if (parentPos) {
+              parentPos.y = centerY;
+            }
+            
+            // Update spouse position
+            if (node.spouse && node.spouse.id) {
+              const spousePos = nodePositions.find(p => p.id === node.spouse.id);
+              if (spousePos) {
+                const maritalStatus = node.marital_status || 'married';
+                const isDivorced = maritalStatus === 'divorced';
+                spousePos.y = isDivorced ? centerY + nodeHeight + 60 : centerY + nodeHeight + spouseGap;
+              }
+            }
+          }
+        }
+      });
     }
-    
-    const positionMap = new Map(uniquePositions.map(p => [p.id, p]));
 
-    // Draw links for parent-child and spouse relationships
+    if (nodePositions.length === 0) {
+      svg.attr('width', containerWidth).attr('height', containerHeight);
+      return;
+    }
+
+    // Calculate SVG dimensions
+    const minX = Math.min(...nodePositions.map(p => p.x));
+    const maxX = Math.max(...nodePositions.map(p => p.x));
+    const minY = Math.min(...nodePositions.map(p => p.y));
+    const maxY = Math.max(...nodePositions.map(p => p.y));
+
+    const contentWidth = maxX - minX + padding * 2 + nodeWidth;
+    const contentHeight = maxY - minY + padding * 2 + nodeHeight;
+
+    const svgWidth = Math.max(containerWidth, contentWidth);
+    const svgHeight = Math.max(containerHeight, contentHeight);
+
+    svg.attr('width', svgWidth).attr('height', svgHeight);
+
+    const g = svg.append('g');
+    const xOffset = padding - minX;
+    const yOffset = padding - minY;
+
+    const positionMap = new Map(nodePositions.map(p => [p.id, p]));
+
+    // Draw links
     const drawLinks = (node) => {
       if (!node || !node.id || node.id === '__root__') {
-        // If root node, draw links for its children
         if (node && node.id === '__root__' && node.children) {
           node.children.forEach((child) => drawLinks(child));
         }
@@ -479,7 +456,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       const parentPos = positionMap.get(node.id);
       if (!parentPos) return;
       
-      // Draw link to spouse if exists (only draw once per pair)
+      // Draw spouse link (vertical for horizontal view)
       if (node.spouse && node.spouse.id && node.id < node.spouse.id) {
         const spousePos = positionMap.get(node.spouse.id);
         if (spousePos) {
@@ -488,198 +465,165 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           const isWidowed = maritalStatus === 'widowed';
           
           g.append('line')
-            .attr('x1', parentPos.x + 90) // Start from right edge of first node
-            .attr('y1', parentPos.y)
-            .attr('x2', spousePos.x + 90) // End at right edge of second node (same x for horizontal)
-            .attr('y2', spousePos.y)
+            .attr('x1', parentPos.x + xOffset)
+            .attr('y1', parentPos.y + yOffset + nodeHeight / 2)
+            .attr('x2', spousePos.x + xOffset)
+            .attr('y2', spousePos.y + yOffset - nodeHeight / 2)
             .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
             .attr('stroke-width', isDivorced ? 2.5 : 3)
-            .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none')
-            .attr('opacity', isDivorced ? 0.7 : 1);
+            .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
         }
       }
       
-      // Draw links to children with better styling
-      if (node.children) {
-        node.children.forEach((child) => {
-          if (!child || !child.id) return; // Skip invalid children
-          const childPos = positionMap.get(child.id);
-          if (childPos) {
-            const parentCenterY = node.spouse && node.spouse.id
-              ? (parentPos.y + (positionMap.get(node.spouse.id)?.y || parentPos.y)) / 2
-              : parentPos.y;
-            
-            // Draw horizontal line from parent(s) to right
+      // Draw links to children
+      if (node.children && node.children.length > 0) {
+        const childrenIds = node.children.map(c => c.id).filter(Boolean);
+        const childPositions = nodePositions.filter(p => childrenIds.includes(p.id));
+        
+        if (childPositions.length > 0) {
+          const minChildY = Math.min(...childPositions.map(p => p.y));
+          const maxChildY = Math.max(...childPositions.map(p => p.y));
+          const parentCenterY = parentPos.y + yOffset + nodeHeight / 2;
+          const parentRightX = parentPos.x + xOffset + nodeWidth / 2;
+          const childLeftX = childPositions[0].x + xOffset - nodeWidth / 2;
+          const midX = parentRightX + (childLeftX - parentRightX) / 2;
+          
+          // Horizontal line from parent to the right
+          g.append('line')
+            .attr('x1', parentRightX)
+            .attr('y1', parentCenterY)
+            .attr('x2', midX)
+            .attr('y2', parentCenterY)
+            .attr('stroke', '#424242')
+            .attr('stroke-width', 2.5);
+          
+          // Vertical line connecting siblings
+          g.append('line')
+            .attr('x1', midX)
+            .attr('y1', minChildY + yOffset)
+            .attr('x2', midX)
+            .attr('y2', maxChildY + yOffset)
+            .attr('stroke', '#424242')
+            .attr('stroke-width', 2.5);
+          
+          // Horizontal lines from vertical line to each child
+          childPositions.forEach((childPos) => {
+            const childCenterY = childPos.y + yOffset + nodeHeight / 2;
             g.append('line')
-              .attr('x1', parentPos.x + 80)
-              .attr('y1', parentCenterY)
-              .attr('x2', childPos.x - 80)
-              .attr('y2', parentCenterY)
+              .attr('x1', midX)
+              .attr('y1', childCenterY)
+              .attr('x2', childLeftX)
+              .attr('y2', childCenterY)
               .attr('stroke', '#424242')
-              .attr('stroke-width', 2.5)
-              .attr('opacity', 0.8);
-            
-            // Draw vertical line down to child
-            g.append('line')
-              .attr('x1', childPos.x - 80)
-              .attr('y1', parentCenterY)
-              .attr('x2', childPos.x - 80)
-              .attr('y2', childPos.y)
-              .attr('stroke', '#424242')
-              .attr('stroke-width', 2.5)
-              .attr('opacity', 0.8);
-          }
-          drawLinks(child);
-        });
+              .attr('stroke-width', 2.5);
+          });
+        }
+        
+        node.children.forEach((child) => drawLinks(child));
       }
     };
 
-    drawLinks(treeStructure);
+    rootNodes.forEach((root) => drawLinks(root));
 
-    // Draw nodes - use unique positions to prevent duplicates
-    const nodes = g
-      .selectAll('.node')
-      .data(uniquePositions.filter(p => p && p.id && p.id !== '__root__'))
-      .enter()
-      .append('g')
-      .attr('class', 'node')
-      .attr('transform', (d) => `translate(${d.x},${d.y})`)
-      .style('cursor', onPersonClick ? 'pointer' : 'default')
-      .on('click', (event, d) => {
-        if (d && d.data && d.data.id) {
-          handleNodeClick(d.data.id);
-        }
-      });
-
-    // Skip rendering the dummy root node
-    const visibleNodes = nodes.filter((d) => d.id !== '__root__');
-
-    // Add rectangles for nodes with better styling
-    visibleNodes
-      .append('rect')
-      .attr('width', 160)
-      .attr('height', 80)
-      .attr('x', -80)
-      .attr('y', -40)
-      .attr('rx', 8)
-      .attr('fill', (d) => {
-        if (d.hasSpouse) {
-          // Check if this node has marital status, or if its spouse has it
-          const maritalStatus = d.data?.marital_status || d.data?.spouse?.marital_status || 'married';
-          if (maritalStatus === 'divorced') return '#ffebee';
-          if (maritalStatus === 'widowed') return '#f5f5f5';
-          return '#fff3e0';
-        }
-        return '#ffffff';
-      })
-      .attr('stroke', (d) => {
-        if (d.hasSpouse) {
-          // Check if this node has marital status, or if its spouse has it
-          const maritalStatus = d.data?.marital_status || d.data?.spouse?.marital_status || 'married';
-          if (maritalStatus === 'divorced') return '#d32f2f';
-          if (maritalStatus === 'widowed') return '#757575';
-          return '#ff9800';
-        }
-        return '#1976d2';
-      })
-      .attr('stroke-width', 3)
-      .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
-
-    // Add text with word wrapping
-    visibleNodes.each(function(d) {
-      const nodeGroup = d3.select(this);
-      const name = d.data.full_name || d.data.label || 'Unknown';
-      
-      // Split long names into multiple lines
+    // Draw nodes
+    const addNameBlock = (group, person, centerX, centerY) => {
+      if (!person) return;
+      const name = person.full_name || person.label || 'Unknown';
       const maxCharsPerLine = 18;
       const words = name.split(' ');
-      let lines = [];
+      const lines = [];
       let currentLine = '';
-      
-      words.forEach((word, i) => {
+
+      words.forEach((word) => {
         if ((currentLine + word).length <= maxCharsPerLine) {
           currentLine += (currentLine ? ' ' : '') + word;
         } else {
           if (currentLine) lines.push(currentLine);
           currentLine = word;
         }
-        if (i === words.length - 1 && currentLine) {
-          lines.push(currentLine);
-        }
       });
-      
-      if (lines.length === 0) lines = [name.substring(0, maxCharsPerLine)];
-      
-      // Add name text (up to 2 lines)
-      lines.slice(0, 2).forEach((line, i) => {
-        nodeGroup
+
+      if (currentLine) lines.push(currentLine);
+      if (lines.length === 0) lines.push(name.substring(0, maxCharsPerLine));
+
+      lines.slice(0, 2).forEach((line, index) => {
+        group
           .append('text')
+          .attr('x', centerX)
+          .attr('y', centerY + (index === 0 ? -8 : 8))
           .attr('text-anchor', 'middle')
-          .attr('dy', i === 0 ? -8 : 4)
           .attr('font-size', '11px')
           .attr('font-weight', 'bold')
           .attr('fill', '#333')
-          .text(line.length > maxCharsPerLine ? line.substring(0, maxCharsPerLine - 3) + '...' : line);
+          .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
       });
-      
-      // Add date text
-      if (d.data.date_of_birth) {
+
+      if (person.date_of_birth) {
         try {
-          const year = new Date(d.data.date_of_birth).getFullYear();
-          if (!isNaN(year)) {
-            const dateText = d.data.date_of_death
-              ? `${year} - ${new Date(d.data.date_of_death).getFullYear()}`
-              : `b. ${year}`;
-            nodeGroup
+          const birthYear = new Date(person.date_of_birth).getFullYear();
+          if (!Number.isNaN(birthYear)) {
+            const dateText = person.date_of_death
+              ? `${birthYear} - ${new Date(person.date_of_death).getFullYear()}`
+              : `b. ${birthYear}`;
+            group
               .append('text')
+              .attr('x', centerX)
+              .attr('y', centerY + 20)
               .attr('text-anchor', 'middle')
-              .attr('dy', 18)
               .attr('font-size', '10px')
               .attr('fill', '#666')
               .text(dateText);
           }
-        } catch (e) {
-          // Ignore date errors
+        } catch (err) {
+          // ignore invalid dates
         }
       }
+    };
+
+    const nodes = g
+      .selectAll('.node')
+      .data(nodePositions.filter(p => p && p.id && p.id !== '__root__'))
+      .enter()
+      .append('g')
+      .attr('class', 'node')
+      .attr('transform', (d) => `translate(${d.x + xOffset},${d.y + yOffset})`);
+
+    nodes.each(function (d) {
+      const group = d3.select(this);
+      const spousePresent = d.hasSpouse;
+      const maritalStatus = d.marital_status || 'married';
+      const isDivorced = maritalStatus === 'divorced';
+      const isWidowed = maritalStatus === 'widowed';
+
+      const getFill = () => {
+        if (!spousePresent) return '#ffffff';
+        if (isDivorced) return '#ffebee';
+        if (isWidowed) return '#f5f5f5';
+        return '#fff3e0';
+      };
+
+      const getStroke = () => {
+        if (isDivorced) return '#d32f2f';
+        if (isWidowed) return '#757575';
+        return spousePresent ? '#ff9800' : '#1976d2';
+      };
+
+      group
+        .append('rect')
+        .attr('x', -nodeWidth / 2)
+        .attr('y', -nodeHeight / 2)
+        .attr('width', nodeWidth)
+        .attr('height', nodeHeight)
+        .attr('rx', 10)
+        .attr('fill', getFill())
+        .attr('stroke', getStroke())
+        .attr('stroke-width', 3)
+        .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.12))')
+        .style('cursor', onPersonClick ? 'pointer' : 'default')
+        .on('click', () => handleNodeClick(d.data.id));
+
+      addNameBlock(group, d.data, 0, 0);
     });
-
-    // Update SVG dimensions to fit content with padding
-    if (allPositions.length > 0) {
-      const bounds = allPositions.reduce((acc, p) => {
-        if (p.id === '__root__') return acc;
-        return {
-          minX: Math.min(acc.minX, p.x),
-          maxX: Math.max(acc.maxX, p.x),
-          minY: Math.min(acc.minY, p.y),
-          maxY: Math.max(acc.maxY, p.y),
-        };
-      }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
-
-      // Check if bounds are valid
-      if (bounds.minX !== Infinity && bounds.maxX !== -Infinity && 
-          bounds.minY !== Infinity && bounds.maxY !== -Infinity) {
-        const padding = 100;
-        const contentWidth = bounds.maxX - bounds.minX + padding * 2;
-        const contentHeight = bounds.maxY - bounds.minY + padding * 2;
-        
-        svg.attr('width', Math.max(width, contentWidth))
-           .attr('height', Math.max(height, contentHeight));
-        
-        // Center the tree
-        const offsetX = Math.max(0, (Math.max(width, contentWidth) - (bounds.maxX - bounds.minX)) / 2 - bounds.minX);
-        const offsetY = Math.max(0, (Math.max(height, contentHeight) - (bounds.maxY - bounds.minY)) / 2 - bounds.minY);
-        g.attr('transform', `translate(${offsetX + padding},${offsetY + padding})`);
-      } else {
-        // Fallback: ensure minimum dimensions
-        svg.attr('width', width).attr('height', height);
-        g.attr('transform', `translate(${width / 2},${height / 2})`);
-      }
-    } else {
-      // No positions - ensure minimum dimensions
-      svg.attr('width', width).attr('height', height);
-      g.attr('transform', `translate(${width / 2},${height / 2})`);
-    }
   }, [treeStructure, data, handleNodeClick, onPersonClick]);
 
   return (
