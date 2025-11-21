@@ -248,10 +248,17 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const familyUnits = new Map(); // personId -> { personId, spouseIds: [], isRoot: boolean }
     const personToUnit = new Map(); // personId -> unit personId
     
+    console.log('[FAMILY UNITS] Building family units from spouses map...');
+    console.log('[FAMILY UNITS] Total spouses entries:', spouses.size);
+    
     persons.forEach((person, id) => {
       const spouseInfo = spouses.get(id);
       if (spouseInfo) {
         const spouseId = spouseInfo.spouseId;
+        const personName = persons.get(id)?.name || id;
+        const spouseName = persons.get(spouseId)?.name || spouseId;
+        console.log(`[FAMILY UNITS] Found spouse relationship: ${personName} <-> ${spouseName} [${spouseInfo.marital_status || 'married'}]`);
+        
         // Check if either person is already in a unit
         if (personToUnit.has(id) || personToUnit.has(spouseId)) {
           // Add to existing unit
@@ -260,10 +267,12 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           if (!unit.spouseIds.includes(spouseId) && unit.personId !== spouseId) {
             unit.spouseIds.push(spouseId);
             personToUnit.set(spouseId, unitId);
+            console.log(`[FAMILY UNITS] Added ${spouseName} to existing unit ${unitId}`);
           }
           if (!unit.spouseIds.includes(id) && unit.personId !== id) {
             unit.spouseIds.push(id);
             personToUnit.set(id, unitId);
+            console.log(`[FAMILY UNITS] Added ${personName} to existing unit ${unitId}`);
           }
         } else {
           // Create new family unit - use the person with lower ID as the unit root
@@ -276,6 +285,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           });
           personToUnit.set(unitId, unitId);
           personToUnit.set(otherId, unitId);
+          console.log(`[FAMILY UNITS] Created new unit ${unitId} with ${personName} and ${spouseName}`);
         }
       } else if (!personToUnit.has(id)) {
         // Person with no spouse - they are their own unit
@@ -287,6 +297,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         personToUnit.set(id, id);
       }
     });
+    
+    console.log('[FAMILY UNITS] Total family units created:', familyUnits.size);
 
     // Group children by their mother
     const childrenByMother = new Map(); // motherId -> [childIds]
@@ -442,9 +454,22 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     });
     
     // STEP 3: Position family units as groups (person + spouses together)
+    console.log('[STEP 3] Starting family unit positioning...');
+    console.log('[STEP 3] Family units map:', Array.from(familyUnits.entries()).map(([uid, unit]) => ({
+      unitId: uid,
+      person: persons.get(unit.personId)?.name || unit.personId,
+      spouses: unit.spouseIds.map(sid => persons.get(sid)?.name || sid)
+    })));
+    console.log('[STEP 3] Person to unit map:', Array.from(personToUnit.entries()).slice(0, 10).map(([pid, uid]) => ({
+      person: persons.get(pid)?.name || pid,
+      unitId: uid
+    })));
+    
     sortedLevels.forEach((level) => {
       const personIds = levelMap.get(level);
       let unitX = padding;
+      
+      console.log(`[STEP 3] Processing level ${level} with ${personIds.length} people`);
       
       // Group people at this level by their family units
       const unitsAtLevel = new Map(); // unitId -> { personId, spouseIds: [] }
@@ -482,11 +507,15 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       
       // Position each family unit
       unitsAtLevel.forEach((unit, unitId) => {
+        const mainPersonName = persons.get(unit.personId)?.name || unit.personId;
+        console.log(`[STEP 3] Processing family unit for ${mainPersonName} with ${unit.spouseIds.length} spouses`);
+        
         // Get the main person's position (should already be positioned)
         let mainPersonX = unitX;
         const mainPersonPos = positions.get(unit.personId);
         if (mainPersonPos) {
           mainPersonX = mainPersonPos.x;
+          console.log(`[STEP 3] Main person ${mainPersonName} already positioned at X:${mainPersonX}`);
         } else {
           // Position main person if not positioned
           positions.set(unit.personId, {
@@ -494,6 +523,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             y: padding + level * levelSpacing,
             level
           });
+          console.log(`[STEP 3] Positioned main person ${mainPersonName} at X:${mainPersonX}`);
         }
         
         // Separate spouses by marital status
@@ -532,6 +562,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             y: padding + level * levelSpacing,
             level
           });
+          const spouseName = persons.get(spouseId)?.name || spouseId;
+          console.log(`[STEP 3] Positioned divorced spouse (left): ${spouseName} at X:${leftX}`);
         });
         
         // Position married spouses to the RIGHT (closer spacing)
@@ -543,7 +575,11 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             y: padding + level * levelSpacing,
             level
           });
+          const spouseName = persons.get(spouseId)?.name || spouseId;
+          console.log(`[STEP 3] Positioned married spouse (right): ${spouseName} at X:${rightX}`);
         });
+        
+        console.log(`[STEP 3] Family unit for ${mainPersonName}: ${divorcedSpouses.length} divorced, ${marriedSpouses.length} married`);
         
         // Calculate unit width and move to next position
         const unitRight = Math.max(mainPersonX, rightX);
@@ -581,7 +617,32 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       });
     });
     
+    // STEP 5: Final fallback - ensure ALL nodes are positioned (even orphaned ones)
+    let fallbackX = padding;
+    persons.forEach((person, id) => {
+      if (!positions.has(id)) {
+        // Find the highest level to place orphaned nodes
+        const maxLevel = sortedLevels.length > 0 ? Math.max(...sortedLevels) + 1 : 0;
+        positions.set(id, {
+          x: fallbackX,
+          y: padding + maxLevel * levelSpacing,
+          level: maxLevel
+        });
+        console.log(`[STEP 5] Positioned orphaned node: ${person.name || id} at X:${fallbackX}, level:${maxLevel}`);
+        fallbackX += nodeWidth + siblingSpacing * 2;
+        
+        // Also add to levelMap if not already there
+        if (!levelMap.has(maxLevel)) {
+          levelMap.set(maxLevel, []);
+        }
+        if (!levelMap.get(maxLevel).includes(id)) {
+          levelMap.get(maxLevel).push(id);
+        }
+      }
+    });
+    
     console.log('=== LAYOUT DEBUG END ===');
+    console.log(`Total persons: ${persons.size}, Positioned: ${positions.size}`);
 
     return { positions, levelMap };
   }, [personsData, getMotherId]);
@@ -607,17 +668,28 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
     const { positions } = computeLayout();
 
+    console.log(`🔵 Rendering: ${persons.size} persons, ${positions.size} positions`);
+
     if (positions.size === 0) {
+      console.warn('⚠️ No positions calculated, cannot render tree');
       svg.attr('width', containerWidth).attr('height', 600);
       return;
     }
 
     // Calculate SVG dimensions
     const allPositions = Array.from(positions.values());
+    if (allPositions.length === 0) {
+      console.warn('⚠️ No positions in array, cannot calculate dimensions');
+      svg.attr('width', containerWidth).attr('height', 600);
+      return;
+    }
+    
     const minX = Math.min(...allPositions.map(p => p.x));
     const maxX = Math.max(...allPositions.map(p => p.x));
     const minY = Math.min(...allPositions.map(p => p.y));
     const maxY = Math.max(...allPositions.map(p => p.y));
+    
+    console.log(`🔵 SVG bounds: X[${minX}, ${maxX}], Y[${minY}, ${maxY}]`);
 
     const contentWidth = maxX - minX + padding * 2 + nodeWidth;
     const contentHeight = maxY - minY + padding * 2 + nodeHeight;
@@ -879,14 +951,21 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     });
 
     // Draw nodes
+    const nodeIds = Array.from(positions.keys());
+    console.log(`🔵 Rendering ${nodeIds.length} nodes`);
+    
     const nodeGroups = g
       .selectAll('.node')
-      .data(Array.from(positions.keys()))
+      .data(nodeIds)
       .enter()
       .append('g')
       .attr('class', 'node')
       .attr('transform', (id) => {
         const pos = positions.get(id);
+        if (!pos) {
+          console.warn(`⚠️ No position found for node ${id}`);
+          return `translate(0,0)`;
+        }
         return `translate(${pos.x + xOffset},${pos.y + yOffset})`;
       })
       .style('cursor', 'pointer')
@@ -896,10 +975,15 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         }
       });
 
+    let renderedCount = 0;
     nodeGroups.each(function (id) {
       const group = d3.select(this);
       const person = persons.get(id);
-      if (!person) return;
+      if (!person) {
+        console.warn(`⚠️ Person data not found for id: ${id}`);
+        return;
+      }
+      renderedCount++;
 
       const spouseInfo = spouses.get(id);
       const hasSpouse = !!spouseInfo;
@@ -972,6 +1056,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         }
       }
     });
+    
+    console.log(`🔵 Successfully rendered ${renderedCount} nodes`);
   }, [personsData, computeLayout, getMotherId, onPersonClick]);
 
   return (
