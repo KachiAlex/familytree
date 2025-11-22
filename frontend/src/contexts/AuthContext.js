@@ -40,9 +40,17 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        // Load user profile from Firestore
+        // Load user profile from Firestore with timeout
         const userRef = doc(db, 'users', firebaseUser.uid);
-        const snap = await getDoc(userRef);
+        
+        // Create a timeout promise that rejects after 5 seconds
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Firestore request timeout')), 5000);
+        });
+        
+        // Race between getDoc and timeout
+        const snap = await Promise.race([getDoc(userRef), timeoutPromise]);
+        
         if (snap.exists()) {
           setUser({ user_id: firebaseUser.uid, ...snap.data() });
         } else {
@@ -55,8 +63,29 @@ export const AuthProvider = ({ children }) => {
           });
         }
       } catch (err) {
-        console.error('Failed to load user profile:', err);
-        setUser(null);
+        // If Firestore is offline or times out, use Firebase Auth info as fallback
+        // This allows the app to work in offline mode
+        const isOfflineError = 
+          err.code === 'unavailable' || 
+          err.code === 'deadline-exceeded' ||
+          err.message?.includes('timeout') ||
+          err.message?.includes('offline') ||
+          err.message?.includes('Could not reach Cloud Firestore');
+        
+        if (isOfflineError) {
+          console.warn('Firestore offline - using Firebase Auth user info:', err.message);
+          // Use Firebase Auth user info as fallback when offline
+          setUser({
+            user_id: firebaseUser.uid,
+            email: firebaseUser.email,
+            full_name: firebaseUser.displayName || '',
+            role: 'member',
+          });
+        } else {
+          console.error('Failed to load user profile:', err);
+          // Only set user to null for non-offline errors
+          setUser(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -70,18 +99,43 @@ export const AuthProvider = ({ children }) => {
       const credential = await signInWithEmailAndPassword(auth, email, password);
       const firebaseUser = credential.user;
 
-      // Load profile from Firestore
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      const snap = await getDoc(userRef);
-      if (snap.exists()) {
-        setUser({ user_id: firebaseUser.uid, ...snap.data() });
-      } else {
-        setUser({
-          user_id: firebaseUser.uid,
-          email: firebaseUser.email,
-          full_name: firebaseUser.displayName || '',
-          role: 'member',
+      try {
+        // Load profile from Firestore with timeout
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Firestore request timeout')), 5000);
         });
+        const snap = await Promise.race([getDoc(userRef), timeoutPromise]);
+        
+        if (snap.exists()) {
+          setUser({ user_id: firebaseUser.uid, ...snap.data() });
+        } else {
+          setUser({
+            user_id: firebaseUser.uid,
+            email: firebaseUser.email,
+            full_name: firebaseUser.displayName || '',
+            role: 'member',
+          });
+        }
+      } catch (firestoreError) {
+        // If Firestore is offline, use Firebase Auth info
+        const isOfflineError = 
+          firestoreError.code === 'unavailable' || 
+          firestoreError.code === 'deadline-exceeded' ||
+          firestoreError.message?.includes('timeout') ||
+          firestoreError.message?.includes('offline');
+        
+        if (isOfflineError) {
+          console.warn('Firestore offline during login - using Firebase Auth info');
+          setUser({
+            user_id: firebaseUser.uid,
+            email: firebaseUser.email,
+            full_name: firebaseUser.displayName || '',
+            role: 'member',
+          });
+        } else {
+          throw firestoreError;
+        }
       }
 
       return { success: true };

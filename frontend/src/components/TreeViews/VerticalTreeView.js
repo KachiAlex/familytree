@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import * as d3 from 'd3';
-import { Box } from '@mui/material';
+import { Box, Paper, Typography, Divider, Chip } from '@mui/material';
 
 const VerticalTreeView = ({ data, onPersonClick }) => {
   console.log('🔵 VerticalTreeView component loaded', data);
   const svgRef = useRef();
+  const [showLegend, setShowLegend] = useState(true);
   const containerRef = useRef();
 
   // Build data structure with relationships
@@ -239,55 +240,66 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const nodeWidth = 160;
     const levelSpacing = 200;
     const siblingSpacing = 50; // Spacing between siblings (increased for clarity)
-    const spouseSpacing = 25; // Spacing between spouses (closer together)
-    const divorcedSpacing = 100; // Spacing for divorced spouses (more distance)
+    const spouseSpacing = 120; // Equal spacing between all spouses (divorced and married) - increased for visibility
     const familyUnitGap = 100; // Gap between different family units on same level
     const padding = 150;
     
-    // Identify family units: person + their spouses grouped together
+    // Identify family units: person + ALL their spouses grouped together
+    // Strategy: For each person with spouses, create a unit with that person as the main person
     const familyUnits = new Map(); // personId -> { personId, spouseIds: [], isRoot: boolean }
     const personToUnit = new Map(); // personId -> unit personId
     
     console.log('[FAMILY UNITS] Building family units from spouses map...');
     console.log('[FAMILY UNITS] Total spouses entries:', spouses.size);
     
+    // First pass: collect all spouse relationships (bidirectional)
+    const spouseRelationships = new Map(); // personId -> Set of spouseIds
+    spouses.forEach((spouseInfo, personId) => {
+      if (!spouseRelationships.has(personId)) {
+        spouseRelationships.set(personId, new Set());
+      }
+      spouseRelationships.get(personId).add(spouseInfo.spouseId);
+      
+      // Also add reverse relationship
+      if (!spouseRelationships.has(spouseInfo.spouseId)) {
+        spouseRelationships.set(spouseInfo.spouseId, new Set());
+      }
+      spouseRelationships.get(spouseInfo.spouseId).add(personId);
+    });
+    
+    // Second pass: merge connected spouse groups into single units
+    // Use DFS to find all connected people through spouse relationships
+    const unitVisited = new Set();
+    
+    const findConnectedGroup = (startId, group) => {
+      if (unitVisited.has(startId)) return;
+      unitVisited.add(startId);
+      group.add(startId);
+      
+      const personSpouses = spouseRelationships.get(startId);
+      if (personSpouses) {
+        personSpouses.forEach(spouseId => {
+          if (!unitVisited.has(spouseId)) {
+            findConnectedGroup(spouseId, group);
+          }
+        });
+      }
+    };
+    
+    // Find all connected groups
+    const connectedGroups = [];
     persons.forEach((person, id) => {
-      const spouseInfo = spouses.get(id);
-      if (spouseInfo) {
-        const spouseId = spouseInfo.spouseId;
-        const personName = persons.get(id)?.name || id;
-        const spouseName = persons.get(spouseId)?.name || spouseId;
-        console.log(`[FAMILY UNITS] Found spouse relationship: ${personName} <-> ${spouseName} [${spouseInfo.marital_status || 'married'}]`);
-        
-        // Check if either person is already in a unit
-        if (personToUnit.has(id) || personToUnit.has(spouseId)) {
-          // Add to existing unit
-          const unitId = personToUnit.get(id) || personToUnit.get(spouseId);
-          const unit = familyUnits.get(unitId);
-          if (!unit.spouseIds.includes(spouseId) && unit.personId !== spouseId) {
-            unit.spouseIds.push(spouseId);
-            personToUnit.set(spouseId, unitId);
-            console.log(`[FAMILY UNITS] Added ${spouseName} to existing unit ${unitId}`);
-          }
-          if (!unit.spouseIds.includes(id) && unit.personId !== id) {
-            unit.spouseIds.push(id);
-            personToUnit.set(id, unitId);
-            console.log(`[FAMILY UNITS] Added ${personName} to existing unit ${unitId}`);
-          }
-        } else {
-          // Create new family unit - use the person with lower ID as the unit root
-          const unitId = id < spouseId ? id : spouseId;
-          const otherId = id < spouseId ? spouseId : id;
-          familyUnits.set(unitId, {
-            personId: unitId,
-            spouseIds: [otherId],
-            isRoot: false
-          });
-          personToUnit.set(unitId, unitId);
-          personToUnit.set(otherId, unitId);
-          console.log(`[FAMILY UNITS] Created new unit ${unitId} with ${personName} and ${spouseName}`);
+      if (unitVisited.has(id)) return;
+      
+      const personSpouses = spouseRelationships.get(id);
+      if (personSpouses && personSpouses.size > 0) {
+        // This person has spouses - find their connected group
+        const group = new Set();
+        findConnectedGroup(id, group);
+        if (group.size > 0) {
+          connectedGroups.push(Array.from(group));
         }
-      } else if (!personToUnit.has(id)) {
+      } else {
         // Person with no spouse - they are their own unit
         familyUnits.set(id, {
           personId: id,
@@ -296,6 +308,39 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         });
         personToUnit.set(id, id);
       }
+    });
+    
+    // Create units for each connected group
+    connectedGroups.forEach(group => {
+      // Find the person in this group with the most spouses (to be the center)
+      let centerPersonId = group[0];
+      let maxSpouseCount = spouseRelationships.get(centerPersonId)?.size || 0;
+      
+      group.forEach(personId => {
+        const spouseCount = spouseRelationships.get(personId)?.size || 0;
+        if (spouseCount > maxSpouseCount) {
+          maxSpouseCount = spouseCount;
+          centerPersonId = personId;
+        }
+      });
+      
+      // All other people in the group are spouses of the center person
+      const spouseIds = group.filter(id => id !== centerPersonId);
+      
+      familyUnits.set(centerPersonId, {
+        personId: centerPersonId,
+        spouseIds: spouseIds,
+        isRoot: false
+      });
+      
+      // Mark all people in this group as belonging to this unit
+      group.forEach(personId => {
+        personToUnit.set(personId, centerPersonId);
+      });
+      
+      const centerPersonName = persons.get(centerPersonId)?.name || centerPersonId;
+      const spouseNames = spouseIds.map(sid => persons.get(sid)?.name || sid).join(', ');
+      console.log(`[FAMILY UNITS] Created merged unit for ${centerPersonName} with spouses: ${spouseNames}`);
     });
     
     console.log('[FAMILY UNITS] Total family units created:', familyUnits.size);
@@ -510,65 +555,115 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         const mainPersonName = persons.get(unit.personId)?.name || unit.personId;
         console.log(`[STEP 3] Processing family unit for ${mainPersonName} with ${unit.spouseIds.length} spouses`);
         
-        // Get the main person's position (should already be positioned)
-        let mainPersonX = unitX;
-        const mainPersonPos = positions.get(unit.personId);
-        if (mainPersonPos) {
-          mainPersonX = mainPersonPos.x;
-          console.log(`[STEP 3] Main person ${mainPersonName} already positioned at X:${mainPersonX}`);
-        } else {
-          // Position main person if not positioned
-          positions.set(unit.personId, {
-            x: mainPersonX,
-            y: padding + level * levelSpacing,
-            level
-          });
-          console.log(`[STEP 3] Positioned main person ${mainPersonName} at X:${mainPersonX}`);
-        }
+        // Find the person with the most spouses to use as the center
+        // This ensures that if someone has multiple spouses, they're centered
+        const allUnitMembers = [unit.personId, ...unit.spouseIds];
+        let centerPersonId = unit.personId;
+        let maxSpouseCount = unit.spouseIds.length;
         
-        // Separate spouses by marital status
-        const divorcedSpouses = [];
-        const marriedSpouses = [];
-        
+        // Check if any spouse has more spouses than the main person
         unit.spouseIds.forEach(spouseId => {
-          const spouseInfo = spouses.get(unit.personId);
-          if (spouseInfo && spouseInfo.spouseId === spouseId) {
-            const maritalStatus = spouseInfo.marital_status || 'married';
-            if (maritalStatus === 'divorced') {
-              divorcedSpouses.push(spouseId);
-            } else {
-              marriedSpouses.push(spouseId);
+          // Count how many spouses this person has in the unit
+          let count = 0;
+          allUnitMembers.forEach(memberId => {
+            if (memberId !== spouseId) {
+              const memberSpouseInfo = spouses.get(memberId);
+              if (memberSpouseInfo && memberSpouseInfo.spouseId === spouseId) count++;
+              const reverseSpouseInfo = spouses.get(spouseId);
+              if (reverseSpouseInfo && reverseSpouseInfo.spouseId === memberId) count++;
             }
-          } else {
-            // Check reverse direction
-            const reverseSpouseInfo = spouses.get(spouseId);
-            if (reverseSpouseInfo && reverseSpouseInfo.spouseId === unit.personId) {
-              const maritalStatus = reverseSpouseInfo.marital_status || 'married';
-              if (maritalStatus === 'divorced') {
-                divorcedSpouses.push(spouseId);
-              } else {
-                marriedSpouses.push(spouseId);
-              }
-            }
+          });
+          if (count > maxSpouseCount) {
+            maxSpouseCount = count;
+            centerPersonId = spouseId;
           }
         });
         
-        // Position divorced spouses to the LEFT (more spacing for visual separation)
-        let leftX = mainPersonX;
-        divorcedSpouses.forEach((spouseId) => {
-          leftX = leftX - nodeWidth - divorcedSpacing;
+        const centerPersonName = persons.get(centerPersonId)?.name || centerPersonId;
+        console.log(`[STEP 3] Using ${centerPersonName} as center person (has ${maxSpouseCount} spouses in unit)`);
+        
+        // Get the center person's position (should already be positioned)
+        let centerPersonX = unitX;
+        const centerPersonPos = positions.get(centerPersonId);
+        if (centerPersonPos) {
+          centerPersonX = centerPersonPos.x;
+          console.log(`[STEP 3] Center person ${centerPersonName} already positioned at X:${centerPersonX}`);
+        } else {
+          // Position center person if not positioned
+          positions.set(centerPersonId, {
+            x: centerPersonX,
+            y: padding + level * levelSpacing,
+            level
+          });
+          console.log(`[STEP 3] Positioned center person ${centerPersonName} at X:${centerPersonX}`);
+        }
+        
+        // Separate spouses by number of children
+        // Spouse with MORE children goes to the RIGHT, spouse with FEWER children goes to the LEFT
+        const spouseWithChildren = [];
+        
+        // Separate spouses into those on the left and right of the center person
+        // All spouses except the center person should be positioned
+        const spousesToPosition = allUnitMembers.filter(id => id !== centerPersonId);
+        
+        // Count children for each spouse (only count children where this spouse is the MOTHER)
+        spousesToPosition.forEach(spouseId => {
+          const children = childrenByMother.get(spouseId) || [];
+          const spouseName = persons.get(spouseId)?.name || spouseId;
+          console.log(`[STEP 3] Spouse ${spouseName} has ${children.length} children (as mother)`);
+          spouseWithChildren.push({ id: spouseId, childCount: children.length });
+        });
+        
+        // Sort by child count: fewer children first (will go left), more children last (will go right)
+        spouseWithChildren.sort((a, b) => a.childCount - b.childCount);
+        
+        // Separate into left (fewer children) and right (more children)
+        const leftSpouses = [];
+        const rightSpouses = [];
+        
+        // If there are 2 spouses, put the one with fewer children on LEFT, more on RIGHT
+        // If there's only 1 spouse, check if they have children to decide placement
+        if (spouseWithChildren.length === 1) {
+          // Single spouse: if they have children, put them on RIGHT, otherwise LEFT
+          if (spouseWithChildren[0].childCount > 0) {
+            rightSpouses.push(spouseWithChildren[0].id);
+          } else {
+            leftSpouses.push(spouseWithChildren[0].id);
+          }
+        } else if (spouseWithChildren.length === 2) {
+          // Two spouses: fewer children on LEFT, more children on RIGHT
+          leftSpouses.push(spouseWithChildren[0].id);
+          rightSpouses.push(spouseWithChildren[1].id);
+        } else {
+          // More than 2 spouses: split evenly, fewer children on left
+          const midPoint = Math.ceil(spouseWithChildren.length / 2);
+          spouseWithChildren.slice(0, midPoint).forEach(s => leftSpouses.push(s.id));
+          spouseWithChildren.slice(midPoint).forEach(s => rightSpouses.push(s.id));
+        }
+        
+        console.log(`[STEP 3] Left spouses (fewer children): ${leftSpouses.map(id => persons.get(id)?.name || id).join(', ')}`);
+        console.log(`[STEP 3] Right spouses (more children): ${rightSpouses.map(id => persons.get(id)?.name || id).join(', ')}`);
+        
+        // Position all spouses with equal spacing relative to the CENTER person
+        // IMPORTANT: Always reposition spouses even if they were positioned in STEP 2
+        let leftX = centerPersonX;
+        leftSpouses.forEach((spouseId) => {
+          const oldPos = positions.get(spouseId);
+          leftX = leftX - nodeWidth - spouseSpacing;
           positions.set(spouseId, {
             x: leftX,
             y: padding + level * levelSpacing,
             level
           });
           const spouseName = persons.get(spouseId)?.name || spouseId;
-          console.log(`[STEP 3] Positioned divorced spouse (left): ${spouseName} at X:${leftX}`);
+          const oldX = oldPos ? oldPos.x : 'not positioned';
+          console.log(`[STEP 3] Positioned spouse (left, fewer children): ${spouseName} from X:${oldX} to X:${leftX} (spacing: ${spouseSpacing}px)`);
         });
         
-        // Position married spouses to the RIGHT (closer spacing)
-        let rightX = mainPersonX;
-        marriedSpouses.forEach((spouseId) => {
+        // Position spouses to the RIGHT with same spacing
+        let rightX = centerPersonX;
+        rightSpouses.forEach((spouseId) => {
+          const oldPos = positions.get(spouseId);
           rightX = rightX + nodeWidth + spouseSpacing;
           positions.set(spouseId, {
             x: rightX,
@@ -576,14 +671,120 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             level
           });
           const spouseName = persons.get(spouseId)?.name || spouseId;
-          console.log(`[STEP 3] Positioned married spouse (right): ${spouseName} at X:${rightX}`);
+          const oldX = oldPos ? oldPos.x : 'not positioned';
+          console.log(`[STEP 3] Positioned spouse (right, more children): ${spouseName} from X:${oldX} to X:${rightX} (spacing: ${spouseSpacing}px)`);
         });
         
-        console.log(`[STEP 3] Family unit for ${mainPersonName}: ${divorcedSpouses.length} divorced, ${marriedSpouses.length} married`);
+        console.log(`[STEP 3] Final positions - Center: ${centerPersonName} at X:${centerPersonX}, Left spouses: ${leftSpouses.length}, Right spouses: ${rightSpouses.length}, Spacing: ${spouseSpacing}px`);
+        
+        console.log(`[STEP 3] Family unit for ${mainPersonName}: ${leftSpouses.length} left (fewer children), ${rightSpouses.length} right (more children)`);
         
         // Calculate unit width and move to next position
-        const unitRight = Math.max(mainPersonX, rightX);
+        const unitRight = Math.max(centerPersonX, rightX);
         unitX = unitRight + familyUnitGap;
+      });
+    });
+    
+    // STEP 3.5: Center fathers above their children (mean average position)
+    console.log('[STEP 3.5] Centering fathers above their children...');
+    sortedLevels.forEach((level) => {
+      const personIds = levelMap.get(level);
+      
+      personIds.forEach((id) => {
+        const person = persons.get(id);
+        if (!person) return;
+        
+        // Check if this is a father (male with children)
+        const isMale = person.data?.gender === 'male';
+        if (!isMale) return;
+        
+        // Find all children of this father
+        const children = [];
+        childrenByParent.forEach((childIds, parentId) => {
+          if (parentId === id) {
+            children.push(...childIds);
+          }
+        });
+        
+        if (children.length === 0) return;
+        
+        // Get positions of all positioned children
+        const childPositions = children
+          .map(childId => positions.get(childId))
+          .filter(pos => pos !== undefined);
+        
+        if (childPositions.length === 0) return;
+        
+        // Calculate mean average X position of children
+        const avgX = childPositions.reduce((sum, pos) => sum + pos.x, 0) / childPositions.length;
+        
+        // Get current position of father
+        const currentPos = positions.get(id);
+        if (!currentPos) return;
+        
+        const oldX = currentPos.x;
+        const deltaX = avgX - oldX;
+        
+        // Update father's X position to center above children
+        currentPos.x = avgX;
+        positions.set(id, currentPos);
+        console.log(`[STEP 3.5] Centered father ${person.name || id} from X:${oldX} to X:${avgX} (average of ${childPositions.length} children, delta: ${deltaX})`);
+        
+        // Also adjust positions of ALL spouses to maintain family unit grouping
+        // Find ALL family units that contain this person (as main person or as spouse)
+        if (Math.abs(deltaX) > 1) {
+          const adjustedSpouses = new Set(); // Track which spouses we've already adjusted
+          
+          // Find all units where this person is the main person
+          const mainUnitId = personToUnit.get(id);
+          if (mainUnitId) {
+            const mainUnit = familyUnits.get(mainUnitId);
+            if (mainUnit) {
+              const allUnitMembers = [mainUnit.personId, ...mainUnit.spouseIds];
+              allUnitMembers.forEach(memberId => {
+                if (memberId !== id && !adjustedSpouses.has(memberId)) {
+                  const memberPos = positions.get(memberId);
+                  if (memberPos && memberPos.level === level) {
+                    memberPos.x += deltaX;
+                    positions.set(memberId, memberPos);
+                    adjustedSpouses.add(memberId);
+                    const memberName = persons.get(memberId)?.name || memberId;
+                    console.log(`[STEP 3.5] Adjusted ${memberName} position by ${deltaX} to maintain family unit (main unit)`);
+                  }
+                }
+              });
+            }
+          }
+          
+          // Find all units where this person is a spouse
+          familyUnits.forEach((unit, unitPersonId) => {
+            if (unit.spouseIds.includes(id) && !adjustedSpouses.has(unitPersonId)) {
+              // Adjust the main person of this unit
+              const mainPersonPos = positions.get(unitPersonId);
+              if (mainPersonPos && mainPersonPos.level === level) {
+                mainPersonPos.x += deltaX;
+                positions.set(unitPersonId, mainPersonPos);
+                adjustedSpouses.add(unitPersonId);
+                const mainPersonName = persons.get(unitPersonId)?.name || unitPersonId;
+                console.log(`[STEP 3.5] Adjusted ${mainPersonName} position by ${deltaX} to maintain family unit (spouse unit)`);
+              }
+              
+              // Also adjust other spouses in this unit
+              unit.spouseIds.forEach(spouseId => {
+                if (spouseId !== id && !adjustedSpouses.has(spouseId)) {
+                  const spousePos = positions.get(spouseId);
+                  if (spousePos && spousePos.level === level) {
+                    spousePos.x += deltaX;
+                    positions.set(spouseId, spousePos);
+                    adjustedSpouses.add(spouseId);
+                    const spouseName = persons.get(spouseId)?.name || spouseId;
+                    console.log(`[STEP 3.5] Adjusted ${spouseName} position by ${deltaX} to maintain family unit (spouse unit)`);
+                  }
+                }
+              });
+            }
+          });
+        }
       });
     });
     
@@ -658,10 +859,48 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       return;
     }
 
+    // Helper function to check if a person has ANY divorced relationship
+    // (since a person can have multiple spouses with different marital statuses)
+    // We need to check all edges, not just the spouses map which only stores one relationship
+    const hasDivorcedRelationship = (personId) => {
+      if (!data || !data.edges) return false;
+      const personIdStr = String(personId);
+      return data.edges.some(edge => {
+        if (!edge || edge.type !== 'spouse') return false;
+        const sourceId = String(edge.source);
+        const targetId = String(edge.target);
+        const maritalStatus = edge.marital_status || 'married';
+        return (sourceId === personIdStr || targetId === personIdStr) && maritalStatus === 'divorced';
+      });
+    };
+
     const containerWidth = containerRef.current?.clientWidth || 1000;
     const nodeWidth = 160;
     const nodeHeight = 80;
     const padding = 150;
+
+    // Generation-based color scheme (professional gradient)
+    // Level 0: Deep Blue, Level 1: Blue, Level 2: Teal, Level 3: Green, Level 4+: Light Green
+    const generationColors = {
+      background: [
+        '#e3f2fd', // Level 0: Light blue (ancestors)
+        '#bbdefb', // Level 1: Lighter blue
+        '#90caf9', // Level 2: Sky blue
+        '#64b5f6', // Level 3: Bright blue
+        '#42a5f5', // Level 4: Medium blue
+        '#2196f3', // Level 5: Standard blue
+        '#1e88e5', // Level 6+: Deep blue
+      ],
+      border: [
+        '#1565c0', // Level 0: Deep blue border
+        '#1976d2', // Level 1: Blue border
+        '#0288d1', // Level 2: Teal-blue border
+        '#0277bd', // Level 3: Darker teal border
+        '#01579b', // Level 4: Deep teal border
+        '#004d40', // Level 5: Teal-green border
+        '#00695c', // Level 6+: Dark teal border
+      ]
+    };
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -843,14 +1082,21 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       const motherBottomY = motherPos.y + yOffset + nodeHeight / 2;
       const midY = motherBottomY + (childTopY - motherBottomY) / 2;
 
+      // Get generation color for connection lines (based on child level)
+      const childLevel = childPositions[0]?.pos?.level ?? motherPos.level + 1;
+      const levelIndex = Math.min(childLevel, generationColors.border.length - 1);
+      const connectionColor = generationColors.border[levelIndex];
+      const connectionOpacity = 0.6; // Slightly transparent for subtlety
+
       // Vertical line from mother down to mid point
       g.append('line')
         .attr('x1', motherCenterX)
         .attr('y1', motherBottomY)
         .attr('x2', motherCenterX)
         .attr('y2', midY)
-        .attr('stroke', '#424242')
-        .attr('stroke-width', 2.5);
+        .attr('stroke', connectionColor)
+        .attr('stroke-width', 2.5)
+        .attr('opacity', connectionOpacity);
 
       // Horizontal line connecting siblings
       g.append('line')
@@ -858,8 +1104,9 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', midY)
         .attr('x2', maxChildX + xOffset)
         .attr('y2', midY)
-        .attr('stroke', '#424242')
-        .attr('stroke-width', 2.5);
+        .attr('stroke', connectionColor)
+        .attr('stroke-width', 2.5)
+        .attr('opacity', connectionOpacity);
 
       // Vertical lines from horizontal line to each child
       childPositions.forEach(({ pos: childPos }) => {
@@ -869,9 +1116,55 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('y1', midY)
           .attr('x2', childCenterX)
           .attr('y2', childTopY)
-          .attr('stroke', '#424242')
-          .attr('stroke-width', 2.5);
+          .attr('stroke', connectionColor)
+          .attr('stroke-width', 2.5)
+          .attr('opacity', connectionOpacity);
       });
+      
+      // Connect mother to father if they're not already close together
+      // Find the father (spouse of mother who is male and has the same children)
+      const motherSpouseInfo = spouses.get(motherId);
+      if (motherSpouseInfo) {
+        const fatherId = motherSpouseInfo.spouseId;
+        const father = persons.get(fatherId);
+        const fatherPos = positions.get(fatherId);
+        
+        // Check if father is male and has the same children
+        if (father && father.data?.gender === 'male' && fatherPos) {
+          const fatherChildren = childrenByParent.get(fatherId) || [];
+          const hasCommonChildren = childIds.some(cid => fatherChildren.includes(cid));
+          
+          if (hasCommonChildren) {
+            const fatherCenterX = fatherPos.x + xOffset + nodeWidth / 2;
+            const fatherBottomY = fatherPos.y + yOffset + nodeHeight / 2;
+            const motherTopY = motherPos.y + yOffset - nodeHeight / 2;
+            
+            // Only draw connection if parents are far apart (more than 2 node widths)
+            const distance = Math.abs(fatherCenterX - motherCenterX);
+            if (distance > nodeWidth * 2) {
+              // Draw line from father to mother
+              g.append('line')
+                .attr('x1', fatherCenterX)
+                .attr('y1', fatherBottomY)
+                .attr('x2', fatherCenterX)
+                .attr('y2', motherTopY)
+                .attr('stroke', '#424242')
+                .attr('stroke-width', 2.5)
+                .attr('stroke-dasharray', '5,5');
+              
+              // Horizontal connector from father to mother
+              g.append('line')
+                .attr('x1', Math.min(fatherCenterX, motherCenterX))
+                .attr('y1', motherTopY)
+                .attr('x2', Math.max(fatherCenterX, motherCenterX))
+                .attr('y2', motherTopY)
+                .attr('stroke', '#424242')
+                .attr('stroke-width', 2.5)
+                .attr('stroke-dasharray', '5,5');
+            }
+          }
+        }
+      }
     });
 
     // Draw spouse connections with X symbol for divorced
@@ -912,40 +1205,40 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
-      // Add X symbol for divorced (cancel icon on the line)
+      // Add diagonal slash line for divorced relationships (slashing across the connection)
       if (isDivorced) {
         const midX = (x1 + x2) / 2;
-        const iconSize = 16;
+        const slashLength = 40; // Increased length for better visibility
+        const circleRadius = 25; // White background circle radius
         
-        // Draw a circle background for better visibility
+        // Draw white background circle for better visibility
         g.append('circle')
           .attr('cx', midX)
           .attr('cy', y)
-          .attr('r', iconSize + 2)
+          .attr('r', circleRadius)
           .attr('fill', '#ffffff')
           .attr('stroke', '#d32f2f')
-          .attr('stroke-width', 2.5);
+          .attr('stroke-width', 2);
         
-        // Draw X symbol using lines (more reliable than text)
-        const offset = iconSize * 0.7;
-        // Top-left to bottom-right line
+        // Draw diagonal slash line at 45-degree angle across the horizontal connection
+        // Top-left to bottom-right
         g.append('line')
-          .attr('x1', midX - offset)
-          .attr('y1', y - offset)
-          .attr('x2', midX + offset)
-          .attr('y2', y + offset)
+          .attr('x1', midX - slashLength / 2)
+          .attr('y1', y - slashLength / 2)
+          .attr('x2', midX + slashLength / 2)
+          .attr('y2', y + slashLength / 2)
           .attr('stroke', '#d32f2f')
-          .attr('stroke-width', 3)
+          .attr('stroke-width', 5)
           .attr('stroke-linecap', 'round');
         
-        // Top-right to bottom-left line
+        // Bottom-left to top-right (X pattern for better visibility)
         g.append('line')
-          .attr('x1', midX + offset)
-          .attr('y1', y - offset)
-          .attr('x2', midX - offset)
-          .attr('y2', y + offset)
+          .attr('x1', midX - slashLength / 2)
+          .attr('y1', y + slashLength / 2)
+          .attr('x2', midX + slashLength / 2)
+          .attr('y2', y - slashLength / 2)
           .attr('stroke', '#d32f2f')
-          .attr('stroke-width', 3)
+          .attr('stroke-width', 5)
           .attr('stroke-linecap', 'round');
       }
     });
@@ -987,9 +1280,42 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
       const spouseInfo = spouses.get(id);
       const hasSpouse = !!spouseInfo;
+      // Check if this person has ANY divorced relationship (not just the first spouse)
+      const isDivorced = hasDivorcedRelationship(id);
+      // Check for widowed status from the first spouse (or check all if needed)
       const maritalStatus = spouseInfo?.marital_status || 'married';
-      const isDivorced = maritalStatus === 'divorced';
       const isWidowed = maritalStatus === 'widowed';
+
+      // Get the person's level for generation-based coloring
+      const personPos = positions.get(id);
+      const level = personPos?.level ?? 0;
+      
+      // Get color based on level (cap at array length)
+      const levelIndex = Math.min(level, generationColors.background.length - 1);
+      let backgroundColor = generationColors.background[levelIndex];
+      let borderColor = generationColors.border[levelIndex];
+      
+      // Override with marital status colors if applicable (but keep generation as base)
+      if (hasSpouse) {
+        if (isDivorced) {
+          // Divorced: Use pink/red but with generation tint
+          backgroundColor = '#ffebee';
+          borderColor = '#d32f2f';
+        } else if (isWidowed) {
+          // Widowed: Use gray but with generation tint
+          backgroundColor = '#f5f5f5';
+          borderColor = '#757575';
+        } else {
+          // Married: Use orange but blend with generation color
+          // Create a subtle blend between generation color and orange
+          backgroundColor = '#fff3e0';
+          borderColor = '#ff9800';
+        }
+      } else {
+        // Single: Use generation colors
+        backgroundColor = generationColors.background[levelIndex];
+        borderColor = generationColors.border[levelIndex];
+      }
 
       // Draw node rectangle
       group
@@ -999,8 +1325,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('width', nodeWidth)
         .attr('height', nodeHeight)
         .attr('rx', 10)
-        .attr('fill', hasSpouse ? (isDivorced ? '#ffebee' : isWidowed ? '#f5f5f5' : '#fff3e0') : '#ffffff')
-        .attr('stroke', hasSpouse ? (isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800') : '#1976d2')
+        .attr('fill', backgroundColor)
+        .attr('stroke', borderColor)
         .attr('stroke-width', 3)
         .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.12))');
 
@@ -1055,14 +1381,287 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           // ignore invalid dates
         }
       }
+
+      // Add divorce indicator badge on the card
+      if (isDivorced && hasSpouse) {
+        // Draw a small badge in the top-right corner
+        const badgeX = nodeWidth / 2 - 45;
+        const badgeY = -nodeHeight / 2 + 8;
+        
+        // Background rectangle for badge
+        group
+          .append('rect')
+          .attr('x', badgeX - 30)
+          .attr('y', badgeY - 8)
+          .attr('width', 60)
+          .attr('height', 16)
+          .attr('rx', 8)
+          .attr('fill', '#d32f2f')
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', 1);
+        
+        // "DIVORCED" text
+        group
+          .append('text')
+          .attr('x', badgeX)
+          .attr('y', badgeY + 2)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '8px')
+          .attr('font-weight', 'bold')
+          .attr('fill', '#ffffff')
+          .text('DIVORCED');
+      }
     });
     
     console.log(`🔵 Successfully rendered ${renderedCount} nodes`);
-  }, [personsData, computeLayout, getMotherId, onPersonClick]);
+  }, [personsData, computeLayout, getMotherId, onPersonClick, data]);
+
+  // Generation color labels
+  const generationLabels = [
+    'Level 0 (Root/Ancestors)',
+    'Level 1',
+    'Level 2',
+    'Level 3',
+    'Level 4',
+    'Level 5',
+    'Level 6+'
+  ];
+
+  const generationColors = {
+    background: [
+      '#e3f2fd', // Level 0
+      '#bbdefb', // Level 1
+      '#90caf9', // Level 2
+      '#64b5f6', // Level 3
+      '#42a5f5', // Level 4
+      '#2196f3', // Level 5
+      '#1e88e5', // Level 6+
+    ],
+    border: [
+      '#1565c0', // Level 0
+      '#1976d2', // Level 1
+      '#0288d1', // Level 2
+      '#0277bd', // Level 3
+      '#01579b', // Level 4
+      '#004d40', // Level 5
+      '#00695c', // Level 6+
+    ]
+  };
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5' }}>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5', position: 'relative' }}>
       <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
+      
+      {/* Color Legend Panel */}
+      {showLegend && (
+        <Paper
+          elevation={4}
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            padding: 2,
+            minWidth: 280,
+            maxWidth: 320,
+            backgroundColor: 'white',
+            zIndex: 1000,
+            maxHeight: 'calc(100vh - 100px)',
+            overflowY: 'auto',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold', color: '#333' }}>
+              Color Legend
+            </Typography>
+            <Chip
+              label="×"
+              onClick={() => setShowLegend(false)}
+              sx={{
+                cursor: 'pointer',
+                height: 24,
+                width: 24,
+                minWidth: 24,
+                fontSize: '1.2rem',
+                '&:hover': { backgroundColor: '#f0f0f0' }
+              }}
+            />
+          </Box>
+          
+          <Divider sx={{ my: 1.5 }} />
+          
+          {/* Generation Levels */}
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#555', fontSize: '0.85rem' }}>
+            Generation Levels
+          </Typography>
+          {generationLabels.map((label, index) => (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Box
+                sx={{
+                  width: 40,
+                  height: 24,
+                  backgroundColor: generationColors.background[index],
+                  border: `2px solid ${generationColors.border[index]}`,
+                  borderRadius: '4px',
+                  mr: 1.5,
+                  flexShrink: 0,
+                }}
+              />
+              <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+                {label}
+              </Typography>
+            </Box>
+          ))}
+          
+          <Divider sx={{ my: 1.5 }} />
+          
+          {/* Marital Status */}
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#555', fontSize: '0.85rem' }}>
+            Marital Status
+          </Typography>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 24,
+                backgroundColor: '#fff3e0',
+                border: '2px solid #ff9800',
+                borderRadius: '4px',
+                mr: 1.5,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Married
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 24,
+                backgroundColor: '#ffebee',
+                border: '2px solid #d32f2f',
+                borderRadius: '4px',
+                mr: 1.5,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Divorced
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 24,
+                backgroundColor: '#f5f5f5',
+                border: '2px solid #757575',
+                borderRadius: '4px',
+                mr: 1.5,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Widowed
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 24,
+                backgroundColor: '#ffffff',
+                border: '2px solid #1976d2',
+                borderRadius: '4px',
+                mr: 1.5,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Single (No Spouse)
+            </Typography>
+          </Box>
+          
+          <Divider sx={{ my: 1.5 }} />
+          
+          {/* Connection Lines */}
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#555', fontSize: '0.85rem' }}>
+            Connection Lines
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 3,
+                backgroundColor: generationColors.border[2],
+                opacity: 0.6,
+                borderRadius: '2px',
+                mr: 1.5,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Parent-Child (matches child's generation)
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 3,
+                backgroundColor: '#ff9800',
+                borderRadius: '2px',
+                mr: 1.5,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Spouse Connection (Married)
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 3,
+                backgroundColor: '#d32f2f',
+                borderTop: '2px dashed #d32f2f',
+                borderRadius: '2px',
+                mr: 1.5,
+                flexShrink: 0,
+                backgroundImage: 'repeating-linear-gradient(90deg, #d32f2f 0, #d32f2f 4px, transparent 4px, transparent 8px)',
+              }}
+            />
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              Spouse Connection (Divorced)
+            </Typography>
+          </Box>
+        </Paper>
+      )}
+      
+      {/* Show Legend Button (when hidden) */}
+      {!showLegend && (
+        <Chip
+          label="Show Legend"
+          onClick={() => setShowLegend(true)}
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            cursor: 'pointer',
+            zIndex: 1000,
+            backgroundColor: 'white',
+            '&:hover': { backgroundColor: '#f5f5f5' }
+          }}
+        />
+      )}
     </Box>
   );
 };
