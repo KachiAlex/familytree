@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import * as d3 from 'd3';
 import { Box, Paper, Typography, Divider, Chip } from '@mui/material';
+import { 
+  generationColors, 
+  generationLabels, 
+  maritalStatusColors,
+  layoutConfig 
+} from '../../config/treeConfig';
 
 const VerticalTreeView = ({ data, onPersonClick }) => {
   console.log('🔵 VerticalTreeView component loaded', data);
@@ -236,13 +242,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       iteration++;
     }
 
-    // Layout parameters
-    const nodeWidth = 160;
-    const levelSpacing = 200;
-    const siblingSpacing = 50; // Spacing between siblings (increased for clarity)
-    const spouseSpacing = 120; // Equal spacing between all spouses (divorced and married) - increased for visibility
-    const familyUnitGap = 100; // Gap between different family units on same level
-    const padding = 150;
+    // Layout parameters - using shared configuration
+    const { nodeWidth, levelSpacing, siblingSpacing, spouseSpacing, familyUnitGap, padding } = layoutConfig;
     
     // Identify family units: person + ALL their spouses grouped together
     // Strategy: For each person with spouses, create a unit with that person as the main person
@@ -875,32 +876,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     };
 
     const containerWidth = containerRef.current?.clientWidth || 1000;
-    const nodeWidth = 160;
-    const nodeHeight = 80;
-    const padding = 150;
-
-    // Generation-based color scheme (professional gradient)
-    // Level 0: Deep Blue, Level 1: Blue, Level 2: Teal, Level 3: Green, Level 4+: Light Green
-    const generationColors = {
-      background: [
-        '#e3f2fd', // Level 0: Light blue (ancestors)
-        '#bbdefb', // Level 1: Lighter blue
-        '#90caf9', // Level 2: Sky blue
-        '#64b5f6', // Level 3: Bright blue
-        '#42a5f5', // Level 4: Medium blue
-        '#2196f3', // Level 5: Standard blue
-        '#1e88e5', // Level 6+: Deep blue
-      ],
-      border: [
-        '#1565c0', // Level 0: Deep blue border
-        '#1976d2', // Level 1: Blue border
-        '#0288d1', // Level 2: Teal-blue border
-        '#0277bd', // Level 3: Darker teal border
-        '#01579b', // Level 4: Deep teal border
-        '#004d40', // Level 5: Teal-green border
-        '#00695c', // Level 6+: Dark teal border
-      ]
-    };
+    // Use shared configuration from treeConfig.js
+    const { nodeWidth, nodeHeight, padding, connectionLineOpacity } = layoutConfig;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -1086,7 +1063,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       const childLevel = childPositions[0]?.pos?.level ?? motherPos.level + 1;
       const levelIndex = Math.min(childLevel, generationColors.border.length - 1);
       const connectionColor = generationColors.border[levelIndex];
-      const connectionOpacity = 0.6; // Slightly transparent for subtlety
+      const connectionOpacity = connectionLineOpacity; // From config
 
       // Vertical line from mother down to mid point
       g.append('line')
@@ -1298,18 +1275,20 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       // Override with marital status colors if applicable (but keep generation as base)
       if (hasSpouse) {
         if (isDivorced) {
-          // Divorced: Use pink/red but with generation tint
-          backgroundColor = '#ffebee';
-          borderColor = '#d32f2f';
+          // Divorced: Use pink/red from config
+          const divorcedColors = maritalStatusColors.divorced;
+          backgroundColor = divorcedColors.background;
+          borderColor = divorcedColors.border;
         } else if (isWidowed) {
-          // Widowed: Use gray but with generation tint
-          backgroundColor = '#f5f5f5';
-          borderColor = '#757575';
+          // Widowed: Use gray from config
+          const widowedColors = maritalStatusColors.widowed;
+          backgroundColor = widowedColors.background;
+          borderColor = widowedColors.border;
         } else {
-          // Married: Use orange but blend with generation color
-          // Create a subtle blend between generation color and orange
-          backgroundColor = '#fff3e0';
-          borderColor = '#ff9800';
+          // Married: Use orange from config
+          const marriedColors = maritalStatusColors.married;
+          backgroundColor = marriedColors.background;
+          borderColor = marriedColors.border;
         }
       } else {
         // Single: Use generation colors
@@ -1417,72 +1396,43 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
   }, [personsData, computeLayout, getMotherId, onPersonClick, data]);
 
   // Generation color labels
-  const generationLabels = [
-    'Level 0 (Root/Ancestors)',
-    'Level 1',
-    'Level 2',
-    'Level 3',
-    'Level 4',
-    'Level 5',
-    'Level 6+'
-  ];
-
-  const generationColors = {
-    background: [
-      '#e3f2fd', // Level 0
-      '#bbdefb', // Level 1
-      '#90caf9', // Level 2
-      '#64b5f6', // Level 3
-      '#42a5f5', // Level 4
-      '#2196f3', // Level 5
-      '#1e88e5', // Level 6+
-    ],
-    border: [
-      '#1565c0', // Level 0
-      '#1976d2', // Level 1
-      '#0288d1', // Level 2
-      '#0277bd', // Level 3
-      '#01579b', // Level 4
-      '#004d40', // Level 5
-      '#00695c', // Level 6+
-    ]
-  };
+  // Using shared configuration from treeConfig.js (generationColors, generationLabels, maritalStatusColors imported at top)
 
   return (
     <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5', position: 'relative' }}>
       <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
       
-      {/* Color Legend Panel */}
+      {/* Color Legend Panel - Bottom Left Corner */}
       {showLegend && (
         <Paper
           elevation={4}
           sx={{
-            position: 'absolute',
-            top: 16,
-            right: 16,
-            padding: 2,
-            minWidth: 280,
-            maxWidth: 320,
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
+            padding: 1.5,
+            width: 260,
             backgroundColor: 'white',
             zIndex: 1000,
-            maxHeight: 'calc(100vh - 100px)',
+            maxHeight: 'calc(100vh - 120px)',
             overflowY: 'auto',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold', color: '#333' }}>
+            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#333' }}>
               Color Legend
             </Typography>
             <Chip
-              label="×"
+              label="Hide"
               onClick={() => setShowLegend(false)}
+              size="small"
               sx={{
                 cursor: 'pointer',
                 height: 24,
-                width: 24,
-                minWidth: 24,
-                fontSize: '1.2rem',
-                '&:hover': { backgroundColor: '#f0f0f0' }
+                fontSize: '0.75rem',
+                backgroundColor: '#f5f5f5',
+                '&:hover': { backgroundColor: '#e0e0e0' }
               }}
             />
           </Box>
@@ -1490,175 +1440,181 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           <Divider sx={{ my: 1.5 }} />
           
           {/* Generation Levels */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#555', fontSize: '0.85rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
             Generation Levels
           </Typography>
-          {generationLabels.map((label, index) => (
-            <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          {generationLabels.slice(0, 5).map((label, index) => (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
               <Box
                 sx={{
-                  width: 40,
-                  height: 24,
+                  width: 32,
+                  height: 20,
                   backgroundColor: generationColors.background[index],
                   border: `2px solid ${generationColors.border[index]}`,
-                  borderRadius: '4px',
-                  mr: 1.5,
+                  borderRadius: '3px',
+                  mr: 1,
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
                 {label}
               </Typography>
             </Box>
           ))}
+          {generationLabels.length > 5 && (
+            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#999', fontStyle: 'italic', ml: 5 }}>
+              + {generationLabels.length - 5} more levels
+            </Typography>
+          )}
           
-          <Divider sx={{ my: 1.5 }} />
+          <Divider sx={{ my: 1 }} />
           
           {/* Marital Status */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#555', fontSize: '0.85rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
             Marital Status
           </Typography>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 24,
+                width: 32,
+                height: 20,
                 backgroundColor: '#fff3e0',
                 border: '2px solid #ff9800',
-                borderRadius: '4px',
-                mr: 1.5,
+                borderRadius: '3px',
+                mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
               Married
             </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 24,
+                width: 32,
+                height: 20,
                 backgroundColor: '#ffebee',
                 border: '2px solid #d32f2f',
-                borderRadius: '4px',
-                mr: 1.5,
+                borderRadius: '3px',
+                mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
               Divorced
             </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 24,
+                width: 32,
+                height: 20,
                 backgroundColor: '#f5f5f5',
                 border: '2px solid #757575',
-                borderRadius: '4px',
-                mr: 1.5,
+                borderRadius: '3px',
+                mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
               Widowed
             </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 24,
+                width: 32,
+                height: 20,
                 backgroundColor: '#ffffff',
                 border: '2px solid #1976d2',
-                borderRadius: '4px',
-                mr: 1.5,
+                borderRadius: '3px',
+                mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
-              Single (No Spouse)
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              Single
             </Typography>
           </Box>
           
-          <Divider sx={{ my: 1.5 }} />
+          <Divider sx={{ my: 1 }} />
           
           {/* Connection Lines */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#555', fontSize: '0.85rem' }}>
-            Connection Lines
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
+            Connections
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 3,
+                width: 32,
+                height: 2,
                 backgroundColor: generationColors.border[2],
                 opacity: 0.6,
                 borderRadius: '2px',
-                mr: 1.5,
+                mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
-              Parent-Child (matches child's generation)
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              Parent-Child
             </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 3,
+                width: 32,
+                height: 2,
                 backgroundColor: '#ff9800',
                 borderRadius: '2px',
-                mr: 1.5,
+                mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
-              Spouse Connection (Married)
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              Married
             </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 40,
-                height: 3,
+                width: 32,
+                height: 2,
                 backgroundColor: '#d32f2f',
-                borderTop: '2px dashed #d32f2f',
+                backgroundImage: 'repeating-linear-gradient(90deg, #d32f2f 0, #d32f2f 3px, transparent 3px, transparent 6px)',
                 borderRadius: '2px',
-                mr: 1.5,
+                mr: 1,
                 flexShrink: 0,
-                backgroundImage: 'repeating-linear-gradient(90deg, #d32f2f 0, #d32f2f 4px, transparent 4px, transparent 8px)',
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#666' }}>
-              Spouse Connection (Divorced)
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              Divorced
             </Typography>
           </Box>
         </Paper>
       )}
       
-      {/* Show Legend Button (when hidden) */}
+      {/* Show Legend Button (when hidden) - Bottom Left Corner */}
       {!showLegend && (
         <Chip
           label="Show Legend"
           onClick={() => setShowLegend(true)}
+          size="small"
           sx={{
-            position: 'absolute',
-            top: 16,
-            right: 16,
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
             cursor: 'pointer',
             zIndex: 1000,
             backgroundColor: 'white',
-            '&:hover': { backgroundColor: '#f5f5f5' }
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            '&:hover': { backgroundColor: '#f5f5f5', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }
           }}
         />
       )}
