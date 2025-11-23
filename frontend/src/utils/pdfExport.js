@@ -3,6 +3,163 @@ import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 
 /**
+ * Build relationship maps from tree data
+ * @param {Object} treeData - Tree data with nodes and edges
+ * @returns {Object} Relationship maps
+ */
+const buildRelationshipMaps = (treeData) => {
+  const nodeMap = new Map(treeData.nodes.map((n) => [String(n.id), n.data]));
+  const childrenByParent = new Map(); // parentId -> [childIds]
+  const parentsByChild = new Map(); // childId -> [parentIds]
+  const spousesByPerson = new Map(); // personId -> [spouseIds]
+  const maritalStatusBySpouse = new Map(); // "personId-spouseId" -> marital_status
+
+  // Build parent-child relationships
+  treeData.edges
+    .filter((e) => e.type === 'parent')
+    .forEach((edge) => {
+      const parentId = String(edge.source);
+      const childId = String(edge.target);
+
+      if (!childrenByParent.has(parentId)) {
+        childrenByParent.set(parentId, []);
+      }
+      childrenByParent.get(parentId).push(childId);
+
+      if (!parentsByChild.has(childId)) {
+        parentsByChild.set(childId, []);
+      }
+      parentsByChild.get(childId).push(parentId);
+    });
+
+  // Build spouse relationships
+  treeData.edges
+    .filter((e) => e.type === 'spouse')
+    .forEach((edge) => {
+      const spouse1Id = String(edge.source);
+      const spouse2Id = String(edge.target);
+      const maritalStatus = edge.marital_status || 'married';
+
+      if (!spousesByPerson.has(spouse1Id)) {
+        spousesByPerson.set(spouse1Id, []);
+      }
+      spousesByPerson.get(spouse1Id).push(spouse2Id);
+
+      if (!spousesByPerson.has(spouse2Id)) {
+        spousesByPerson.set(spouse2Id, []);
+      }
+      spousesByPerson.get(spouse2Id).push(spouse1Id);
+
+      // Store marital status
+      maritalStatusBySpouse.set(`${spouse1Id}-${spouse2Id}`, maritalStatus);
+      maritalStatusBySpouse.set(`${spouse2Id}-${spouse1Id}`, maritalStatus);
+    });
+
+  return { nodeMap, childrenByParent, parentsByChild, spousesByPerson, maritalStatusBySpouse };
+};
+
+/**
+ * Generate descriptive relationship text for a person
+ * @param {Object} person - Person data
+ * @param {string} personId - Person ID
+ * @param {Object} relationships - Relationship maps
+ * @returns {Array<string>} Array of relationship descriptions
+ */
+const generateRelationshipDescriptions = (person, personId, relationships) => {
+  const { nodeMap, childrenByParent, parentsByChild, spousesByPerson, maritalStatusBySpouse } = relationships;
+  const descriptions = [];
+  const personName = person.full_name || 'Unknown';
+
+  // Children
+  const children = childrenByParent.get(personId) || [];
+  if (children.length > 0) {
+    const childNames = children
+      .map((childId) => {
+        const child = nodeMap.get(childId);
+        return child?.full_name || 'Unknown';
+      })
+      .filter(Boolean);
+
+    const gender = person.gender?.toLowerCase() || '';
+    const verb = gender === 'female' ? 'gave birth to' : gender === 'male' ? 'fathered' : 'had';
+    const childWord = children.length === 1 ? 'child' : 'children';
+
+    descriptions.push(
+      `${personName} ${verb} ${children.length} ${childWord}: ${childNames.join(', ')}.`
+    );
+  }
+
+  // Parents
+  const parents = parentsByChild.get(personId) || [];
+  if (parents.length > 0) {
+    const parentNames = parents
+      .map((parentId) => {
+        const parent = nodeMap.get(parentId);
+        return parent?.full_name || 'Unknown';
+      })
+      .filter(Boolean);
+
+    if (parents.length === 1) {
+      descriptions.push(`${personName} is the child of ${parentNames[0]}.`);
+    } else if (parents.length === 2) {
+      descriptions.push(`${personName} is the child of ${parentNames[0]} and ${parentNames[1]}.`);
+    } else {
+      descriptions.push(`${personName} is the child of ${parentNames.join(', ')}.`);
+    }
+  }
+
+  // Spouses
+  const spouses = spousesByPerson.get(personId) || [];
+  if (spouses.length > 0) {
+    spouses.forEach((spouseId) => {
+      const spouse = nodeMap.get(spouseId);
+      if (spouse) {
+        const spouseName = spouse.full_name || 'Unknown';
+        const maritalStatus = maritalStatusBySpouse.get(`${personId}-${spouseId}`) || 'married';
+        
+        if (maritalStatus === 'married') {
+          descriptions.push(`${personName} is married to ${spouseName}.`);
+        } else if (maritalStatus === 'divorced') {
+          descriptions.push(`${personName} was divorced from ${spouseName}.`);
+        } else {
+          descriptions.push(`${personName} is in a ${maritalStatus} relationship with ${spouseName}.`);
+        }
+      }
+    });
+  }
+
+  // Siblings (through shared parents)
+  if (parents.length > 0) {
+    const siblings = new Set();
+    parents.forEach((parentId) => {
+      const siblingsFromParent = childrenByParent.get(parentId) || [];
+      siblingsFromParent.forEach((siblingId) => {
+        if (siblingId !== personId) {
+          siblings.add(siblingId);
+        }
+      });
+    });
+
+    if (siblings.size > 0) {
+      const siblingNames = Array.from(siblings)
+        .map((siblingId) => {
+          const sibling = nodeMap.get(siblingId);
+          return sibling?.full_name || 'Unknown';
+        })
+        .filter(Boolean);
+
+      if (siblings.size === 1) {
+        descriptions.push(`${personName} has one sibling: ${siblingNames[0]}.`);
+      } else {
+        descriptions.push(`${personName} has ${siblings.size} siblings: ${siblingNames.join(', ')}.`);
+      }
+    }
+  }
+
+  return descriptions;
+};
+
+/**
  * Helper function to load image from URL and convert to base64
  * @param {string} url - Image URL
  * @returns {Promise<string>} Base64 data URL
@@ -226,7 +383,79 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       }
     }
 
+    // Build relationship maps
+    const relationships = buildRelationshipMaps(treeData);
+
+    // Add relationship descriptions section (brief summary)
+    checkPageBreak(30);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Key Family Relationships', margin, yPosition);
+    yPosition += 10;
+
+    // Show relationships for root nodes and key persons
+    const rootNodes = treeData.rootNodes || [];
+    const processedPersons = new Set();
+    let relationshipCount = 0;
+    const maxRelationships = 20; // Limit to avoid too much text
+
+    const addPersonRelationships = (personId) => {
+      if (processedPersons.has(personId) || relationshipCount >= maxRelationships) return;
+      
+      const person = relationships.nodeMap.get(String(personId));
+      if (!person) return;
+
+      const descriptions = generateRelationshipDescriptions(person, String(personId), relationships);
+      
+      if (descriptions.length > 0) {
+        processedPersons.add(personId);
+        relationshipCount += descriptions.length;
+        
+        checkPageBreak(15);
+        
+        // Person name
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        yPosition += addText(person.full_name || 'Unknown', margin, yPosition, pageWidth - 2 * margin, 10);
+        yPosition += 2;
+
+        // Relationship descriptions
+        doc.setFont('helvetica', 'normal');
+        descriptions.forEach((desc) => {
+          if (relationshipCount <= maxRelationships) {
+            checkPageBreak(8);
+            yPosition += addText(desc, margin + 10, yPosition, pageWidth - 2 * margin - 10, 9);
+            yPosition += 2;
+          }
+        });
+        yPosition += 3;
+      }
+    };
+
+    // Process root nodes first
+    rootNodes.forEach((rootId) => {
+      addPersonRelationships(String(rootId));
+    });
+
+    // Process persons with many children (key family members)
+    const personsByChildren = Array.from(relationships.childrenByParent.entries())
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 10); // Top 10 by number of children
+
+    personsByChildren.forEach(([personId]) => {
+      addPersonRelationships(personId);
+    });
+
+    if (relationshipCount >= maxRelationships) {
+      checkPageBreak(10);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      yPosition += addText('(Additional relationships are shown in the detailed table below)', margin, yPosition, pageWidth - 2 * margin, 9);
+      yPosition += 5;
+    }
+
     // Summary table
+    checkPageBreak(30);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Family Members Summary', margin, yPosition);
@@ -335,7 +564,7 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       }
     }
   } else if (format === 'tree') {
-    // Tree format - include visual tree diagram
+    // Tree format - include visual tree diagram and relationship descriptions
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Family Tree Diagram', margin, yPosition);
@@ -344,7 +573,7 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
     // Try to capture the tree visualization if container is provided
     if (treeContainer) {
       try {
-        if (onProgress) onProgress(0.3);
+        if (onProgress) onProgress(0.2);
         
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
@@ -353,7 +582,7 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
 
         const treeImage = await captureTreeAsImage(treeContainer);
         
-        if (onProgress) onProgress(0.7);
+        if (onProgress) onProgress(0.5);
 
         // Calculate image dimensions to fit on page
         const maxImageWidth = pageWidth - 2 * margin;
@@ -386,9 +615,9 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
 
         // Add the tree diagram image
         doc.addImage(treeImage, 'PNG', margin, yPosition, imageWidth, imageHeight);
-        yPosition += imageHeight + 10;
+        yPosition += imageHeight + 15;
 
-        if (onProgress) onProgress(0.9);
+        if (onProgress) onProgress(0.6);
       } catch (error) {
         console.warn('Failed to capture tree visualization, falling back to text representation:', error);
         // Fall back to text representation
@@ -399,24 +628,85 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       }
     }
 
-    // Add text representation as fallback or supplement
-    doc.setFontSize(10);
+    // Build relationship maps
+    const relationships = buildRelationshipMaps(treeData);
+    
+    // Add relationship descriptions section
+    checkPageBreak(30);
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Family Tree Structure (Text)', margin, yPosition);
+    doc.text('Family Relationships', margin, yPosition);
     yPosition += 10;
 
+    // Generate descriptions for all persons, starting with root nodes
     const rootNodes = treeData.rootNodes || [];
-    const nodeMap = new Map(treeData.nodes.map((n) => [n.id, n.data]));
-    const childrenMap = new Map();
+    const processedPersons = new Set();
     
-    treeData.edges
-      .filter((e) => e.type === 'parent')
-      .forEach((edge) => {
-        if (!childrenMap.has(edge.source)) {
-          childrenMap.set(edge.source, []);
-        }
-        childrenMap.get(edge.source).push(edge.target);
+    // Process root nodes first, then their descendants
+    const processPerson = (personId) => {
+      if (processedPersons.has(personId)) return;
+      
+      const person = relationships.nodeMap.get(String(personId));
+      if (!person) return;
+
+      processedPersons.add(personId);
+      
+      checkPageBreak(20);
+      
+      // Person name as heading
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      yPosition += addText(person.full_name || 'Unknown', margin, yPosition, pageWidth - 2 * margin, 11);
+      yPosition += 3;
+
+      // Generate relationship descriptions
+      const descriptions = generateRelationshipDescriptions(person, String(personId), relationships);
+      
+      if (descriptions.length > 0) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        descriptions.forEach((desc) => {
+          checkPageBreak(10);
+          yPosition += addText(desc, margin + 10, yPosition, pageWidth - 2 * margin - 10, 10);
+          yPosition += 2;
+        });
+      } else {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'italic');
+        yPosition += addText('(No relationship information available)', margin + 10, yPosition, pageWidth - 2 * margin - 10, 10);
+        yPosition += 2;
+      }
+
+      yPosition += 5;
+
+      // Process children recursively
+      const children = relationships.childrenByParent.get(String(personId)) || [];
+      children.forEach((childId) => {
+        processPerson(childId);
       });
+    };
+
+    // Process all root nodes and their descendants
+    rootNodes.forEach((rootId) => {
+      processPerson(String(rootId));
+    });
+
+    // Process any remaining persons (in case of disconnected nodes)
+    treeData.nodes.forEach((node) => {
+      if (!processedPersons.has(String(node.id))) {
+        processPerson(String(node.id));
+      }
+    });
+
+    // Add text tree structure as supplement
+    checkPageBreak(30);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Family Tree Structure (Hierarchical)', margin, yPosition);
+    yPosition += 10;
+
+    const nodeMap = new Map(treeData.nodes.map((n) => [n.id, n.data]));
+    const childrenMap = relationships.childrenByParent;
 
     const printTree = (nodeId, level = 0) => {
       const person = nodeMap.get(nodeId);
@@ -428,14 +718,14 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       doc.setFont('helvetica', 'normal');
       yPosition += addText(`${indent}${name}`, margin, yPosition, pageWidth - 2 * margin, 10);
 
-      const children = childrenMap.get(nodeId) || [];
+      const children = childrenMap.get(String(nodeId)) || [];
       children.forEach((childId) => {
         printTree(childId, level + 1);
       });
     };
 
     rootNodes.forEach((rootId) => {
-      printTree(rootId, 0);
+      printTree(String(rootId), 0);
       yPosition += 5;
     });
   }
