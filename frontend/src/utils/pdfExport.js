@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 /**
  * Helper function to load image from URL and convert to base64
@@ -50,13 +51,76 @@ const loadImageAsBase64 = (url) => {
 };
 
 /**
+ * Capture tree visualization as image
+ * @param {HTMLElement} treeContainer - Container element with tree visualization
+ * @returns {Promise<string>} Base64 image data URL
+ */
+const captureTreeAsImage = async (treeContainer) => {
+  if (!treeContainer) {
+    throw new Error('Tree container not provided');
+  }
+
+  try {
+    // Wait a bit for the tree to fully render
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Find the SVG element within the container or any child
+    let svgElement = treeContainer.querySelector('svg');
+    
+    // If not found, try to find it in the document
+    if (!svgElement) {
+      const allSvgs = document.querySelectorAll('svg');
+      // Find the largest SVG (likely the tree)
+      svgElement = Array.from(allSvgs).reduce((largest, svg) => {
+        const rect = svg.getBoundingClientRect();
+        const largestRect = largest?.getBoundingClientRect();
+        return (!largest || (rect.width * rect.height > largestRect.width * largestRect.height)) ? svg : largest;
+      }, null);
+    }
+
+    if (!svgElement) {
+      throw new Error('SVG element not found in tree container');
+    }
+
+    // Get the container that holds the SVG (usually a Box or div)
+    const svgContainer = svgElement.closest('div') || treeContainer;
+    
+    // Get the actual dimensions
+    const svgRect = svgElement.getBoundingClientRect();
+    const containerRect = svgContainer.getBoundingClientRect();
+    
+    // Use the larger of SVG dimensions or container dimensions
+    const captureWidth = Math.max(svgRect.width, containerRect.width, 800);
+    const captureHeight = Math.max(svgRect.height, containerRect.height, 600);
+
+    // Use html2canvas to capture the SVG container
+    const canvas = await html2canvas(svgContainer, {
+      backgroundColor: '#ffffff',
+      scale: 1.5, // Balance between quality and file size
+      useCORS: true,
+      logging: false,
+      width: captureWidth,
+      height: captureHeight,
+      windowWidth: captureWidth,
+      windowHeight: captureHeight,
+    });
+
+    return canvas.toDataURL('image/png', 0.85);
+  } catch (error) {
+    console.error('Failed to capture tree image:', error);
+    throw error;
+  }
+};
+
+/**
  * Export family tree data to PDF
  * @param {Object} treeData - Tree data with nodes and edges
  * @param {Object} familyInfo - Family information
  * @param {string} format - 'tree' | 'book' | 'summary'
  * @param {Function} onProgress - Optional progress callback
+ * @param {HTMLElement} treeContainer - Optional tree container element to capture visualization
  */
-export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summary', onProgress) => {
+export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summary', onProgress, treeContainer = null) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -109,6 +173,65 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
 
   if (format === 'summary') {
     // Summary format - table of all persons
+    // Optionally include tree diagram if container is provided
+    if (treeContainer) {
+      try {
+        if (onProgress) onProgress(0.2);
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Family Tree Diagram', margin, yPosition);
+        yPosition += 10;
+
+        const treeImage = await captureTreeAsImage(treeContainer);
+        
+        if (onProgress) onProgress(0.5);
+
+        // Calculate image dimensions to fit on page
+        const maxImageWidth = pageWidth - 2 * margin;
+        const maxImageHeight = (pageHeight - yPosition - margin) * 0.4; // Use 40% of remaining space
+        
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = treeImage;
+        });
+
+        let imageWidth = img.width;
+        let imageHeight = img.height;
+
+        // Scale to fit page while maintaining aspect ratio
+        const scaleX = maxImageWidth / imageWidth;
+        const scaleY = maxImageHeight / imageHeight;
+        const scale = Math.min(scaleX, scaleY, 1);
+
+        imageWidth = imageWidth * scale;
+        imageHeight = imageHeight * scale;
+
+        // Check if we need a new page
+        if (yPosition + imageHeight > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        // Add the tree diagram image
+        doc.addImage(treeImage, 'PNG', margin, yPosition, imageWidth, imageHeight);
+        yPosition += imageHeight + 15;
+
+        if (onProgress) onProgress(0.6);
+      } catch (error) {
+        console.warn('Failed to capture tree visualization in summary:', error);
+        // Continue without tree diagram
+      }
+    }
+
+    // Summary table
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Family Members Summary', margin, yPosition);
+    yPosition += 10;
+
     const persons = treeData.nodes.map((node) => node.data);
     
     // Create table data
@@ -154,7 +277,6 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
           const imageWidth = 60;
           const imageHeight = 60;
           const imageX = pageWidth - margin - imageWidth;
-          const imageY = yPosition;
 
           // Check if we need a new page for the image
           if (yPosition + imageHeight > pageHeight - margin) {
@@ -213,13 +335,76 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       }
     }
   } else if (format === 'tree') {
-    // Tree format - simplified tree structure
+    // Tree format - include visual tree diagram
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Family Tree Structure', margin, yPosition);
+    doc.text('Family Tree Diagram', margin, yPosition);
     yPosition += 10;
 
-    // Build a simple text representation of the tree
+    // Try to capture the tree visualization if container is provided
+    if (treeContainer) {
+      try {
+        if (onProgress) onProgress(0.3);
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Capturing tree visualization...', margin, yPosition);
+        yPosition += 10;
+
+        const treeImage = await captureTreeAsImage(treeContainer);
+        
+        if (onProgress) onProgress(0.7);
+
+        // Calculate image dimensions to fit on page
+        const maxImageWidth = pageWidth - 2 * margin;
+        const maxImageHeight = pageHeight - yPosition - margin - 20;
+        
+        // Get image dimensions
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = treeImage;
+        });
+
+        let imageWidth = img.width;
+        let imageHeight = img.height;
+
+        // Scale to fit page while maintaining aspect ratio
+        const scaleX = maxImageWidth / imageWidth;
+        const scaleY = maxImageHeight / imageHeight;
+        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up
+
+        imageWidth = imageWidth * scale;
+        imageHeight = imageHeight * scale;
+
+        // Check if we need a new page
+        if (yPosition + imageHeight > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        // Add the tree diagram image
+        doc.addImage(treeImage, 'PNG', margin, yPosition, imageWidth, imageHeight);
+        yPosition += imageHeight + 10;
+
+        if (onProgress) onProgress(0.9);
+      } catch (error) {
+        console.warn('Failed to capture tree visualization, falling back to text representation:', error);
+        // Fall back to text representation
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'italic');
+        doc.text('(Tree visualization could not be captured. Showing text structure below.)', margin, yPosition);
+        yPosition += 10;
+      }
+    }
+
+    // Add text representation as fallback or supplement
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Family Tree Structure (Text)', margin, yPosition);
+    yPosition += 10;
+
     const rootNodes = treeData.rootNodes || [];
     const nodeMap = new Map(treeData.nodes.map((n) => [n.id, n.data]));
     const childrenMap = new Map();
@@ -240,6 +425,7 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       checkPageBreak(10);
       const indent = '  '.repeat(level);
       const name = person.full_name || 'Unknown';
+      doc.setFont('helvetica', 'normal');
       yPosition += addText(`${indent}${name}`, margin, yPosition, pageWidth - 2 * margin, 10);
 
       const children = childrenMap.get(nodeId) || [];
@@ -285,7 +471,6 @@ export const exportPersonProfileToPDF = async (person, relationships = {}) => {
       const imageWidth = 80;
       const imageHeight = 80;
       const imageX = pageWidth - margin - imageWidth;
-      const imageY = yPosition;
 
       doc.addImage(imageData, 'JPEG', imageX, yPosition, imageWidth, imageHeight);
       yPosition += imageHeight + 10;

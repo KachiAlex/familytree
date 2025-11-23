@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -86,6 +86,7 @@ const FamilyTree = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [insightsExpanded, setInsightsExpanded] = useState(false); // Default to collapsed
   const [searchFiltersExpanded, setSearchFiltersExpanded] = useState(false); // Default to collapsed
+  const treeContainerRef = useRef(null); // Ref for tree container to capture visualization
 
   // Only fetch when familyId changes, not when viewType changes
   useEffect(() => {
@@ -384,15 +385,18 @@ const FamilyTree = () => {
           URL.revokeObjectURL(url);
         } else if (format === 'pdf-summary') {
           setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
-          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'summary');
+          const treeContainer = treeContainerRef.current || document.querySelector('[data-tree-container]');
+          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'summary', null, treeContainer);
           setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'pdf-book') {
           setSnackbar({ open: true, message: 'Generating PDF with photos... This may take a moment.', severity: 'info' });
           await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'book');
           setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'pdf-tree') {
-          setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
-          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'tree');
+          setSnackbar({ open: true, message: 'Generating PDF with tree diagram... This may take a moment.', severity: 'info' });
+          // Get the tree container element - use the ref or find it in the DOM
+          const treeContainer = treeContainerRef.current || document.querySelector('[data-tree-container]');
+          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'tree', null, treeContainer);
           setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'gedcom') {
           exportGEDCOM(filteredTreeData, familyInfo);
@@ -795,7 +799,7 @@ const FamilyTree = () => {
         </Tabs>
       </Paper>
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 0, position: 'relative' }}>
+      <Box ref={treeContainerRef} sx={{ flex: 1, overflow: 'auto', p: 0, position: 'relative' }} data-tree-container>
         {renderTreeView}
       </Box>
 
