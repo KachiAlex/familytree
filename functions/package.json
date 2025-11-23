@@ -28,5 +28,9 @@
     "eslint": "^8.57.1",
     "eslint-config-google": "^0.14.0"
   },
-  "private": true
+  "private": true,
+  "optionalDependencies": {
+    "@types/markdown-it": "14.1.2",
+    "markdown-it": "14.1.0"
+  }
 }
