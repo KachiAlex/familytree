@@ -11,6 +11,7 @@ import {
   CircularProgress,
   Card,
   CardContent,
+  TextField,
 } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
 import { db } from '../firebase';
@@ -29,13 +30,17 @@ import {
 const ClaimPerson = () => {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, login, register } = useAuth();
   const [invitation, setInvitation] = useState(null);
   const [person, setPerson] = useState(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -150,8 +155,92 @@ const ClaimPerson = () => {
     }
   };
 
+  const handleLoginWithPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    setAuthenticating(true);
+
+    try {
+      const result = await login(invitation.email, password);
+      
+      if (result.success) {
+        // User is now logged in, automatically claim the profile
+        await handleClaim();
+      } else {
+        // Check if user doesn't exist - show signup option
+        if (result.error?.includes('user-not-found') || result.error?.includes('invalid-credential')) {
+          setError('No account found with this email. Please create an account below.');
+          setIsNewUser(true);
+        } else {
+          setError(result.error || 'Invalid password. Please try again.');
+        }
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Failed to log in. Please try again.');
+    } finally {
+      setAuthenticating(false);
+    }
+  };
+
+  const handleSignupAndClaim = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setAuthenticating(true);
+
+    try {
+      // Use person's name as default, or the entered full name
+      const nameToUse = fullName || person?.full_name || '';
+      
+      // For invitation flow, use person's family info
+      const familyName = person?.family_name || 'Family Tree';
+      const clanName = person?.clan_name || '';
+      const villageOrigin = person?.village_origin || '';
+      
+      const result = await register(
+        invitation.email,
+        password,
+        nameToUse,
+        '', // phone
+        familyName, // Use person's family name
+        clanName,
+        villageOrigin
+      );
+      
+      if (result.success) {
+        // Auth state will update automatically, useEffect will trigger handleClaim
+        setAuthenticating(false);
+      } else {
+        setError(result.error || 'Failed to create account. Please try again.');
+      }
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError('Failed to create account. Please try again.');
+    } finally {
+      setAuthenticating(false);
+    }
+  };
+
+  // Auto-claim when user becomes authenticated with matching email
+  useEffect(() => {
+    if (isAuthenticated && user && invitation && person && !claiming && !success) {
+      if (user.email?.toLowerCase() === invitation.email.toLowerCase()) {
+        handleClaim();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user, invitation, person]);
+
   const handleClaim = async () => {
-    if (!user || !invitation || !person) return;
+    if (!user || !invitation || !person) {
+      return;
+    }
 
     // Verify email matches
     if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
@@ -303,24 +392,102 @@ const ClaimPerson = () => {
             {!isAuthenticated ? (
               <Box>
                 <Alert severity="info" sx={{ mb: 3 }}>
-                  You need to log in to claim this profile. Please log in with the email address: <strong>{invitation.email}</strong>
+                  To claim this profile, please enter your password. Your email <strong>{invitation.email}</strong> is already set.
                 </Alert>
-                <Box display="flex" gap={2}>
-                  <Button
-                    variant="contained"
-                    onClick={() => navigate('/login')}
-                    fullWidth
-                  >
-                    Log In
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate('/register')}
-                    fullWidth
-                  >
-                    Create Account
-                  </Button>
-                </Box>
+                
+                {!isNewUser ? (
+                  // Login form (password only)
+                  <Box component="form" onSubmit={handleLoginWithPassword}>
+                    <TextField
+                      fullWidth
+                      label="Email"
+                      type="email"
+                      value={invitation.email}
+                      disabled
+                      margin="normal"
+                      sx={{ mb: 2 }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      margin="normal"
+                      autoFocus
+                    />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      fullWidth
+                      size="large"
+                      disabled={authenticating || !password}
+                      sx={{ mt: 3, mb: 2, py: 1.5 }}
+                    >
+                      {authenticating ? 'Logging in...' : 'Log In & Claim Profile'}
+                    </Button>
+                    <Button
+                      variant="text"
+                      fullWidth
+                      onClick={() => setIsNewUser(true)}
+                      sx={{ mt: 1 }}
+                    >
+                      Don't have an account? Create one
+                    </Button>
+                  </Box>
+                ) : (
+                  // Signup form (email pre-filled, just need name and password)
+                  <Box component="form" onSubmit={handleSignupAndClaim}>
+                    <TextField
+                      fullWidth
+                      label="Full Name"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                      margin="normal"
+                      autoFocus
+                      helperText="Your name as it appears in the family tree"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Email"
+                      type="email"
+                      value={invitation.email}
+                      disabled
+                      margin="normal"
+                      sx={{ mb: 2 }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      margin="normal"
+                      helperText="Must be at least 6 characters"
+                    />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      fullWidth
+                      size="large"
+                      disabled={authenticating || !password || !fullName || password.length < 6}
+                      sx={{ mt: 3, mb: 2, py: 1.5 }}
+                    >
+                      {authenticating ? 'Creating account...' : 'Create Account & Claim Profile'}
+                    </Button>
+                    <Button
+                      variant="text"
+                      fullWidth
+                      onClick={() => setIsNewUser(false)}
+                      sx={{ mt: 1 }}
+                    >
+                      Already have an account? Log in
+                    </Button>
+                  </Box>
+                )}
               </Box>
             ) : user.email?.toLowerCase() !== invitation.email.toLowerCase() ? (
               <Box>
