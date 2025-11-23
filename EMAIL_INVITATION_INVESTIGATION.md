@@ -217,42 +217,43 @@ firebase functions:log --only sendInvitationEmail --limit 10
 
 ## 🐛 Known Issues & Solutions
 
-### Issue 1: Function Deployment Timeout
+### Issue 1: Function Deployment Timeout ✅ RESOLVED
 
 **Symptoms:**
 - `firebase deploy --only functions` fails with timeout
 - Function doesn't appear in Firebase Console
 
-**Possible Causes:**
-1. Function initialization code taking too long
-2. Missing dependencies
-3. Syntax errors in function code
-4. Network issues during deployment
+**Root Cause:**
+- Package-lock.json out of sync with package.json
+- Missing markdown-it packages (transitive dependencies)
 
-**Solutions:**
-1. Check `functions/index.js` for syntax errors
-2. Verify all dependencies in `functions/package.json`
-3. Try deploying single function: `firebase deploy --only functions:sendInvitationEmail`
-4. Check Firebase Console for deployment errors
+**Solution Applied:**
+1. Added `markdown-it@14.1.0` and `@types/markdown-it@14.1.2` to dependencies
+2. Regenerated package-lock.json
+3. Function deployed successfully
 
-### Issue 2: Email Not Sending
+**Status:** ✅ **RESOLVED** - Function is now deployed and active
+
+### Issue 2: Email Not Sending ✅ FIXED
 
 **Symptoms:**
 - Invitation created but no email received
 - `email_sent: false` in Firestore
 - `email_error` field populated
+- Logs show: "⚠️ Gmail credentials not configured"
 
-**Possible Causes:**
-1. Gmail credentials not configured
-2. App password incorrect
-3. 2FA not enabled
-4. Gmail rate limit exceeded (500/day)
+**Root Cause:**
+- Function was using deprecated `functions.config()` method
+- Secrets were set via Secret Manager but function wasn't accessing them correctly
+- Function definition didn't declare secrets
 
-**Solutions:**
-1. Verify secrets: `firebase functions:secrets:access GMAIL_USER`
-2. Regenerate app password
-3. Check function logs for specific error
-4. Wait 24 hours if rate limited
+**Solution Applied:**
+1. Updated function to use `.runWith({ secrets: ['GMAIL_USER', 'GMAIL_APP_PASSWORD'] })`
+2. Changed code to access secrets via `process.env.GMAIL_USER` and `process.env.GMAIL_APP_PASSWORD`
+3. Removed deprecated `functions.config()` code
+4. Function now properly accesses Secret Manager secrets
+
+**Status:** ✅ **FIXED** - Function now has access to Gmail credentials
 
 ### Issue 3: Function Not Triggering
 
@@ -427,23 +428,32 @@ firebase functions:describe sendInvitationEmail
 
 ## 📝 Summary
 
-**Status:** ✅ **DEPLOYED - NEEDS TESTING**
+**Status:** ✅ **FIXED AND DEPLOYED - READY FOR TESTING**
 
 - ✅ Frontend flow is complete and working
 - ✅ Email template is professional
 - ✅ Claim process is functional
 - ✅ **Function is deployed and active**
-- ⚠️ Email sending needs verification (Gmail credentials may not be set)
+- ✅ **Secret Manager access configured**
+- ✅ **Function code updated to use Secret Manager properly**
 
 **Verified:**
 - ✅ Function `sendInvitationEmail` is deployed
 - ✅ Trigger is properly configured
 - ✅ Function appears in Firebase Console
+- ✅ Secrets are set: `GMAIL_USER` and `GMAIL_APP_PASSWORD`
+- ✅ Function code updated to use `.runWith({ secrets: [...] })`
+- ✅ Secret access granted to function service account
+
+**Recent Fixes:**
+1. ✅ **Fixed Secret Manager access** - Updated function to use `.runWith({ secrets: [...] })`
+2. ✅ **Fixed deployment issue** - Added missing markdown-it packages to dependencies
+3. ✅ **Function successfully deployed** - Deployment completed without errors
 
 **Priority Actions:**
-1. ✅ ~~Fix function deployment timeout~~ - **RESOLVED: Function is deployed**
-2. ⚠️ **Verify Gmail credentials are set** - **ACTION NEEDED**
-3. ⚠️ **Test end-to-end email flow** - **ACTION NEEDED**
+1. ✅ ~~Fix function deployment timeout~~ - **RESOLVED**
+2. ✅ ~~Fix Secret Manager access~~ - **RESOLVED: Function now uses Secret Manager**
+3. ⚠️ **Test end-to-end email flow** - **READY FOR TESTING**
 4. Add user feedback for email status
 
 ---
