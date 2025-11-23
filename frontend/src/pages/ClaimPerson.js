@@ -49,18 +49,46 @@ const ClaimPerson = () => {
       setLoading(true);
       setError('');
 
+      if (!token) {
+        setError('Invalid invitation link. No token provided.');
+        setLoading(false);
+        return;
+      }
+
       // Fetch invitation by token
       const invitationsRef = collection(db, 'personInvitations');
       const q = query(invitationsRef, where('token', '==', token));
-      const snapshot = await getDocs(q);
+      
+      let snapshot;
+      try {
+        snapshot = await getDocs(q);
+      } catch (queryError) {
+        console.error('Firestore query error:', queryError);
+        // Check if it's an index error
+        if (queryError.code === 'failed-precondition') {
+          setError('Database index required. Please contact support or try again later.');
+        } else {
+          setError('Failed to load invitation. Please check your internet connection and try again.');
+        }
+        setLoading(false);
+        return;
+      }
 
       if (snapshot.empty) {
-        setError('Invalid or expired invitation link.');
+        setError('Invalid or expired invitation link. Please check the link or request a new invitation.');
         setLoading(false);
         return;
       }
 
       const invitationData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+      
+      // Validate invitation data
+      if (!invitationData.person_id || !invitationData.family_id) {
+        setError('Invalid invitation data. Please request a new invitation.');
+        setLoading(false);
+        return;
+      }
+      
       setInvitation(invitationData);
 
       // Check if invitation is expired
@@ -81,11 +109,19 @@ const ClaimPerson = () => {
       }
 
       // Fetch person details
-      const personRef = doc(db, 'persons', invitationData.person_id);
-      const personSnap = await getDoc(personRef);
+      let personSnap;
+      try {
+        const personRef = doc(db, 'persons', invitationData.person_id);
+        personSnap = await getDoc(personRef);
+      } catch (personError) {
+        console.error('Error fetching person:', personError);
+        setError('Failed to load person information. Please try again.');
+        setLoading(false);
+        return;
+      }
       
       if (!personSnap.exists()) {
-        setError('Person not found.');
+        setError('Person profile not found. The profile may have been deleted.');
         setLoading(false);
         return;
       }

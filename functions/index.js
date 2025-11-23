@@ -412,11 +412,22 @@ exports.sendInvitationEmail = functions
       // Get sender email from environment variable (Secret Manager)
       const senderEmail = process.env.GMAIL_USER;
 
-      // Email content
+      // Email content with improved deliverability
       const mailOptions = {
         from: `"African Family Tree" <${senderEmail}>`,
+        replyTo: senderEmail, // Add reply-to header
         to: invitation.email,
         subject: `You've been invited to claim your family profile${person ? ` - ${person.full_name || invitation.person_name}` : ''}`,
+        // Add headers to improve deliverability
+        headers: {
+          'X-Priority': '1',
+          'X-MSMail-Priority': 'High',
+          'Importance': 'high',
+          'List-Unsubscribe': `<${frontendUrl}/unsubscribe>`, // Add unsubscribe link
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+        // Add message ID for better tracking
+        messageId: `<invitation-${invitationId}@familytree-2025.web.app>`,
         html: `
           <!DOCTYPE html>
           <html>
@@ -439,21 +450,34 @@ exports.sendInvitationEmail = functions
               </div>
               <div class="content">
                 <p>Hello,</p>
-                <p>You have been invited to claim and manage your family profile on the African Family Tree platform.</p>
+                <p>You have been invited by a family member to claim and manage your profile on the African Family Tree platform.</p>
                 ${person ? `<p><strong>Profile Name:</strong> ${person.full_name || invitation.person_name}</p>` : ''}
-                ${family ? `<p><strong>Family:</strong> ${family.family_name}</p>` : ''}
+                ${family ? `<p><strong>Family:</strong> ${family.family_name || 'Your Family'}</p>` : ''}
+                <p>This invitation allows you to:</p>
+                <ul>
+                  <li>Claim ownership of your family profile</li>
+                  <li>Update and manage your personal information</li>
+                  <li>Add photos, documents, and stories</li>
+                  <li>Connect with other family members</li>
+                </ul>
                 <p>Click the button below to accept this invitation and claim your profile:</p>
-                <div style="text-align: center;">
-                  <a href="${invitationLink}" class="button">Claim My Profile</a>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${invitationLink}" class="button" style="text-decoration: none;">Claim My Profile</a>
                 </div>
-                <p>Or copy and paste this link into your browser:</p>
-                <p style="word-break: break-all; color: #1976d2;">${invitationLink}</p>
-                <p><strong>This invitation expires in 7 days.</strong></p>
-                <p>If you didn't expect this invitation, you can safely ignore this email.</p>
+                <p style="font-size: 12px; color: #666;">Or copy and paste this link into your browser:</p>
+                <p style="word-break: break-all; color: #1976d2; font-size: 12px; background: #f0f0f0; padding: 10px; border-radius: 4px;">${invitationLink}</p>
+                <p style="margin-top: 20px;"><strong>⏰ This invitation expires in 7 days.</strong></p>
+                <p style="font-size: 12px; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+                  If you didn't expect this invitation, you can safely ignore this email. This is a one-time invitation link sent by a family member.
+                </p>
               </div>
               <div class="footer">
                 <p>© ${new Date().getFullYear()} African Family Tree. All rights reserved.</p>
-                <p>This is an automated email. Please do not reply.</p>
+                <p style="font-size: 11px; color: #999;">
+                  This is an automated email from African Family Tree.<br>
+                  If you no longer wish to receive these emails, you can 
+                  <a href="${frontendUrl}/unsubscribe?email=${encodeURIComponent(invitation.email)}" style="color: #1976d2;">unsubscribe here</a>.
+                </p>
               </div>
             </div>
           </body>
