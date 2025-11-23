@@ -2,12 +2,61 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 /**
+ * Helper function to load image from URL and convert to base64
+ * @param {string} url - Image URL
+ * @returns {Promise<string>} Base64 data URL
+ */
+const loadImageAsBase64 = (url) => {
+  return new Promise((resolve, reject) => {
+    if (!url) {
+      reject(new Error('No URL provided'));
+      return;
+    }
+
+    // Create an image element
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    img.onload = () => {
+      try {
+        // Create canvas to convert image to base64
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+        resolve(dataURL);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    img.onerror = () => {
+      // If CORS fails, try fetching as blob
+      fetch(url)
+        .then((response) => response.blob())
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        })
+        .catch(reject);
+    };
+
+    img.src = url;
+  });
+};
+
+/**
  * Export family tree data to PDF
  * @param {Object} treeData - Tree data with nodes and edges
  * @param {Object} familyInfo - Family information
  * @param {string} format - 'tree' | 'book' | 'summary'
+ * @param {Function} onProgress - Optional progress callback
  */
-export const exportFamilyTreeToPDF = (treeData, familyInfo, format = 'summary') => {
+export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summary', onProgress) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -89,11 +138,36 @@ export const exportFamilyTreeToPDF = (treeData, familyInfo, format = 'summary') 
     // Book format - detailed person profiles
     const persons = treeData.nodes.map((node) => node.data);
     
-    persons.forEach((person, index) => {
+    for (let index = 0; index < persons.length; index++) {
+      const person = persons[index];
+      
       if (index > 0) {
         checkPageBreak(50);
         doc.addPage();
         yPosition = margin;
+      }
+
+      // Add profile photo if available
+      if (person.profile_photo_url) {
+        try {
+          const imageData = await loadImageAsBase64(person.profile_photo_url);
+          const imageWidth = 60;
+          const imageHeight = 60;
+          const imageX = pageWidth - margin - imageWidth;
+          const imageY = yPosition;
+
+          // Check if we need a new page for the image
+          if (yPosition + imageHeight > pageHeight - margin) {
+            doc.addPage();
+            yPosition = margin;
+          }
+
+          doc.addImage(imageData, 'JPEG', imageX, yPosition, imageWidth, imageHeight);
+          yPosition += imageHeight + 5;
+        } catch (error) {
+          console.warn('Failed to load profile photo:', error);
+          // Continue without photo
+        }
       }
 
       // Person name
@@ -132,7 +206,12 @@ export const exportFamilyTreeToPDF = (treeData, familyInfo, format = 'summary') 
       }
 
       yPosition += 10;
-    });
+
+      // Progress callback
+      if (onProgress) {
+        onProgress((index + 1) / persons.length);
+      }
+    }
   } else if (format === 'tree') {
     // Tree format - simplified tree structure
     doc.setFontSize(12);
@@ -185,7 +264,7 @@ export const exportFamilyTreeToPDF = (treeData, familyInfo, format = 'summary') 
  * @param {Object} person - Person data
  * @param {Array} relationships - Relationships (parents, children, spouses)
  */
-export const exportPersonProfileToPDF = (person, relationships = {}) => {
+export const exportPersonProfileToPDF = async (person, relationships = {}) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 20;
@@ -198,6 +277,23 @@ export const exportPersonProfileToPDF = (person, relationships = {}) => {
     doc.text(lines, x, y);
     return lines.length * (fontSize * 0.4);
   };
+
+  // Add profile photo if available
+  if (person.profile_photo_url) {
+    try {
+      const imageData = await loadImageAsBase64(person.profile_photo_url);
+      const imageWidth = 80;
+      const imageHeight = 80;
+      const imageX = pageWidth - margin - imageWidth;
+      const imageY = yPosition;
+
+      doc.addImage(imageData, 'JPEG', imageX, yPosition, imageWidth, imageHeight);
+      yPosition += imageHeight + 10;
+    } catch (error) {
+      console.warn('Failed to load profile photo:', error);
+      // Continue without photo
+    }
+  }
 
   // Person name
   doc.setFontSize(20);

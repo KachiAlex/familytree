@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { Box, Typography, Paper, Slider, Chip } from '@mui/material';
+import { Box, Typography, Paper, Slider, Chip, IconButton, Tooltip } from '@mui/material';
+import { PlayArrow, Pause, SkipNext, SkipPrevious } from '@mui/icons-material';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { db } from '../../firebase';
@@ -16,8 +17,12 @@ L.Icon.Default.mergeOptions({
 
 const MigrationMapView = ({ familyId }) => {
   const [persons, setPersons] = useState([]);
+  const [relationships, setRelationships] = useState([]);
   const [loading, setLoading] = useState(true);
   const [yearRange, setYearRange] = useState([1800, new Date().getFullYear()]);
+  const [selectedYear, setSelectedYear] = useState(null); // For timeline slider
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1000); // ms per year
 
   useEffect(() => {
     fetchPersons();
@@ -27,16 +32,23 @@ const MigrationMapView = ({ familyId }) => {
   const fetchPersons = async () => {
     try {
       setLoading(true);
-      const personsRef = collection(db, 'persons');
-      const personsQuery = query(personsRef, where('family_id', '==', familyId));
-      const snap = await getDocs(personsQuery);
+      const [personsSnap, relSnap] = await Promise.all([
+        getDocs(query(collection(db, 'persons'), where('family_id', '==', familyId))),
+        getDocs(query(collection(db, 'relationships'), where('family_id', '==', familyId))),
+      ]);
 
-      const personsList = snap.docs.map((docSnap) => ({
+      const personsList = personsSnap.docs.map((docSnap) => ({
         person_id: docSnap.id,
         ...docSnap.data(),
       }));
 
+      const relationshipsList = relSnap.docs.map((docSnap) => ({
+        relationship_id: docSnap.id,
+        ...docSnap.data(),
+      }));
+
       setPersons(personsList);
+      setRelationships(relationshipsList);
 
       // Calculate year range from data
       const years = [];
@@ -54,13 +66,84 @@ const MigrationMapView = ({ familyId }) => {
       if (years.length > 0) {
         const minYear = Math.min(...years);
         const maxYear = Math.max(...years);
-        setYearRange([Math.max(1800, minYear - 10), Math.min(new Date().getFullYear(), maxYear + 10)]);
+        const range = [Math.max(1800, minYear - 10), Math.min(new Date().getFullYear(), maxYear + 10)];
+        setYearRange(range);
+        setSelectedYear(range[0]); // Initialize timeline to start year
       }
     } catch (error) {
       console.error('Failed to fetch persons:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate generation for each person
+  const personGenerations = useMemo(() => {
+    const generations = new Map();
+    const childrenMap = new Map();
+    
+    // Build children map
+    relationships.forEach((rel) => {
+      if (!childrenMap.has(rel.parent_id)) {
+        childrenMap.set(rel.parent_id, []);
+      }
+      childrenMap.get(rel.parent_id).push(rel.child_id);
+    });
+
+    // Find root nodes (persons with no parents)
+    const hasParent = new Set(relationships.map((r) => r.child_id));
+    const rootNodes = persons.filter((p) => !hasParent.has(p.person_id)).map((p) => p.person_id);
+
+    // Assign generation 0 to root nodes
+    rootNodes.forEach((rootId) => {
+      generations.set(rootId, 0);
+    });
+
+    // Recursively assign generations
+    const assignGeneration = (personId, gen) => {
+      if (generations.has(personId)) return generations.get(personId);
+      
+      const children = childrenMap.get(personId) || [];
+      if (children.length > 0) {
+        generations.set(personId, gen);
+        children.forEach((childId) => {
+          assignGeneration(childId, gen + 1);
+        });
+      } else {
+        generations.set(personId, gen);
+      }
+      return gen;
+    };
+
+    rootNodes.forEach((rootId) => {
+      assignGeneration(rootId, 0);
+    });
+
+    // Handle persons not connected to root (assign max generation + 1)
+    persons.forEach((person) => {
+      if (!generations.has(person.person_id)) {
+        generations.set(person.person_id, 10); // Default to high generation
+      }
+    });
+
+    return generations;
+  }, [persons, relationships]);
+
+  // Get color for generation
+  const getGenerationColor = (generation) => {
+    const colors = [
+      '#FF6B6B', // Red - oldest generation
+      '#4ECDC4', // Teal
+      '#45B7D1', // Blue
+      '#96CEB4', // Green
+      '#FFEAA7', // Yellow
+      '#DDA15E', // Orange
+      '#A8DADC', // Light Blue
+      '#F1C0E8', // Pink
+      '#CFBAF0', // Purple
+      '#90E0EF', // Cyan
+    ];
+    return colors[generation % colors.length] || '#95A5A6';
   };
 
   // Get coordinates for a place (simplified - in production, use geocoding API)
@@ -92,21 +175,41 @@ const MigrationMapView = ({ familyId }) => {
     return null;
   };
 
-  // Filter persons by year range
+  // Filter persons by selected year (for timeline) or year range
   const filteredPersons = useMemo(() => {
-    return persons.filter((person) => {
-      const birthYear = person.date_of_birth ? new Date(person.date_of_birth).getFullYear() : null;
-      const deathYear = person.date_of_death ? new Date(person.date_of_death).getFullYear() : null;
-      
-      if (birthYear && !isNaN(birthYear)) {
-        return birthYear >= yearRange[0] && birthYear <= yearRange[1];
-      }
-      if (deathYear && !isNaN(deathYear)) {
-        return deathYear >= yearRange[0] && deathYear <= yearRange[1];
-      }
-      return false;
-    });
-  }, [persons, yearRange]);
+    if (selectedYear !== null) {
+      // Timeline mode: show persons active in selected year
+      return persons.filter((person) => {
+        const birthYear = person.date_of_birth ? new Date(person.date_of_birth).getFullYear() : null;
+        const deathYear = person.date_of_death ? new Date(person.date_of_death).getFullYear() : null;
+        
+        if (birthYear && !isNaN(birthYear) && deathYear && !isNaN(deathYear)) {
+          return selectedYear >= birthYear && selectedYear <= deathYear;
+        }
+        if (birthYear && !isNaN(birthYear)) {
+          return selectedYear >= birthYear;
+        }
+        if (deathYear && !isNaN(deathYear)) {
+          return selectedYear <= deathYear;
+        }
+        return false;
+      });
+    } else {
+      // Range mode: show persons in year range
+      return persons.filter((person) => {
+        const birthYear = person.date_of_birth ? new Date(person.date_of_birth).getFullYear() : null;
+        const deathYear = person.date_of_death ? new Date(person.date_of_death).getFullYear() : null;
+        
+        if (birthYear && !isNaN(birthYear)) {
+          return birthYear >= yearRange[0] && birthYear <= yearRange[1];
+        }
+        if (deathYear && !isNaN(deathYear)) {
+          return deathYear >= yearRange[0] && deathYear <= yearRange[1];
+        }
+        return false;
+      });
+    }
+  }, [persons, yearRange, selectedYear]);
 
   // Group locations by place
   const locationGroups = useMemo(() => {
@@ -144,6 +247,8 @@ const MigrationMapView = ({ familyId }) => {
 
       places.forEach((placeData) => {
         const key = placeData.place.toLowerCase().trim();
+        const generation = personGenerations.get(placeData.person.person_id) || 0;
+        
         if (!groups.has(key)) {
           groups.set(key, {
             place: placeData.place,
@@ -152,11 +257,13 @@ const MigrationMapView = ({ familyId }) => {
             births: 0,
             deaths: 0,
             origins: 0,
+            generations: new Set(),
           });
         }
 
         const group = groups.get(key);
-        group.persons.push(placeData.person);
+        group.persons.push({ ...placeData.person, generation });
+        group.generations.add(generation);
         if (placeData.type === 'birth') group.births++;
         if (placeData.type === 'death') group.deaths++;
         if (placeData.type === 'origin') group.origins++;
@@ -164,7 +271,7 @@ const MigrationMapView = ({ familyId }) => {
     });
 
     return Array.from(groups.values()).filter((group) => group.coordinates !== null);
-  }, [filteredPersons]);
+  }, [filteredPersons, personGenerations]);
 
   // Calculate center of map
   const mapCenter = useMemo(() => {
@@ -175,6 +282,23 @@ const MigrationMapView = ({ familyId }) => {
     const avgLng = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
     return [avgLat, avgLng];
   }, [locationGroups]);
+
+  // Timeline playback effect
+  useEffect(() => {
+    if (!isPlaying || selectedYear === null) return;
+
+    const interval = setInterval(() => {
+      setSelectedYear((prev) => {
+        if (prev >= yearRange[1]) {
+          setIsPlaying(false);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, playbackSpeed);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, selectedYear, yearRange, playbackSpeed]);
 
   if (loading) {
     return (
@@ -200,33 +324,102 @@ const MigrationMapView = ({ familyId }) => {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Family Migration Map
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Showing {filteredPersons.length} persons from {yearRange[0]} to {yearRange[1]}
-        </Typography>
-        
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" gutterBottom>
-            Year Range: {yearRange[0]} - {yearRange[1]}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">
+            Family Migration Map
           </Typography>
-          <Slider
-            value={yearRange}
-            onChange={(e, newValue) => setYearRange(newValue)}
-            min={1800}
-            max={new Date().getFullYear()}
-            valueLabelDisplay="auto"
-            marks={[
-              { value: 1800, label: '1800' },
-              { value: 1900, label: '1900' },
-              { value: 2000, label: '2000' },
-              { value: new Date().getFullYear(), label: 'Now' },
-            ]}
-          />
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Tooltip title="Year Range Mode">
+              <Chip
+                label="Range"
+                size="small"
+                color={selectedYear === null ? 'primary' : 'default'}
+                onClick={() => setSelectedYear(null)}
+                clickable
+              />
+            </Tooltip>
+            <Tooltip title="Timeline Mode">
+              <Chip
+                label="Timeline"
+                size="small"
+                color={selectedYear !== null ? 'primary' : 'default'}
+                onClick={() => setSelectedYear(selectedYear || yearRange[0])}
+                clickable
+              />
+            </Tooltip>
+          </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {selectedYear !== null ? (
+          // Timeline mode
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <IconButton
+                size="small"
+                onClick={() => setSelectedYear(Math.max(yearRange[0], selectedYear - 10))}
+                disabled={selectedYear <= yearRange[0]}
+              >
+                <SkipPrevious />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={() => setIsPlaying(!isPlaying)}
+                color="primary"
+              >
+                {isPlaying ? <Pause /> : <PlayArrow />}
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={() => setSelectedYear(Math.min(yearRange[1], selectedYear + 10))}
+                disabled={selectedYear >= yearRange[1]}
+              >
+                <SkipNext />
+              </IconButton>
+              <Typography variant="body2" sx={{ flex: 1, textAlign: 'center' }}>
+                Year: <strong>{selectedYear}</strong>
+              </Typography>
+            </Box>
+            <Slider
+              value={selectedYear}
+              onChange={(e, newValue) => {
+                setSelectedYear(newValue);
+                setIsPlaying(false);
+              }}
+              min={yearRange[0]}
+              max={yearRange[1]}
+              valueLabelDisplay="auto"
+              marks={[
+                { value: yearRange[0], label: String(yearRange[0]) },
+                { value: yearRange[1], label: String(yearRange[1]) },
+              ]}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Showing {filteredPersons.length} persons active in {selectedYear}
+            </Typography>
+          </Box>
+        ) : (
+          // Range mode
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Showing {filteredPersons.length} persons from {yearRange[0]} to {yearRange[1]}
+            </Typography>
+            <Slider
+              value={yearRange}
+              onChange={(e, newValue) => setYearRange(newValue)}
+              min={1800}
+              max={new Date().getFullYear()}
+              valueLabelDisplay="auto"
+              marks={[
+                { value: 1800, label: '1800' },
+                { value: 1900, label: '1900' },
+                { value: 2000, label: '2000' },
+                { value: new Date().getFullYear(), label: 'Now' },
+              ]}
+            />
+          </Box>
+        )}
+
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
           <Chip label={`${locationGroups.length} Locations`} size="small" />
           <Chip 
             label={`${locationGroups.reduce((sum, g) => sum + g.births, 0)} Births`} 
@@ -238,6 +431,24 @@ const MigrationMapView = ({ familyId }) => {
             size="small" 
             color="secondary" 
           />
+          <Box sx={{ ml: 'auto', display: 'flex', gap: 0.5, alignItems: 'center' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+              Generations:
+            </Typography>
+            {Array.from(new Set(Array.from(personGenerations.values()))).slice(0, 5).map((gen) => (
+              <Chip
+                key={gen}
+                label={`G${gen}`}
+                size="small"
+                sx={{
+                  backgroundColor: getGenerationColor(gen),
+                  color: 'white',
+                  fontSize: '0.7rem',
+                  height: 20,
+                }}
+              />
+            ))}
+          </Box>
         </Box>
       </Paper>
 
@@ -252,41 +463,90 @@ const MigrationMapView = ({ familyId }) => {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           
-          {locationGroups.map((group, index) => (
-            <Marker key={index} position={group.coordinates}>
-              <Popup>
-                <Box>
-                  <Typography variant="subtitle1" fontWeight="bold">
-                    {group.place}
-                  </Typography>
-                  <Typography variant="body2">
-                    {group.persons.length} person{group.persons.length !== 1 ? 's' : ''}
-                  </Typography>
-                  {group.births > 0 && (
-                    <Chip label={`${group.births} Birth${group.births !== 1 ? 's' : ''}`} size="small" sx={{ mt: 0.5, mr: 0.5 }} />
-                  )}
-                  {group.deaths > 0 && (
-                    <Chip label={`${group.deaths} Death${group.deaths !== 1 ? 's' : ''}`} size="small" sx={{ mt: 0.5, mr: 0.5 }} color="secondary" />
-                  )}
-                  {group.origins > 0 && (
-                    <Chip label={`${group.origins} Origin${group.origins !== 1 ? 's' : ''}`} size="small" sx={{ mt: 0.5, mr: 0.5 }} color="default" />
-                  )}
-                  <Box sx={{ mt: 1 }}>
-                    {group.persons.slice(0, 5).map((person) => (
-                      <Typography key={person.person_id} variant="caption" display="block">
-                        • {person.full_name || 'Unknown'}
-                      </Typography>
-                    ))}
-                    {group.persons.length > 5 && (
-                      <Typography variant="caption" color="text.secondary">
-                        ... and {group.persons.length - 5} more
-                      </Typography>
-                    )}
+          {locationGroups.map((group, index) => {
+            // Get dominant generation color (most common generation in this location)
+            const generationsArray = Array.from(group.generations);
+            const dominantGen = generationsArray.length > 0 
+              ? generationsArray.reduce((a, b) => 
+                  group.persons.filter(p => p.generation === a).length >= 
+                  group.persons.filter(p => p.generation === b).length ? a : b
+                )
+              : 0;
+            const markerColor = getGenerationColor(dominantGen);
+
+            // Create custom colored icon
+            const customIcon = L.divIcon({
+              className: 'custom-marker',
+              html: `<div style="
+                background-color: ${markerColor};
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              "></div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 10],
+            });
+
+            return (
+              <Marker key={index} position={group.coordinates} icon={customIcon}>
+                <Popup>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {group.place}
+                    </Typography>
+                    <Typography variant="body2">
+                      {group.persons.length} person{group.persons.length !== 1 ? 's' : ''}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                      {group.births > 0 && (
+                        <Chip label={`${group.births} Birth${group.births !== 1 ? 's' : ''}`} size="small" />
+                      )}
+                      {group.deaths > 0 && (
+                        <Chip label={`${group.deaths} Death${group.deaths !== 1 ? 's' : ''}`} size="small" color="secondary" />
+                      )}
+                      {group.origins > 0 && (
+                        <Chip label={`${group.origins} Origin${group.origins !== 1 ? 's' : ''}`} size="small" color="default" />
+                      )}
+                      <Chip 
+                        label={`Gen ${dominantGen}`} 
+                        size="small" 
+                        sx={{ 
+                          backgroundColor: markerColor, 
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }} 
+                      />
+                    </Box>
+                    <Box sx={{ mt: 1 }}>
+                      {group.persons.slice(0, 5).map((person) => (
+                        <Typography key={person.person_id} variant="caption" display="block">
+                          • {person.full_name || 'Unknown'} 
+                          <Chip 
+                            label={`G${person.generation}`} 
+                            size="small" 
+                            sx={{ 
+                              ml: 0.5, 
+                              height: 16, 
+                              fontSize: '0.65rem',
+                              backgroundColor: getGenerationColor(person.generation),
+                              color: 'white'
+                            }} 
+                          />
+                        </Typography>
+                      ))}
+                      {group.persons.length > 5 && (
+                        <Typography variant="caption" color="text.secondary">
+                          ... and {group.persons.length - 5} more
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              </Popup>
-            </Marker>
-          ))}
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </Box>
     </Box>

@@ -22,14 +22,19 @@ import {
   PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
 import {
   doc,
   getDoc,
+  collection,
+  addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 const FamilySettings = () => {
   const { familyId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [family, setFamily] = useState(null);
   const [members, setMembers] = useState([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -59,13 +64,50 @@ const FamilySettings = () => {
   const handleInvite = async () => {
     if (!inviteEmail) return;
 
-    // In client-only mode, we don't implement email invitations yet.
-    // You can manually invite relatives by helping them register and create/join families.
-    setSnackbar({ 
-      open: true, 
-      message: 'Invitations are not implemented yet in client-only mode. This will be added when backend functions are enabled.', 
-      severity: 'info' 
-    });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail)) {
+      setSnackbar({ 
+        open: true, 
+        message: 'Please enter a valid email address', 
+        severity: 'warning' 
+      });
+      return;
+    }
+
+    try {
+      // Generate invitation token
+      const token = crypto.randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+
+      // Store invitation in Firestore
+      // The email will be sent automatically by Firebase Function trigger
+      const invitationsRef = collection(db, 'familyInvitations');
+      await addDoc(invitationsRef, {
+        family_id: familyId,
+        email: inviteEmail.trim().toLowerCase(),
+        invited_by_user_id: user?.user_id || user?.uid || null,
+        token: token,
+        role: 'member',
+        status: 'pending',
+        expires_at: expiresAt,
+        created_at: serverTimestamp(),
+      });
+
+      setSnackbar({ 
+        open: true, 
+        message: `Invitation sent to ${inviteEmail}. The email will be sent automatically.`, 
+        severity: 'success' 
+      });
+      setInviteEmail('');
+    } catch (error) {
+      console.error('Failed to create invitation:', error);
+      setSnackbar({ 
+        open: true, 
+        message: 'Failed to create invitation. Please try again.', 
+        severity: 'error' 
+      });
+    }
   };
 
   if (!family) {

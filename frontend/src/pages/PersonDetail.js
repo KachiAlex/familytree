@@ -26,12 +26,14 @@ import {
   Avatar,
   CircularProgress,
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon } from '@mui/icons-material';
 import { db, storage } from '../firebase';
 import { exportPersonProfileToPDF } from '../utils/pdfExport';
 import { compressImage } from '../utils/imageCompression';
 import { useAuth } from '../contexts/AuthContext';
 import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
+import PendingChangesDialog from '../components/PendingChangesDialog';
+import EditHistoryDialog from '../components/EditHistoryDialog';
 import {
   doc,
   getDoc,
@@ -117,6 +119,8 @@ const PersonDetail = () => {
     clan_name: '',
     village_origin: '',
   });
+  const [pendingChangesOpen, setPendingChangesOpen] = useState(false);
+  const [editHistoryOpen, setEditHistoryOpen] = useState(false);
 
   useEffect(() => {
     fetchPersonDetails();
@@ -469,28 +473,103 @@ const PersonDetail = () => {
   };
 
   const handleSaveEdit = async () => {
-    if (!person || !editValues) return;
+    if (!person || !editValues || !user) return;
+    
     try {
-      const updates = {
-        full_name: editValues.full_name,
-        gender: editValues.gender,
-        date_of_birth: editValues.date_of_birth || null,
-        date_of_death: editValues.date_of_death || null,
-        place_of_birth: editValues.place_of_birth || null,
-        occupation: editValues.occupation || null,
-        biography: editValues.biography || null,
-        clan_name: editValues.clan_name || null,
-        village_origin: editValues.village_origin || null,
-        updated_at: serverTimestamp(),
-      };
-      const personRef = doc(db, 'persons', person.person_id);
-      await updateDoc(personRef, updates);
-      setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
-      setEditOpen(false);
-      setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
+      // Check if user is an elder/admin (can edit directly) or needs approval
+      const isElder = person.verified_by === user.uid || 
+                     (family && family.created_by_user_id === user.user_id);
+      
+      if (isElder) {
+        // Direct update for elders/admins
+        const updates = {
+          full_name: editValues.full_name,
+          gender: editValues.gender,
+          date_of_birth: editValues.date_of_birth || null,
+          date_of_death: editValues.date_of_death || null,
+          place_of_birth: editValues.place_of_birth || null,
+          occupation: editValues.occupation || null,
+          biography: editValues.biography || null,
+          clan_name: editValues.clan_name || null,
+          village_origin: editValues.village_origin || null,
+          updated_at: serverTimestamp(),
+          last_edited_by: user.uid,
+          last_edited_at: serverTimestamp(),
+        };
+        const personRef = doc(db, 'persons', person.person_id);
+        await updateDoc(personRef, updates);
+        
+        // Record in edit history
+        const { createPendingChange } = await import('../utils/editHistory');
+        const oldValues = {
+          full_name: person.full_name || '',
+          gender: person.gender || '',
+          date_of_birth: person.date_of_birth || '',
+          date_of_death: person.date_of_death || '',
+          place_of_birth: person.place_of_birth || '',
+          occupation: person.occupation || '',
+          biography: person.biography || '',
+          clan_name: person.clan_name || '',
+          village_origin: person.village_origin || '',
+        };
+        
+        // Auto-approve for elders
+        const { approvePendingChange } = await import('../utils/editHistory');
+        const pendingChangeId = await createPendingChange(
+          person.person_id,
+          person.family_id,
+          user.uid,
+          oldValues,
+          editValues,
+          'Direct edit by elder/admin'
+        );
+        await approvePendingChange(pendingChangeId, user.uid, 'Auto-approved: Elder/Admin edit');
+        
+        setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
+        setEditOpen(false);
+        setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
+      } else {
+        // Create pending change for regular users
+        const { createPendingChange } = await import('../utils/editHistory');
+        const oldValues = {
+          full_name: person.full_name || '',
+          gender: person.gender || '',
+          date_of_birth: person.date_of_birth || '',
+          date_of_death: person.date_of_death || '',
+          place_of_birth: person.place_of_birth || '',
+          occupation: person.occupation || '',
+          biography: person.biography || '',
+          clan_name: person.clan_name || '',
+          village_origin: person.village_origin || '',
+        };
+        
+        await createPendingChange(
+          person.person_id,
+          person.family_id,
+          user.uid,
+          oldValues,
+          editValues,
+          'User requested edit'
+        );
+        
+        setEditOpen(false);
+        setSnackbar({ 
+          open: true, 
+          message: 'Your changes have been submitted for approval by an elder.', 
+          severity: 'info' 
+        });
+      }
     } catch (error) {
-      console.error('Failed to update person:', error);
-      setSnackbar({ open: true, message: 'Failed to save changes. Please try again.', severity: 'error' });
+      console.error('Failed to save edit:', error);
+      if (error.message && error.message.includes('conflict')) {
+        setSnackbar({ 
+          open: true, 
+          message: 'Your changes conflict with another pending edit. Please review pending changes first.', 
+          severity: 'warning' 
+        });
+      } else {
+        setSnackbar({ open: true, message: 'Failed to save changes. Please try again.', severity: 'error' });
+      }
     }
   };
 
@@ -899,11 +978,34 @@ const PersonDetail = () => {
                   variant="outlined"
                   size="small"
                   startIcon={<PdfIcon />}
-                  onClick={() => {
-                    exportPersonProfileToPDF(person, { parents, children, spouses, siblings });
+                  onClick={async () => {
+                    try {
+                      setSnackbar({ open: true, message: 'Generating PDF with photo...', severity: 'info' });
+                      await exportPersonProfileToPDF(person, { parents, children, spouses, siblings });
+                      setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
+                    } catch (error) {
+                      console.error('Failed to export PDF:', error);
+                      setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
+                    }
                   }}
                 >
                   Export PDF
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<PendingActionsIcon />}
+                  onClick={() => setPendingChangesOpen(true)}
+                >
+                  Pending Changes
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<HistoryIcon />}
+                  onClick={() => setEditHistoryOpen(true)}
+                >
+                  Edit History
                 </Button>
               </Box>
 
@@ -2399,6 +2501,25 @@ const PersonDetail = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Pending Changes Dialog */}
+      <PendingChangesDialog
+        person={person}
+        open={pendingChangesOpen}
+        onClose={() => setPendingChangesOpen(false)}
+        currentUser={user}
+        onChangesResolved={async () => {
+          // Refresh person data after changes are resolved
+          await fetchPersonDetails();
+        }}
+      />
+
+      {/* Edit History Dialog */}
+      <EditHistoryDialog
+        person={person}
+        open={editHistoryOpen}
+        onClose={() => setEditHistoryOpen(false)}
+      />
 
       <Snackbar
         open={snackbar.open}

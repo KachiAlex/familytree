@@ -61,6 +61,7 @@ import ThreeDTreeView from '../components/TreeViews/ThreeDTreeView';
 import TimelineView from '../components/TreeViews/TimelineView';
 import MigrationMapView from '../components/TreeViews/MigrationMapView';
 import { FamilyTreeSkeleton } from '../components/SkeletonLoaders';
+import GedcomImportPreview from '../components/GedcomImportPreview';
 
 const FamilyTree = () => {
   const { familyId } = useParams();
@@ -78,7 +79,10 @@ const FamilyTree = () => {
   const [familyInfo, setFamilyInfo] = useState(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [gedcomImportOpen, setGedcomImportOpen] = useState(false);
+  const [gedcomPreviewOpen, setGedcomPreviewOpen] = useState(false);
   const [importingGedcom, setImportingGedcom] = useState(false);
+  const [parsedGedcomData, setParsedGedcomData] = useState(null);
+  const [existingPersons, setExistingPersons] = useState([]);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [insightsExpanded, setInsightsExpanded] = useState(false); // Default to collapsed
   const [searchFiltersExpanded, setSearchFiltersExpanded] = useState(false); // Default to collapsed
@@ -348,7 +352,7 @@ const FamilyTree = () => {
   }, [loading, treeDataWithView, viewType, handlePersonClick, familyId, filteredTreeData, searchQuery]);
 
   const handleExport = useCallback(
-    (format) => {
+    async (format) => {
       if (!filteredTreeData) return;
       const data = filteredTreeData.nodes.map((node) => node.data);
       try {
@@ -379,11 +383,17 @@ const FamilyTree = () => {
           link.click();
           URL.revokeObjectURL(url);
         } else if (format === 'pdf-summary') {
-          exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'summary');
+          setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
+          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'summary');
+          setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'pdf-book') {
-          exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'book');
+          setSnackbar({ open: true, message: 'Generating PDF with photos... This may take a moment.', severity: 'info' });
+          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'book');
+          setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'pdf-tree') {
-          exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'tree');
+          setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
+          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'tree');
+          setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'gedcom') {
           exportGEDCOM(filteredTreeData, familyInfo);
         }
@@ -396,19 +406,54 @@ const FamilyTree = () => {
     [filteredTreeData, familyId, familyInfo]
   );
 
-  const handleGedcomImport = async (file) => {
+  const handleGedcomFileSelect = async (file) => {
     if (!file) return;
 
-    setImportingGedcom(true);
     try {
       const text = await file.text();
       const parsed = parseGEDCOM(text);
 
-      // Create persons in Firestore
+      // Fetch existing persons for duplicate detection
+      const existingPersonsRef = collection(db, 'persons');
+      const existingQuery = query(existingPersonsRef, where('family_id', '==', familyId));
+      const existingSnap = await getDocs(existingQuery);
+      const existing = existingSnap.docs.map((docSnap) => ({
+        person_id: docSnap.id,
+        ...docSnap.data(),
+      }));
+
+      setParsedGedcomData(parsed);
+      setExistingPersons(existing);
+      setGedcomImportOpen(false);
+      setGedcomPreviewOpen(true);
+    } catch (error) {
+      console.error('Failed to parse GEDCOM:', error);
+      setSnackbar({ open: true, message: 'Failed to parse GEDCOM file. Please check the file format and try again.', severity: 'error' });
+    }
+  };
+
+  const handleGedcomImportConfirm = async ({ skipDuplicates, duplicates }) => {
+    if (!parsedGedcomData) return;
+
+    setImportingGedcom(true);
+    setGedcomPreviewOpen(false);
+
+    try {
       const personsRef = collection(db, 'persons');
       const personIdMap = new Map();
+      const duplicateIds = new Set(duplicates.map((d) => d.import.person_id));
 
-      for (const person of parsed.persons) {
+      // Filter out duplicates if skipDuplicates is true
+      const personsToImport = skipDuplicates
+        ? parsedGedcomData.persons.filter((p) => !duplicateIds.has(p.person_id))
+        : parsedGedcomData.persons;
+
+      let importedCount = 0;
+      let skippedCount = 0;
+
+      // Create persons in Firestore with progress tracking
+      for (let i = 0; i < personsToImport.length; i++) {
+        const person = personsToImport[i];
         const personData = {
           family_id: familyId,
           full_name: person.full_name || 'Unknown',
@@ -426,11 +471,15 @@ const FamilyTree = () => {
 
         const docRef = await addDoc(personsRef, personData);
         personIdMap.set(person.person_id, docRef.id);
+        importedCount++;
       }
+
+      skippedCount = skipDuplicates ? duplicates.length : 0;
 
       // Create relationships
       const relationshipsRef = collection(db, 'relationships');
-      for (const rel of parsed.relationships) {
+      let relationshipCount = 0;
+      for (const rel of parsedGedcomData.relationships) {
         const parentId = personIdMap.get(rel.parent_id);
         const childId = personIdMap.get(rel.child_id);
         if (parentId && childId) {
@@ -440,12 +489,14 @@ const FamilyTree = () => {
             child_id: childId,
             created_at: serverTimestamp(),
           });
+          relationshipCount++;
         }
       }
 
       // Create spouse relationships
       const spouseRelationshipsRef = collection(db, 'spouseRelationships');
-      for (const spouseRel of parsed.spouseRelationships) {
+      let spouseCount = 0;
+      for (const spouseRel of parsedGedcomData.spouseRelationships) {
         const spouse1Id = personIdMap.get(spouseRel.spouse1_id);
         const spouse2Id = personIdMap.get(spouseRel.spouse2_id);
         if (spouse1Id && spouse2Id) {
@@ -456,18 +507,24 @@ const FamilyTree = () => {
             marital_status: spouseRel.marital_status || 'married',
             created_at: serverTimestamp(),
           });
+          spouseCount++;
         }
       }
 
       // Refresh tree data
       await fetchTreeData();
-      setGedcomImportOpen(false);
-      setSnackbar({ open: true, message: `Successfully imported ${parsed.persons.length} persons from GEDCOM file.`, severity: 'success' });
+      setSnackbar({
+        open: true,
+        message: `Successfully imported ${importedCount} persons${skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ''}, ${relationshipCount} relationships, and ${spouseCount} spouse relationships.`,
+        severity: 'success',
+      });
     } catch (error) {
       console.error('Failed to import GEDCOM:', error);
-      setSnackbar({ open: true, message: 'Failed to import GEDCOM file. Please check the file format and try again.', severity: 'error' });
+      setSnackbar({ open: true, message: 'Failed to import GEDCOM file. Please try again.', severity: 'error' });
     } finally {
       setImportingGedcom(false);
+      setParsedGedcomData(null);
+      setExistingPersons([]);
     }
   };
 
@@ -773,16 +830,8 @@ const FamilyTree = () => {
         <DialogTitle>Import GEDCOM File</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
-            Select a GEDCOM file (.ged) to import family tree data. This will add all persons and relationships from the file to your family tree.
+            Select a GEDCOM file (.ged) to import family tree data. You'll be able to preview and review the data before importing.
           </DialogContentText>
-          {importingGedcom && (
-            <Box sx={{ mb: 2 }}>
-              <LinearProgress />
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Importing GEDCOM file...
-              </Typography>
-            </Box>
-          )}
           <input
             accept=".ged"
             style={{ display: 'none' }}
@@ -791,7 +840,7 @@ const FamilyTree = () => {
             onChange={(e) => {
               const file = e.target.files[0];
               if (file) {
-                handleGedcomImport(file);
+                handleGedcomFileSelect(file);
               }
             }}
             disabled={importingGedcom}
@@ -815,6 +864,20 @@ const FamilyTree = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* GEDCOM Import Preview Dialog */}
+      <GedcomImportPreview
+        open={gedcomPreviewOpen}
+        onClose={() => {
+          setGedcomPreviewOpen(false);
+          setParsedGedcomData(null);
+          setExistingPersons([]);
+        }}
+        onConfirm={handleGedcomImportConfirm}
+        parsedData={parsedGedcomData}
+        existingPersons={existingPersons}
+        importing={importingGedcom}
+      />
 
       {/* Profile Completion Dialog */}
       <Dialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)}>
