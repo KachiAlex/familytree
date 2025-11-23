@@ -14,8 +14,9 @@ import {
   TextField,
 } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import {
   collection,
   query,
@@ -24,13 +25,14 @@ import {
   updateDoc,
   doc,
   getDoc,
+  setDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 
 const ClaimPerson = () => {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading: authLoading, login, register } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, login } = useAuth();
   const [invitation, setInvitation] = useState(null);
   const [person, setPerson] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -198,31 +200,50 @@ const ClaimPerson = () => {
       // Use person's name as default, or the entered full name
       const nameToUse = fullName || person?.full_name || '';
       
-      // For invitation flow, use person's family info
-      const familyName = person?.family_name || 'Family Tree';
-      const clanName = person?.clan_name || '';
-      const villageOrigin = person?.village_origin || '';
-      
-      const result = await register(
-        invitation.email,
-        password,
-        nameToUse,
-        '', // phone
-        familyName, // Use person's family name
-        clanName,
-        villageOrigin
-      );
-      
-      if (result.success) {
-        // Auth state will update automatically, useEffect will trigger handleClaim
-        setAuthenticating(false);
-      } else {
-        setError(result.error || 'Failed to create account. Please try again.');
+      // Create Firebase Auth user
+      const credential = await createUserWithEmailAndPassword(auth, invitation.email, password);
+      const firebaseUser = credential.user;
+
+      // Update display name
+      if (nameToUse) {
+        await updateProfile(firebaseUser, { displayName: nameToUse });
       }
+
+      // Create user profile in Firestore
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      await setDoc(userRef, {
+        email: invitation.email,
+        full_name: nameToUse,
+        phone: null,
+        role: 'member',
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+
+      // Join the existing family (don't create a new one)
+      const existingFamilyId = invitation.family_id;
+      const membershipRef = doc(db, 'familyMembers', `${existingFamilyId}_${firebaseUser.uid}`);
+      await setDoc(membershipRef, {
+        family_id: existingFamilyId,
+        user_id: firebaseUser.uid,
+        role: 'member',
+        invited_by: invitation.invited_by_user_id || null,
+        status: 'active',
+        joined_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+      });
+
+      // Auth state will update automatically via Firebase Auth listener
+      // useEffect will trigger handleClaim when user becomes available
+      setAuthenticating(false);
     } catch (err) {
       console.error('Registration error:', err);
-      setError('Failed to create account. Please try again.');
-    } finally {
+      if (err.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists. Please log in instead.');
+        setIsNewUser(false);
+      } else {
+        setError(err.message || 'Failed to create account. Please try again.');
+      }
       setAuthenticating(false);
     }
   };
