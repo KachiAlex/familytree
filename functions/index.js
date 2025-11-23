@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
-// Using v1 functions API (1st Gen) - secrets need to be set via functions.config()
+// Using v1 functions API (1st Gen) - secrets accessed via Secret Manager
+// Secrets must be declared in function definition using .runWith({ secrets: [...] })
 const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
@@ -335,26 +336,10 @@ const nodemailer = require('nodemailer');
 //    firebase functions:secrets:set GMAIL_APP_PASSWORD
 
 const createTransporter = () => {
-  // For 1st Gen functions, we need to use functions.config() to access secrets
-  // Secrets set via firebase functions:config:set are available via functions.config()
-  let gmailUser, gmailPassword;
-  
-  try {
-    // Access config safely - may not be available during deployment
-    if (typeof functions.config === 'function') {
-      const config = functions.config();
-      gmailUser = config.gmail?.user || process.env.GMAIL_USER;
-      gmailPassword = config.gmail?.password || process.env.GMAIL_APP_PASSWORD;
-    } else {
-      // Fallback to environment variables if config is not available
-      gmailUser = process.env.GMAIL_USER;
-      gmailPassword = process.env.GMAIL_APP_PASSWORD;
-    }
-  } catch (e) {
-    // Fallback to environment variables
-    gmailUser = process.env.GMAIL_USER;
-    gmailPassword = process.env.GMAIL_APP_PASSWORD;
-  }
+  // For 1st Gen functions with Secret Manager, secrets are available as environment variables
+  // Secrets must be declared in the function definition using .runWith({ secrets: [...] })
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPassword = process.env.GMAIL_APP_PASSWORD;
 
   // Debug logging
   console.log('🔍 Checking Gmail credentials...');
@@ -363,9 +348,9 @@ const createTransporter = () => {
 
   if (!gmailUser || !gmailPassword) {
     console.error('❌ Gmail credentials not configured. Email sending will fail.');
-    console.error('For 1st Gen functions, set up using:');
-    console.error('  firebase functions:config:set gmail.user="your-email@gmail.com"');
-    console.error('  firebase functions:config:set gmail.password="your-app-password"');
+    console.error('Set up using:');
+    console.error('  firebase functions:secrets:set GMAIL_USER');
+    console.error('  firebase functions:secrets:set GMAIL_APP_PASSWORD');
     console.error('  firebase deploy --only functions:sendInvitationEmail');
     return null;
   }
@@ -379,10 +364,14 @@ const createTransporter = () => {
   });
 };
 
-// Secrets will be accessed via functions.config() for 1st Gen functions
-
-// Function to send invitation email (1st Gen - uses legacy config)
-exports.sendInvitationEmail = functions.firestore.document('personInvitations/{invitationId}').onCreate(async (snap, context) => {
+// Function to send invitation email (1st Gen - uses Secret Manager)
+// Secrets must be declared in the function definition to be accessible
+exports.sendInvitationEmail = functions
+  .runWith({
+    secrets: ['GMAIL_USER', 'GMAIL_APP_PASSWORD'],
+  })
+  .firestore.document('personInvitations/{invitationId}')
+  .onCreate(async (snap, context) => {
     const invitation = snap.data();
     const invitationId = context.params.invitationId;
 
@@ -420,18 +409,8 @@ exports.sendInvitationEmail = functions.firestore.document('personInvitations/{i
       const frontendUrl = process.env.FRONTEND_URL || 'https://familytree-2025.web.app';
       const invitationLink = `${frontendUrl}/claim/${invitation.token}`;
 
-      // Get sender email (same method as transporter)
-      let senderEmail;
-      try {
-        if (typeof functions.config === 'function') {
-          const config = functions.config();
-          senderEmail = config.gmail?.user || process.env.GMAIL_USER;
-        } else {
-          senderEmail = process.env.GMAIL_USER;
-        }
-      } catch (e) {
-        senderEmail = process.env.GMAIL_USER;
-      }
+      // Get sender email from environment variable (Secret Manager)
+      const senderEmail = process.env.GMAIL_USER;
 
       // Email content
       const mailOptions = {
