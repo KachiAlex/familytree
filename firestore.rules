@@ -141,12 +141,14 @@ service cloud.firestore {
       allow read: if true;
 
       // Update: only to mark as accepted/claimed (by the invited user)
+      // Allow if user is family owner, OR if user's email matches invitation email and they're claiming it
       allow update: if isSignedIn()
         && (isFamilyOwner(resource.data.family_id)
           || (request.auth.token.email != null
             && request.auth.token.email.lower() == resource.data.email.lower()
             && request.resource.data.status == 'accepted'
-            && resource.data.status == 'pending'));
+            && resource.data.status == 'pending'
+            && isFamilyMember(resource.data.family_id))); // User must be a family member to claim
 
       // Delete: family owner can delete invitations
       allow delete: if isSignedIn()

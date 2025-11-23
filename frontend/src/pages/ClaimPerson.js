@@ -166,20 +166,30 @@ const ClaimPerson = () => {
       const result = await login(invitation.email, password);
       
       if (result.success) {
-        // User is now logged in, automatically claim the profile
-        await handleClaim();
+        // User is now logged in
+        // Wait a moment for auth state to update, then claim
+        setTimeout(() => {
+          handleClaim();
+        }, 500);
       } else {
         // Check if user doesn't exist - show signup option
-        if (result.error?.includes('user-not-found') || result.error?.includes('invalid-credential')) {
+        if (result.error?.includes('user-not-found') || result.error?.includes('auth/user-not-found')) {
           setError('No account found with this email. Please create an account below.');
           setIsNewUser(true);
+        } else if (result.error?.includes('wrong-password') || result.error?.includes('invalid-credential')) {
+          setError('Invalid password. Please try again.');
         } else {
           setError(result.error || 'Invalid password. Please try again.');
         }
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('Failed to log in. Please try again.');
+      if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email. Please create an account below.');
+        setIsNewUser(true);
+      } else {
+        setError(err.message || 'Failed to log in. Please try again.');
+      }
     } finally {
       setAuthenticating(false);
     }
@@ -200,16 +210,16 @@ const ClaimPerson = () => {
       // Use person's name as default, or the entered full name
       const nameToUse = fullName || person?.full_name || '';
       
-      // Create Firebase Auth user
+      // Step 1: Create Firebase Auth user
       const credential = await createUserWithEmailAndPassword(auth, invitation.email, password);
       const firebaseUser = credential.user;
 
-      // Update display name
+      // Step 2: Update display name
       if (nameToUse) {
         await updateProfile(firebaseUser, { displayName: nameToUse });
       }
 
-      // Create user profile in Firestore
+      // Step 3: Create user profile in Firestore
       const userRef = doc(db, 'users', firebaseUser.uid);
       await setDoc(userRef, {
         email: invitation.email,
@@ -220,7 +230,8 @@ const ClaimPerson = () => {
         updated_at: serverTimestamp(),
       });
 
-      // Join the existing family (don't create a new one)
+      // Step 4: Join the existing family FIRST (before claiming)
+      // This is critical - user must be a family member to claim the profile
       const existingFamilyId = invitation.family_id;
       const membershipRef = doc(db, 'familyMembers', `${existingFamilyId}_${firebaseUser.uid}`);
       await setDoc(membershipRef, {
@@ -233,8 +244,29 @@ const ClaimPerson = () => {
         created_at: serverTimestamp(),
       });
 
-      // Auth state will update automatically via Firebase Auth listener
-      // useEffect will trigger handleClaim when user becomes available
+      // Step 5: Wait a moment for Firestore to propagate the membership
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Step 6: Now claim the profile (user is now a family member)
+      const invitationRef = doc(db, 'personInvitations', invitation.id);
+      await updateDoc(invitationRef, {
+        status: 'accepted',
+        claimed_at: serverTimestamp(),
+        claimed_by_user_id: firebaseUser.uid,
+      });
+
+      const personRef = doc(db, 'persons', person.person_id);
+      await updateDoc(personRef, {
+        ownerUserId: firebaseUser.uid,
+        claimed_at: serverTimestamp(),
+      });
+
+      // Success - redirect to profile
+      setSuccess(true);
+      setTimeout(() => {
+        navigate(`/person/${person.person_id}`);
+      }, 2000);
+
       setAuthenticating(false);
     } catch (err) {
       console.error('Registration error:', err);
