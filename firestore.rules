@@ -68,15 +68,20 @@ service cloud.firestore {
 
     // PERSONS: belong to a family via family_id.
     // Read: family members can read all persons in their family.
+    // Also allow read for unclaimed persons (no ownerUserId) to support invitation claim flow.
     // Update/delete: family members OR person owner (ownerUserId) OR family owner.
     match /persons/{personId} {
       // Create: require auth and that the user is a member of the target family
       allow create: if isSignedIn()
         && isFamilyMember(request.resource.data.family_id);
 
-      // Read: family members can read all persons in their family
-      allow read: if isSignedIn()
-        && isFamilyMember(resource.data.family_id);
+      // Read: 
+      // 1. Family members can read all persons in their family
+      // 2. Allow read for unclaimed persons (no ownerUserId) - needed for invitation claim flow
+      //    The frontend validates the invitation token before showing person data
+      allow read: if (isSignedIn()
+        && isFamilyMember(resource.data.family_id))
+        || (!resource.data.ownerUserId || resource.data.ownerUserId == ''); // Unclaimed persons
 
       // Update/delete: family members, claimed owner of that person, or family owner
       allow update, delete: if isSignedIn()
