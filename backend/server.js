@@ -21,6 +21,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       process.env.FRONTEND_URL,
+      'https://familytreebio.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001'
     ];
