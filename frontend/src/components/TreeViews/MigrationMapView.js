@@ -4,8 +4,7 @@ import { Box, Typography, Paper, Slider, Chip, IconButton, Tooltip } from '@mui/
 import { PlayArrow, Pause, SkipNext, SkipPrevious } from '@mui/icons-material';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { db } from '../../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import api from '../../services/api';
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -32,19 +31,16 @@ const MigrationMapView = ({ familyId }) => {
   const fetchPersons = async () => {
     try {
       setLoading(true);
-      const [personsSnap, relSnap] = await Promise.all([
-        getDocs(query(collection(db, 'persons'), where('family_id', '==', familyId))),
-        getDocs(query(collection(db, 'relationships'), where('family_id', '==', familyId))),
+      const [personsRes, relRes] = await Promise.all([
+        api.get(`/persons/family/${familyId}`),
+        api.get(`/relationships/family/${familyId}`),
       ]);
 
-      const personsList = personsSnap.docs.map((docSnap) => ({
-        person_id: docSnap.id,
-        ...docSnap.data(),
-      }));
-
-      const relationshipsList = relSnap.docs.map((docSnap) => ({
-        relationship_id: docSnap.id,
-        ...docSnap.data(),
+      const personsList = personsRes.data.persons || [];
+      const relationshipsList = (relRes.data.relationships || []).map((r) => ({
+        ...r,
+        parent_id: r.person1_id,
+        child_id: r.person2_id,
       }));
 
       setPersons(personsList);

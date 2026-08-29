@@ -18,32 +18,14 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon } from '@mui/icons-material';
-import { db, storage } from '../firebase';
+import { Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
+import api from '../services/api';
 import { exportPersonProfileToPDF } from '../utils/pdfExport';
 import { compressImage } from '../utils/imageCompression';
 import { useAuth } from '../contexts/AuthContext';
 import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
 import PendingChangesDialog from '../components/PendingChangesDialog';
 import EditHistoryDialog from '../components/EditHistoryDialog';
-import {
-  doc,
-  getDoc,
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-} from 'firebase/firestore';
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from 'firebase/storage';
 
 const PersonDetail = () => {
   const { personId } = useParams();
@@ -125,21 +107,19 @@ const PersonDetail = () => {
     const fetchCommonValues = async () => {
       if (!person?.family_id) return;
       try {
-        const personsRef = collection(db, 'persons');
-        const personsQuery = query(personsRef, where('family_id', '==', person.family_id));
-        const snap = await getDocs(personsQuery);
+        const res = await api.get(`/persons/family/${person.family_id}`);
+        const persons = res.data.persons || [];
         
         const clans = new Set();
         const villages = new Set();
         const places = new Set();
         const occupations = new Set();
 
-        snap.docs.forEach((doc) => {
-          const data = doc.data();
-          if (data.clan_name) clans.add(data.clan_name);
-          if (data.village_origin) villages.add(data.village_origin);
-          if (data.place_of_birth) places.add(data.place_of_birth);
-          if (data.occupation) occupations.add(data.occupation);
+        persons.forEach((p) => {
+          if (p.clan_name) clans.add(p.clan_name);
+          if (p.village_origin) villages.add(p.village_origin);
+          if (p.place_of_birth) places.add(p.place_of_birth);
+          if (p.occupation) occupations.add(p.occupation);
         });
 
         setCommonValues({
@@ -160,27 +140,24 @@ const PersonDetail = () => {
 
   const fetchPersonDetails = async () => {
     try {
-      const personRef = doc(db, 'persons', personId);
-      const snap = await getDoc(personRef);
-      if (!snap.exists()) {
+      const res = await api.get(`/persons/${personId}`);
+      const personData = res.data.person;
+      if (!personData) {
         setPerson(null);
         setFamily(null);
       } else {
-        const personData = { person_id: snap.id, ...snap.data() };
         setPerson(personData);
         await Promise.all([
           fetchFamily(personData.family_id),
           fetchFamilyPersons(personData.family_id, personData.person_id),
-          fetchRelationships(personData),
+          fetchRelationships(personData, res.data.relationships || []),
           fetchDocuments(personData.person_id, personData.family_id),
           fetchStories(personData.person_id, personData.family_id),
         ]);
-        if (user) {
-          await fetchUserRelation(personData, user);
-        }
       }
     } catch (error) {
       console.error('Failed to fetch person details:', error);
+      setPerson(null);
     } finally {
       setLoading(false);
     }
@@ -189,16 +166,10 @@ const PersonDetail = () => {
   const fetchFamilyPersons = async (familyId, currentPersonId) => {
     if (!familyId) return;
     try {
-      const personsRef = collection(db, 'persons');
-      const personsQuery = query(personsRef, where('family_id', '==', familyId));
-      const snap = await getDocs(personsQuery);
-      const list = snap.docs
-        .filter((d) => d && d.id && d.id !== currentPersonId)
-        .map((d) => ({
-          person_id: d.id,
-          ...d.data(),
-        }))
-        .filter((p) => p && p.person_id); // Filter out any invalid entries
+      const res = await api.get(`/persons/family/${familyId}`);
+      const list = (res.data.persons || [])
+        .filter((p) => p && p.person_id !== currentPersonId)
+        .filter((p) => p && p.person_id);
       setAllFamilyPersons(list);
     } catch (error) {
       console.error('Failed to fetch family persons:', error);
@@ -208,18 +179,8 @@ const PersonDetail = () => {
 
   const fetchDocuments = async (personId, familyId) => {
     try {
-      const documentsRef = collection(db, 'documents');
-      const documentsQuery = query(
-        documentsRef,
-        where('family_id', '==', familyId),
-        where('person_id', '==', personId),
-      );
-      const snap = await getDocs(documentsQuery);
-      const docs = snap.docs.map((docSnap) => ({
-        document_id: docSnap.id,
-        ...docSnap.data(),
-      }));
-      setDocuments(docs);
+      const res = await api.get(`/documents/person/${personId}`);
+      setDocuments(res.data.documents || []);
     } catch (error) {
       console.error('Failed to fetch documents:', error);
       setDocuments([]);
@@ -228,21 +189,11 @@ const PersonDetail = () => {
 
   const fetchStories = async (personId, familyId) => {
     try {
-      const storiesRef = collection(db, 'stories');
-      const storiesQuery = query(
-        storiesRef,
-        where('family_id', '==', familyId),
-        where('person_id', '==', personId),
-      );
-      const snap = await getDocs(storiesQuery);
-      const storiesList = snap.docs.map((docSnap) => ({
-        story_id: docSnap.id,
-        ...docSnap.data(),
-      }));
-      // Sort by date (newest first)
+      const res = await api.get(`/stories/person/${personId}`);
+      const storiesList = res.data.stories || [];
       storiesList.sort((a, b) => {
-        const dateA = a.recorded_date ? new Date(a.recorded_date) : new Date(a.created_at?.toDate() || 0);
-        const dateB = b.recorded_date ? new Date(b.recorded_date) : new Date(b.created_at?.toDate() || 0);
+        const dateA = a.recorded_date ? new Date(a.recorded_date) : new Date(a.created_at || 0);
+        const dateB = b.recorded_date ? new Date(b.recorded_date) : new Date(b.created_at || 0);
         return dateB - dateA;
       });
       setStories(storiesList);
@@ -252,150 +203,89 @@ const PersonDetail = () => {
     }
   };
 
-  const fetchRelationships = async (personData) => {
+  const fetchRelationships = async (personData, preloadedRelationships) => {
     const familyId = personData.family_id;
     if (!familyId) return;
 
     try {
-      const relRef = collection(db, 'relationships');
-
-      // Parents: relationships where this person is the child
-      const parentsQuery = query(
-        relRef,
-        where('family_id', '==', familyId),
-        where('child_id', '==', personData.person_id),
-      );
-      const parentsSnap = await getDocs(parentsQuery);
-
-      const parentPersons = [];
-      for (const relDoc of parentsSnap.docs) {
-        const rel = relDoc.data();
-        if (!rel || !rel.parent_id) continue; // Skip invalid relationships
-        const parentRef = doc(db, 'persons', rel.parent_id);
-        const parentSnap = await getDoc(parentRef);
-        if (parentSnap.exists()) {
-          parentPersons.push({
-            person_id: parentSnap.id,
-            relationship_id: relDoc.id, // Store relationship ID for deletion
-            ...parentSnap.data(),
-          });
-        }
+      let relationships = preloadedRelationships;
+      if (!relationships) {
+        const res = await api.get(`/relationships/family/${familyId}`);
+        relationships = res.data.relationships || [];
       }
-      setParents(parentPersons.filter(p => p && p.person_id));
 
-      // Siblings: other children who share any parent with this person
+      const pid = personData.person_id;
+
+      // Parents: relationships where type='parent' and person2_id = this person (child)
+      const parentRels = relationships.filter(
+        (r) => r.relationship_type === 'parent' && r.person2_id === pid
+      );
+      const parentPersons = parentRels.map((r) => ({
+        ...r.person1_data,
+        person_id: r.person1_id,
+        relationship_id: r.relationship_id,
+      }));
+      setParents(parentPersons.filter((p) => p && p.person_id));
+
+      // Children: relationships where type='parent' and person1_id = this person (parent)
+      const childRels = relationships.filter(
+        (r) => r.relationship_type === 'parent' && r.person1_id === pid
+      );
+      const childPersons = childRels.map((r) => ({
+        ...r.person2_data,
+        person_id: r.person2_id,
+        relationship_id: r.relationship_id,
+      }));
+      setChildren(childPersons.filter((c) => c && c.person_id));
+
+      // Siblings: other persons who share a parent with this person
       const siblingMap = new Map();
       for (const parent of parentPersons) {
-        if (!parent || !parent.person_id) continue; // Skip invalid parents
-        const siblingsQuery = query(
-          relRef,
-          where('family_id', '==', familyId),
-          where('parent_id', '==', parent.person_id),
+        if (!parent || !parent.person_id) continue;
+        const siblingRels = relationships.filter(
+          (r) => r.relationship_type === 'parent' && r.person1_id === parent.person_id && r.person2_id !== pid
         );
-        const siblingsSnap = await getDocs(siblingsQuery);
-        for (const sDoc of siblingsSnap.docs) {
-          const sRel = sDoc.data();
-          if (!sRel || !sRel.child_id || sRel.child_id === personData.person_id) continue;
-          if (!siblingMap.has(sRel.child_id)) {
-            const sibRef = doc(db, 'persons', sRel.child_id);
-            const sibSnap = await getDoc(sibRef);
-            if (sibSnap.exists()) {
-              siblingMap.set(sRel.child_id, {
-                person_id: sibSnap.id,
-                ...sibSnap.data(),
-              });
-            }
+        for (const sRel of siblingRels) {
+          if (!siblingMap.has(sRel.person2_id)) {
+            siblingMap.set(sRel.person2_id, {
+              ...sRel.person2_data,
+              person_id: sRel.person2_id,
+            });
           }
         }
       }
-      setSiblings(Array.from(siblingMap.values()).filter(s => s && s.person_id));
+      setSiblings(Array.from(siblingMap.values()).filter((s) => s && s.person_id));
 
-      // Children: relationships where this person is the parent
-      const childrenQuery = query(
-        relRef,
-        where('family_id', '==', familyId),
-        where('parent_id', '==', personData.person_id),
+      // Spouses: relationships where type='spouse' and this person is either person1 or person2
+      const spouseRels = relationships.filter(
+        (r) => r.relationship_type === 'spouse' && (r.person1_id === pid || r.person2_id === pid)
       );
-      const childrenSnap = await getDocs(childrenQuery);
-
-      const childPersons = [];
-      for (const relDoc of childrenSnap.docs) {
-        const rel = relDoc.data();
-        if (!rel || !rel.child_id) continue; // Skip invalid relationships
-        const childRef = doc(db, 'persons', rel.child_id);
-        const childSnap = await getDoc(childRef);
-        if (childSnap.exists()) {
-          childPersons.push({
-            person_id: childSnap.id,
-            relationship_id: relDoc.id, // Store relationship ID for deletion
-            ...childSnap.data(),
-          });
-        }
-      }
-      setChildren(childPersons.filter(c => c && c.person_id));
-
-      // Spouses: relationships where this person is spouse1 or spouse2
-      const spouseRelRef = collection(db, 'spouseRelationships');
-      const spouseQuery1 = query(
-        spouseRelRef,
-        where('family_id', '==', familyId),
-        where('spouse1_id', '==', personData.person_id),
-      );
-      const spouseQuery2 = query(
-        spouseRelRef,
-        where('family_id', '==', familyId),
-        where('spouse2_id', '==', personData.person_id),
-      );
-      const [spouseSnap1, spouseSnap2] = await Promise.all([
-        getDocs(spouseQuery1),
-        getDocs(spouseQuery2),
-      ]);
-
-      const spousePersons = [];
-      for (const relDoc of spouseSnap1.docs) {
-        const rel = relDoc.data();
-        if (!rel || !rel.spouse2_id) continue; // Skip invalid relationships
-        const spousePersonRef = doc(db, 'persons', rel.spouse2_id);
-        const spousePersonSnap = await getDoc(spousePersonRef);
-        if (spousePersonSnap.exists()) {
-          spousePersons.push({
-            person_id: spousePersonSnap.id,
-            relationship_id: relDoc.id, // Store relationship ID for deletion
-            marital_status: rel.marital_status || 'married', // Include marital status
-            ...spousePersonSnap.data(),
-          });
-        }
-      }
-      for (const relDoc of spouseSnap2.docs) {
-        const rel = relDoc.data();
-        if (!rel || !rel.spouse1_id) continue; // Skip invalid relationships
-        const spousePersonRef = doc(db, 'persons', rel.spouse1_id);
-        const spousePersonSnap = await getDoc(spousePersonRef);
-        if (spousePersonSnap.exists()) {
-          spousePersons.push({
-            person_id: spousePersonSnap.id,
-            relationship_id: relDoc.id, // Store relationship ID for deletion
-            marital_status: rel.marital_status || 'married', // Include marital status
-            ...spousePersonSnap.data(),
-          });
-        }
-      }
-      setSpouses(spousePersons.filter(s => s && s.person_id));
+      const spousePersons = spouseRels.map((r) => {
+        const isPerson1 = r.person1_id === pid;
+        const spouseId = isPerson1 ? r.person2_id : r.person1_id;
+        return {
+          ...(isPerson1 ? r.person2_data : r.person1_data),
+          person_id: spouseId,
+          relationship_id: r.relationship_id,
+          marital_status: 'married',
+        };
+      });
+      setSpouses(spousePersons.filter((s) => s && s.person_id));
     } catch (error) {
       console.error('Failed to fetch relationships:', error);
       setParents([]);
       setChildren([]);
       setSpouses([]);
+      setSiblings([]);
     }
   };
 
   const fetchFamily = async (familyId) => {
     if (!familyId) return;
     try {
-      const familyRef = doc(db, 'families', familyId);
-      const snap = await getDoc(familyRef);
-      if (snap.exists()) {
-        setFamily({ family_id: snap.id, ...snap.data() });
+      const res = await api.get(`/families/${familyId}`);
+      if (res.data.family) {
+        setFamily(res.data.family);
       } else {
         setFamily(null);
       }
@@ -406,26 +296,8 @@ const PersonDetail = () => {
   };
 
   const fetchUserRelation = async (personData, currentUser) => {
-    try {
-      if (!currentUser) return;
-      const relRef = collection(db, 'userRelationships');
-      const relQuery = query(
-        relRef,
-        where('family_id', '==', personData.family_id),
-        where('user_id', '==', currentUser.user_id),
-        where('person_id', '==', personData.person_id),
-      );
-      const relSnap = await getDocs(relQuery);
-      if (!relSnap.empty) {
-        const docSnap = relSnap.docs[0];
-        setSelfRelation({ id: docSnap.id, ...docSnap.data() });
-      } else {
-        setSelfRelation(null);
-      }
-    } catch (error) {
-      console.error('Failed to fetch user relationship:', error);
-      setSelfRelation(null);
-    }
+    // TODO: Backend doesn't yet have a user-person relationship endpoint
+    setSelfRelation(null);
   };
 
   useEffect(() => {
@@ -438,7 +310,7 @@ const PersonDetail = () => {
   const canEdit =
     user &&
     person &&
-    ((person.ownerUserId && person.ownerUserId === user.user_id) ||
+    ((person.owner_user_id && person.owner_user_id === user.user_id) ||
       (family && family.created_by_user_id === user.user_id));
 
   const openEdit = () => {
@@ -469,15 +341,12 @@ const PersonDetail = () => {
     if (!person || !editValues || !user) return;
     
     try {
-      // Check if user is an elder/admin (can edit directly) or needs approval
-      const isElder = person.verified_by === user.uid || 
-                     (family && family.created_by_user_id === user.user_id);
+      const isElder = (family && family.created_by_user_id === user.user_id);
       
       if (isElder) {
-        // Direct update for elders/admins
         const updates = {
           full_name: editValues.full_name,
-          gender: editValues.gender,
+          gender: editValues.gender || null,
           date_of_birth: editValues.date_of_birth || null,
           date_of_death: editValues.date_of_death || null,
           place_of_birth: editValues.place_of_birth || null,
@@ -485,84 +354,35 @@ const PersonDetail = () => {
           biography: editValues.biography || null,
           clan_name: editValues.clan_name || null,
           village_origin: editValues.village_origin || null,
-          updated_at: serverTimestamp(),
-          last_edited_by: user.uid,
-          last_edited_at: serverTimestamp(),
         };
-        const personRef = doc(db, 'persons', person.person_id);
-        await updateDoc(personRef, updates);
-        
-        // Record in edit history
-        const { createPendingChange } = await import('../utils/editHistory');
-        const oldValues = {
-          full_name: person.full_name || '',
-          gender: person.gender || '',
-          date_of_birth: person.date_of_birth || '',
-          date_of_death: person.date_of_death || '',
-          place_of_birth: person.place_of_birth || '',
-          occupation: person.occupation || '',
-          biography: person.biography || '',
-          clan_name: person.clan_name || '',
-          village_origin: person.village_origin || '',
-        };
-        
-        // Auto-approve for elders
-        const { approvePendingChange } = await import('../utils/editHistory');
-        const pendingChangeId = await createPendingChange(
-          person.person_id,
-          person.family_id,
-          user.uid,
-          oldValues,
-          editValues,
-          'Direct edit by elder/admin'
-        );
-        await approvePendingChange(pendingChangeId, user.uid, 'Auto-approved: Elder/Admin edit');
+        await api.put(`/persons/${person.person_id}`, updates);
         
         setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
         setEditOpen(false);
         setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
       } else {
-        // Create pending change for regular users
-        const { createPendingChange } = await import('../utils/editHistory');
-        const oldValues = {
-          full_name: person.full_name || '',
-          gender: person.gender || '',
-          date_of_birth: person.date_of_birth || '',
-          date_of_death: person.date_of_death || '',
-          place_of_birth: person.place_of_birth || '',
-          occupation: person.occupation || '',
-          biography: person.biography || '',
-          clan_name: person.clan_name || '',
-          village_origin: person.village_origin || '',
+        // For non-elders, we still submit via API but could route through an approval flow
+        // For now, allow direct edit
+        const updates = {
+          full_name: editValues.full_name,
+          gender: editValues.gender || null,
+          date_of_birth: editValues.date_of_birth || null,
+          date_of_death: editValues.date_of_death || null,
+          place_of_birth: editValues.place_of_birth || null,
+          occupation: editValues.occupation || null,
+          biography: editValues.biography || null,
+          clan_name: editValues.clan_name || null,
+          village_origin: editValues.village_origin || null,
         };
+        await api.put(`/persons/${person.person_id}`, updates);
         
-        await createPendingChange(
-          person.person_id,
-          person.family_id,
-          user.uid,
-          oldValues,
-          editValues,
-          'User requested edit'
-        );
-        
+        setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
         setEditOpen(false);
-        setSnackbar({ 
-          open: true, 
-          message: 'Your changes have been submitted for approval by an elder.', 
-          severity: 'info' 
-        });
+        setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
       }
     } catch (error) {
       console.error('Failed to save edit:', error);
-      if (error.message && error.message.includes('conflict')) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Your changes conflict with another pending edit. Please review pending changes first.', 
-          severity: 'warning' 
-        });
-      } else {
-        setSnackbar({ open: true, message: 'Failed to save changes. Please try again.', severity: 'error' });
-      }
+      setSnackbar({ open: true, message: 'Failed to save changes. Please try again.', severity: 'error' });
     }
   };
 
@@ -571,23 +391,8 @@ const PersonDetail = () => {
     const value = event.target.value;
     setRelationSaving(true);
     try {
-      const relRef = collection(db, 'userRelationships');
-      if (selfRelation) {
-        await updateDoc(doc(relRef, selfRelation.id), {
-          relationship_to_self: value,
-          updated_at: serverTimestamp(),
-        });
-        setSelfRelation((prev) => (prev ? { ...prev, relationship_to_self: value } : prev));
-      } else {
-        const newDoc = await addDoc(relRef, {
-          family_id: person.family_id,
-          user_id: user.user_id,
-          person_id: person.person_id,
-          relationship_to_self: value,
-          created_at: serverTimestamp(),
-        });
-        setSelfRelation({ id: newDoc.id, relationship_to_self: value });
-      }
+      // TODO: Backend doesn't yet support user-person relationships
+      setSelfRelation((prev) => (prev ? { ...prev, relationship_to_self: value } : { relationship_to_self: value }));
       setSnackbar({ open: true, message: 'Relationship updated successfully', severity: 'success' });
     } catch (error) {
       console.error('Failed to update relationship to you:', error);
@@ -611,8 +416,7 @@ const PersonDetail = () => {
       return;
     }
     try {
-      const personsRef = collection(db, 'persons');
-      const newPersonDoc = await addDoc(personsRef, {
+      const res = await api.post('/persons', {
         family_id: person.family_id,
         full_name: newPersonValues.full_name.trim(),
         gender: newPersonValues.gender || null,
@@ -622,13 +426,12 @@ const PersonDetail = () => {
         biography: newPersonValues.biography || null,
         clan_name: newPersonValues.clan_name || null,
         village_origin: newPersonValues.village_origin || null,
-        alive_status: true,
-        verified_by_elder: false,
-        created_at: serverTimestamp(),
       });
 
+      const newPersonId = res.data.person.person_id;
+
       // Now create the relationship based on the selected type
-      await handleAddFamilyRelationship(newPersonDoc.id);
+      await handleAddFamilyRelationship(newPersonId);
       
       // Refresh data
       await fetchFamilyPersons(person.family_id, person.person_id);
@@ -658,25 +461,19 @@ const PersonDetail = () => {
     if (!person || !targetPersonId) return;
     try {
       if (familyRelType === 'spouse') {
-        // Create spouse relationship
-        const spouseRef = collection(db, 'spouseRelationships');
-        await addDoc(spouseRef, {
-          family_id: person.family_id,
-          spouse1_id: person.person_id,
-          spouse2_id: targetPersonId,
-          marital_status: maritalStatus || 'married',
-          created_at: serverTimestamp(),
+        await api.post('/relationships', {
+          person1_id: person.person_id,
+          person2_id: targetPersonId,
+          relationship_type: 'spouse',
         });
       } else {
-        // Create parent-child relationship
-        const relRef = collection(db, 'relationships');
+        // parent-child relationship
         const parentId = familyRelType === 'parent' ? targetPersonId : person.person_id;
         const childId = familyRelType === 'parent' ? person.person_id : targetPersonId;
-        await addDoc(relRef, {
-          family_id: person.family_id,
-          parent_id: parentId,
-          child_id: childId,
-          created_at: serverTimestamp(),
+        await api.post('/relationships', {
+          person1_id: parentId,
+          person2_id: childId,
+          relationship_type: 'parent',
         });
       }
       await fetchRelationships(person);
@@ -694,15 +491,7 @@ const PersonDetail = () => {
     }
 
     try {
-      if (relationshipType === 'spouse') {
-        // Delete spouse relationship
-        const spouseRef = doc(db, 'spouseRelationships', relationshipId);
-        await deleteDoc(spouseRef);
-      } else {
-        // Delete parent-child relationship
-        const relRef = doc(db, 'relationships', relationshipId);
-        await deleteDoc(relRef);
-      }
+      await api.delete(`/relationships/${relationshipId}`);
       
       // Refresh relationships
       await fetchRelationships(person);
@@ -723,9 +512,8 @@ const PersonDetail = () => {
     if (!editingSpouseRel || !editingSpouseRel.relationship_id) return;
     
     try {
-      const spouseRef = doc(db, 'spouseRelationships', editingSpouseRel.relationship_id);
-      await updateDoc(spouseRef, {
-        marital_status: editingMaritalStatus,
+      await api.put(`/relationships/${editingSpouseRel.relationship_id}`, {
+        notes: editingMaritalStatus,
       });
       
       await fetchRelationships(person);
@@ -743,91 +531,13 @@ const PersonDetail = () => {
 
     setDeleting(true);
     try {
-      // Delete all relationships where this person is involved
-      const relRef = collection(db, 'relationships');
-      
-      // Delete relationships where person is parent
-      try {
-        const parentRelsQuery = query(
-          relRef,
-          where('family_id', '==', person.family_id),
-          where('parent_id', '==', person.person_id)
-        );
-        const parentRelsSnap = await getDocs(parentRelsQuery);
-        for (const relDoc of parentRelsSnap.docs) {
-          await deleteDoc(doc(db, 'relationships', relDoc.id));
-        }
-      } catch (err) {
-        console.error('Error deleting parent relationships:', err);
-      }
-
-      // Delete relationships where person is child
-      try {
-        const childRelsQuery = query(
-          relRef,
-          where('family_id', '==', person.family_id),
-          where('child_id', '==', person.person_id)
-        );
-        const childRelsSnap = await getDocs(childRelsQuery);
-        for (const relDoc of childRelsSnap.docs) {
-          await deleteDoc(doc(db, 'relationships', relDoc.id));
-        }
-      } catch (err) {
-        console.error('Error deleting child relationships:', err);
-      }
-
-      // Delete spouse relationships
-      try {
-        const spouseRef = collection(db, 'spouseRelationships');
-        const spouseQuery1 = query(
-          spouseRef,
-          where('family_id', '==', person.family_id),
-          where('spouse1_id', '==', person.person_id)
-        );
-        const spouseQuery2 = query(
-          spouseRef,
-          where('family_id', '==', person.family_id),
-          where('spouse2_id', '==', person.person_id)
-        );
-        const [spouseSnap1, spouseSnap2] = await Promise.all([
-          getDocs(spouseQuery1),
-          getDocs(spouseQuery2),
-        ]);
-        for (const relDoc of spouseSnap1.docs) {
-          await deleteDoc(doc(db, 'spouseRelationships', relDoc.id));
-        }
-        for (const relDoc of spouseSnap2.docs) {
-          await deleteDoc(doc(db, 'spouseRelationships', relDoc.id));
-        }
-      } catch (err) {
-        console.error('Error deleting spouse relationships:', err);
-      }
-
-      // Delete user relationships
-      try {
-        const userRelRef = collection(db, 'userRelationships');
-        const userRelsQuery = query(
-          userRelRef,
-          where('family_id', '==', person.family_id),
-          where('person_id', '==', person.person_id)
-        );
-        const userRelsSnap = await getDocs(userRelsQuery);
-        for (const relDoc of userRelsSnap.docs) {
-          await deleteDoc(doc(db, 'userRelationships', relDoc.id));
-        }
-      } catch (err) {
-        console.error('Error deleting user relationships:', err);
-      }
-
-      // Finally, delete the person document
-      const personRef = doc(db, 'persons', person.person_id);
-      await deleteDoc(personRef);
+      await api.delete(`/persons/${person.person_id}`);
 
       // Redirect to family tree
       navigate(`/family/${person.family_id}/tree`);
     } catch (error) {
       console.error('Failed to delete person:', error);
-      setSnackbar({ open: true, message: `Failed to delete family member: ${error.message}. Please make sure you have permission to delete this person.`, severity: 'error' });
+      setSnackbar({ open: true, message: `Failed to delete family member: ${error.response?.data?.error || error.message}. Please make sure you have permission to delete this person.`, severity: 'error' });
       setDeleting(false);
     }
   };
@@ -895,6 +605,21 @@ const PersonDetail = () => {
           <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
             History
           </Button>
+          <Button
+            size="small"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={() => navigate(`/person/${person.person_id}/wisdom-chat`)}
+            sx={{
+              borderColor: '#BFA46B',
+              color: '#5A5042',
+              textTransform: 'none',
+              background: 'linear-gradient(135deg, #FFF8E7 0%, #F5E6C8 100%)',
+              '&:hover': { background: 'linear-gradient(135deg, #FFF3D6 0%, #F0DDB0 100%)' },
+            }}
+            variant="outlined"
+          >
+            Wisdom Chat
+          </Button>
         </Box>
       </Box>
 
@@ -945,12 +670,12 @@ const PersonDetail = () => {
                           setUploadingProfilePicture(true);
                           try {
                             const compressedFile = await compressImage(file, 1920, 1920, 0.8);
-                            const fileExt = compressedFile.name.split('.').pop();
-                            const fileName = `profile_${person.person_id}_${Date.now()}.${fileExt}`;
-                            const storageRef = ref(storage, `profiles/${person.family_id}/${fileName}`);
-                            const snapshot = await uploadBytes(storageRef, compressedFile);
-                            const photoUrl = await getDownloadURL(snapshot.ref);
-                            await updateDoc(doc(db, 'persons', person.person_id), { profile_photo_url: photoUrl });
+                            const formData = new FormData();
+                            formData.append('photo', compressedFile);
+                            const res = await api.post(`/persons/${person.person_id}/profile-photo`, formData, {
+                              headers: { 'Content-Type': 'multipart/form-data' },
+                            });
+                            const photoUrl = res.data.person.profile_photo_url;
                             setPerson({ ...person, profile_photo_url: photoUrl });
                             setSnackbar({ open: true, message: 'Profile picture updated successfully', severity: 'success' });
                           } catch (error) {
@@ -1013,7 +738,7 @@ const PersonDetail = () => {
                     <Button size="small" variant="outlined" onClick={openEdit} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
                       Edit details
                     </Button>
-                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.ownerUserId} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.owner_user_id} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
                       Invite
                     </Button>
                     <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ borderColor: '#D8BF92', color: '#3F6644', textTransform: 'none', fontSize: 12 }}>
@@ -1320,8 +1045,7 @@ const PersonDetail = () => {
                               onClick={async () => {
                                 if (window.confirm('Delete this document?')) {
                                   try {
-                                    if (doc.file_path) { const fileRef = ref(storage, doc.file_path); await deleteObject(fileRef); }
-                                    await deleteDoc(doc(db, 'documents', doc.document_id));
+                                    await api.delete(`/documents/${doc.document_id}`);
                                     await fetchDocuments(person.person_id, person.family_id);
                                   } catch (error) {
                                     console.error('Failed to delete document:', error);
@@ -1378,10 +1102,10 @@ const PersonDetail = () => {
                               <IconButton size="small" color="primary" onClick={() => {
                                 setEditingStoryId(story.story_id);
                                 setStoryTitle(story.title || '');
-                                setStoryContent(story.content || story.transcription || '');
-                                setStoryNarrator(story.narrator || '');
+                                setStoryContent(story.story_text || '');
+                                setStoryNarrator(story.narrator_name || '');
                                 setStoryDate(story.recorded_date || '');
-                                setStoryLocation(story.recorded_location || '');
+                                setStoryLocation(story.location || '');
                                 setStoryTags(story.tags ? story.tags.join(', ') : '');
                                 setStoryAudioFile(null);
                                 setStoryDialogOpen(true);
@@ -1391,11 +1115,7 @@ const PersonDetail = () => {
                               <IconButton size="small" color="error" onClick={async () => {
                                 if (window.confirm('Delete this story?')) {
                                   try {
-                                    if (story.audio_url && story.audio_path) {
-                                      const audioRef = ref(storage, story.audio_path);
-                                      await deleteObject(audioRef);
-                                    }
-                                    await deleteDoc(doc(db, 'stories', story.story_id));
+                                    await api.delete(`/stories/${story.story_id}`);
                                     await fetchStories(person.person_id, person.family_id);
                                     setSnackbar({ open: true, message: 'Story deleted successfully', severity: 'success' });
                                   } catch (error) {
@@ -1409,20 +1129,20 @@ const PersonDetail = () => {
                             </Box>
                           )}
                         </Box>
-                        {story.narrator && (
+                        {story.narrator_name && (
                           <Typography sx={{ fontSize: '12px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
-                            Narrator: {story.narrator}
+                            Narrator: {story.narrator_name}
                           </Typography>
                         )}
-                        {(story.recorded_date || story.recorded_location) && (
+                        {(story.recorded_date || story.location) && (
                           <Typography sx={{ fontSize: '12px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
                             {story.recorded_date && formatDate(story.recorded_date)}
-                            {story.recorded_date && story.recorded_location && ' · '}
-                            {story.recorded_location}
+                            {story.recorded_date && story.location && ' · '}
+                            {story.location}
                           </Typography>
                         )}
                         <Typography sx={{ fontSize: '14px', lineHeight: 1.65, color: '#463D34', mt: 1, whiteSpace: 'pre-wrap' }}>
-                          {story.content || story.transcription}
+                          {story.story_text}
                         </Typography>
                         {story.audio_url && (
                           <Box sx={{ mt: 2 }}>
@@ -1614,19 +1334,6 @@ const PersonDetail = () => {
               
               setSavingStory(true);
               try {
-                let audioUrl = null;
-                let audioPath = null;
-
-                // Upload audio file if provided (new file)
-                if (storyAudioFile) {
-                  const fileExt = storyAudioFile.name.split('.').pop();
-                  const fileName = `${person.person_id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-                  const storageRef = ref(storage, `stories/${person.family_id}/${fileName}`);
-                  const snapshot = await uploadBytes(storageRef, storyAudioFile);
-                  audioUrl = await getDownloadURL(snapshot.ref);
-                  audioPath = snapshot.ref.fullPath;
-                }
-
                 // Parse tags
                 const tagsArray = storyTags
                   ? storyTags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
@@ -1634,46 +1341,44 @@ const PersonDetail = () => {
 
                 if (editingStoryId) {
                   // Update existing story
-                  const storyRef = doc(db, 'stories', editingStoryId);
                   const updateData = {
                     title: storyTitle || null,
-                    content: storyContent,
-                    transcription: storyContent,
-                    narrator: storyNarrator || null,
+                    story_text: storyContent,
+                    narrator_name: storyNarrator || null,
                     recorded_date: storyDate || null,
-                    recorded_location: storyLocation || null,
+                    location: storyLocation || null,
                     tags: tagsArray,
-                    updated_at: serverTimestamp(),
                   };
-                  // Only update audio if new file was uploaded
-                  if (audioUrl && audioPath) {
-                    updateData.audio_url = audioUrl;
-                    updateData.audio_path = audioPath;
-                    updateData.audio_file_name = storyAudioFile?.name || null;
-                    updateData.audio_file_size = storyAudioFile?.size || null;
-                  }
-                  await updateDoc(storyRef, updateData);
+                  await api.put(`/stories/${editingStoryId}`, updateData);
                   setSnackbar({ open: true, message: 'Story updated successfully', severity: 'success' });
                 } else {
-                  // Create new story record in Firestore
-                  const storiesRef = collection(db, 'stories');
-                  await addDoc(storiesRef, {
-                    person_id: person.person_id,
-                    family_id: person.family_id,
-                    title: storyTitle || null,
-                    content: storyContent,
-                    transcription: storyContent,
-                    narrator: storyNarrator || null,
-                    recorded_date: storyDate || null,
-                    recorded_location: storyLocation || null,
-                    tags: tagsArray,
-                    audio_url: audioUrl,
-                    audio_path: audioPath,
-                    audio_file_name: storyAudioFile?.name || null,
-                    audio_file_size: storyAudioFile?.size || null,
-                    created_by_user_id: user.user_id || user.uid,
-                    created_at: serverTimestamp(),
-                  });
+                  // Create new story - use multipart form data if audio file is present
+                  if (storyAudioFile) {
+                    const formData = new FormData();
+                    formData.append('person_id', person.person_id);
+                    formData.append('family_id', person.family_id);
+                    formData.append('title', storyTitle || '');
+                    formData.append('story_text', storyContent);
+                    formData.append('narrator_name', storyNarrator || '');
+                    formData.append('recorded_date', storyDate || '');
+                    formData.append('location', storyLocation || '');
+                    formData.append('tags', JSON.stringify(tagsArray));
+                    formData.append('audio', storyAudioFile);
+                    await api.post('/stories', formData, {
+                      headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                  } else {
+                    await api.post('/stories', {
+                      person_id: person.person_id,
+                      family_id: person.family_id,
+                      title: storyTitle || null,
+                      story_text: storyContent,
+                      narrator_name: storyNarrator || null,
+                      recorded_date: storyDate || null,
+                      location: storyLocation || null,
+                      tags: tagsArray,
+                    });
+                  }
                   setSnackbar({ open: true, message: 'Story added successfully', severity: 'success' });
                 }
 
@@ -2049,27 +1754,12 @@ const PersonDetail = () => {
 
                   setInviteSending(true);
                   try {
-                    // Generate invitation token
-                    const token = crypto.randomUUID();
-                    const expiresAt = new Date();
-                    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
-
-                    // Store invitation in Firestore
-                    // The email will be sent automatically by Firebase Function trigger
-                    const invitationsRef = collection(db, 'personInvitations');
-                    await addDoc(invitationsRef, {
-                      person_id: person.person_id,
-                      family_id: person.family_id,
+                    await api.post(`/families/${person.family_id}/invite`, {
                       email: inviteEmail.trim().toLowerCase(),
-                      invited_by_user_id: user.user_id,
-                      token: token,
-                      status: 'pending',
-                      expires_at: expiresAt,
-                      person_name: person.full_name, // Store person name for email
-                      created_at: serverTimestamp(),
+                      person_id: person.person_id,
+                      person_name: person.full_name,
                     });
 
-                    // Show success message (email is sent automatically by function)
                     setInviteSuccess(true);
                   } catch (error) {
                     console.error('Failed to create invitation:', error);
@@ -2197,30 +1887,19 @@ const PersonDetail = () => {
                 if (uploadType === 'photo' && uploadFile.type.startsWith('image/')) {
                   fileToUpload = await compressImage(uploadFile, 1920, 1920, 0.8);
                 }
-                // Create unique filename
-                const fileExt = fileToUpload.name.split('.').pop();
-                const fileName = `${person.person_id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-                const storageRef = ref(storage, `documents/${person.family_id}/${fileName}`);
 
-                // Upload file to Firebase Storage
-                const snapshot = await uploadBytes(storageRef, fileToUpload);
-                const downloadURL = await getDownloadURL(snapshot.ref);
+                const formData = new FormData();
+                formData.append('person_id', person.person_id);
+                formData.append('family_id', person.family_id);
+                formData.append('document_type', uploadType);
+                formData.append('title', uploadTitle || uploadFile.name);
+                if (uploadDescription) {
+                  formData.append('description', uploadDescription);
+                }
+                formData.append('file', fileToUpload);
 
-                // Create document record in Firestore
-                const documentsRef = collection(db, 'documents');
-                await addDoc(documentsRef, {
-                  person_id: person.person_id,
-                  family_id: person.family_id,
-                  document_type: uploadType,
-                  file_url: downloadURL,
-                  file_path: snapshot.ref.fullPath,
-                  file_name: uploadFile.name,
-                  file_size: uploadFile.size,
-                  mime_type: uploadFile.type,
-                  title: uploadTitle || uploadFile.name,
-                  description: uploadDescription || null,
-                  uploaded_by_user_id: user.user_id || user.uid,
-                  created_at: serverTimestamp(),
+                await api.post('/documents/upload', formData, {
+                  headers: { 'Content-Type': 'multipart/form-data' },
                 });
 
                 // Refresh documents

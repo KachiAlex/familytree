@@ -7,8 +7,7 @@ import TimelineConnector from '@mui/lab/TimelineConnector';
 import TimelineContent from '@mui/lab/TimelineContent';
 import TimelineDot from '@mui/lab/TimelineDot';
 import { format } from 'date-fns';
-import { db } from '../../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import api from '../../services/api';
 
 const TimelineView = ({ familyId }) => {
   const [timelineData, setTimelineData] = useState([]);
@@ -22,14 +21,12 @@ const TimelineView = ({ familyId }) => {
 
     try {
       // Fetch all persons in the family
-      const personsRef = collection(db, 'persons');
-      const personsQuery = query(personsRef, where('family_id', '==', familyId));
-      const personsSnap = await getDocs(personsQuery);
+      const res = await api.get(`/persons/family/${familyId}`);
+      const persons = res.data.persons || [];
 
       const events = [];
 
-      personsSnap.docs.forEach((docSnap) => {
-        const person = { person_id: docSnap.id, ...docSnap.data() };
+      persons.forEach((person) => {
 
         // Add birth event
         if (person.date_of_birth) {

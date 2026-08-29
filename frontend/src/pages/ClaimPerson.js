@@ -14,25 +14,13 @@ import {
   TextField,
 } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
-import { db, auth } from '../firebase';
+import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
 
 const ClaimPerson = () => {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading: authLoading, login } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, login, register, setUser } = useAuth();
   const [invitation, setInvitation] = useState(null);
   const [person, setPerson] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -63,81 +51,48 @@ const ClaimPerson = () => {
       }
 
       // Fetch invitation by token
-      const invitationsRef = collection(db, 'personInvitations');
-      const q = query(invitationsRef, where('token', '==', token));
-      
-      let snapshot;
+      let inviteRes;
       try {
-        snapshot = await getDocs(q);
+        inviteRes = await api.get(`/families/invite/${token}`);
       } catch (queryError) {
-        console.error('Firestore query error:', queryError);
-        // Check if it's an index error
-        if (queryError.code === 'failed-precondition') {
-          setError('Database index required. Please contact support or try again later.');
-        } else {
-          setError('Failed to load invitation. Please check your internet connection and try again.');
-        }
+        console.error('API query error:', queryError);
+        setError('Failed to load invitation. Please check your internet connection and try again.');
         setLoading(false);
         return;
       }
 
-      if (snapshot.empty) {
-        setError('Invalid or expired invitation link. Please check the link or request a new invitation.');
-        setLoading(false);
-        return;
-      }
+      const invitationData = inviteRes.data.invitation;
 
-      const invitationData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-      
-      // Validate invitation data
       if (!invitationData.person_id || !invitationData.family_id) {
         setError('Invalid invitation data. Please request a new invitation.');
         setLoading(false);
         return;
       }
-      
+
       setInvitation(invitationData);
 
-      // Check if invitation is expired
-      if (invitationData.expires_at) {
-        const expiresAt = invitationData.expires_at.toDate();
-        if (expiresAt < new Date()) {
-          setError('This invitation has expired. Please request a new invitation.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Check if already claimed
-      if (invitationData.status === 'accepted') {
-        setError('This invitation has already been claimed.');
-        setLoading(false);
-        return;
-      }
-
       // Fetch person details
-      let personSnap;
+      let personRes;
       try {
-        const personRef = doc(db, 'persons', invitationData.person_id);
-        personSnap = await getDoc(personRef);
+        personRes = await api.get(`/persons/${invitationData.person_id}`);
       } catch (personError) {
         console.error('Error fetching person:', personError);
         setError('Failed to load person information. Please try again.');
         setLoading(false);
         return;
       }
-      
-      if (!personSnap.exists()) {
+
+      const personData = personRes.data.person;
+      if (!personData) {
         setError('Person profile not found. The profile may have been deleted.');
         setLoading(false);
         return;
       }
 
-      const personData = { person_id: personSnap.id, ...personSnap.data() };
       setPerson(personData);
 
       // Check if person already has an owner
-      if (personData.ownerUserId) {
+      if (personData.owner_user_id) {
         setError('This person profile has already been claimed by another user.');
         setLoading(false);
         return;
@@ -166,17 +121,11 @@ const ClaimPerson = () => {
       const result = await login(invitation.email, password);
       
       if (result.success) {
-        // User is now logged in
-        // Wait a moment for auth state to update, then claim
         setTimeout(() => {
           handleClaim();
         }, 500);
       } else {
-        // Check if user doesn't exist - show signup option
-        if (result.error?.includes('user-not-found') || result.error?.includes('auth/user-not-found')) {
-          setError('No account found with this email. Please create an account below.');
-          setIsNewUser(true);
-        } else if (result.error?.includes('wrong-password') || result.error?.includes('invalid-credential')) {
+        if (result.error?.includes('Invalid credentials') || result.error?.includes('password')) {
           setError('Invalid password. Please try again.');
         } else {
           setError(result.error || 'Invalid password. Please try again.');
@@ -184,12 +133,7 @@ const ClaimPerson = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
-      if (err.code === 'auth/user-not-found') {
-        setError('No account found with this email. Please create an account below.');
-        setIsNewUser(true);
-      } else {
-        setError(err.message || 'Failed to log in. Please try again.');
-      }
+      setError(err.message || 'Failed to log in. Please try again.');
     } finally {
       setAuthenticating(false);
     }
@@ -207,61 +151,25 @@ const ClaimPerson = () => {
     setAuthenticating(true);
 
     try {
-      // Use person's name as default, or the entered full name
       const nameToUse = fullName || person?.full_name || '';
       
-      // Step 1: Create Firebase Auth user
-      const credential = await createUserWithEmailAndPassword(auth, invitation.email, password);
-      const firebaseUser = credential.user;
+      // Register as invited user via backend API
+      const res = await api.post('/auth/register/invited', {
+        email: invitation.email,
+        password,
+        full_name: nameToUse,
+        invitation_token: token,
+      });
 
-      // Step 2: Update display name
-      if (nameToUse) {
-        await updateProfile(firebaseUser, { displayName: nameToUse });
+      if (res.data.token) {
+        localStorage.setItem('token', res.data.token);
+        // Update auth context with new user
+        setUser(res.data.user);
       }
 
-      // Step 3: Create user profile in Firestore
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      await setDoc(userRef, {
-        email: invitation.email,
-        full_name: nameToUse,
-        phone: null,
-        role: 'member',
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-      });
+      // Claim the person profile
+      await api.post(`/persons/${person.person_id}/claim`);
 
-      // Step 4: Join the existing family FIRST (before claiming)
-      // This is critical - user must be a family member to claim the profile
-      const existingFamilyId = invitation.family_id;
-      const membershipRef = doc(db, 'familyMembers', `${existingFamilyId}_${firebaseUser.uid}`);
-      await setDoc(membershipRef, {
-        family_id: existingFamilyId,
-        user_id: firebaseUser.uid,
-        role: 'member',
-        invited_by: invitation.invited_by_user_id || null,
-        status: 'active',
-        joined_at: serverTimestamp(),
-        created_at: serverTimestamp(),
-      });
-
-      // Step 5: Wait a moment for Firestore to propagate the membership
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Step 6: Now claim the profile (user is now a family member)
-      const invitationRef = doc(db, 'personInvitations', invitation.id);
-      await updateDoc(invitationRef, {
-        status: 'accepted',
-        claimed_at: serverTimestamp(),
-        claimed_by_user_id: firebaseUser.uid,
-      });
-
-      const personRef = doc(db, 'persons', person.person_id);
-      await updateDoc(personRef, {
-        ownerUserId: firebaseUser.uid,
-        claimed_at: serverTimestamp(),
-      });
-
-      // Success - redirect to profile
       setSuccess(true);
       setTimeout(() => {
         navigate(`/person/${person.person_id}`);
@@ -270,11 +178,11 @@ const ClaimPerson = () => {
       setAuthenticating(false);
     } catch (err) {
       console.error('Registration error:', err);
-      if (err.code === 'auth/email-already-in-use') {
+      if (err.response?.data?.error?.includes('already')) {
         setError('An account with this email already exists. Please log in instead.');
         setIsNewUser(false);
       } else {
-        setError(err.message || 'Failed to create account. Please try again.');
+        setError(err.response?.data?.error || err.message || 'Failed to create account. Please try again.');
       }
       setAuthenticating(false);
     }
@@ -305,31 +213,27 @@ const ClaimPerson = () => {
     setError('');
 
     try {
-      // Update invitation status
-      const invitationRef = doc(db, 'personInvitations', invitation.id);
-      await updateDoc(invitationRef, {
-        status: 'accepted',
-        claimed_at: serverTimestamp(),
-        claimed_by_user_id: user.user_id || user.uid || user.email,
-      });
+      // Accept the family invitation
+      try {
+        await api.post(`/families/invite/accept/${token}`);
+      } catch (acceptErr) {
+        console.error('Failed to accept invitation:', acceptErr);
+      }
 
-      // Update person with owner
-      const personRef = doc(db, 'persons', person.person_id);
-      await updateDoc(personRef, {
-        ownerUserId: user.user_id || user.uid || user.email,
-        claimed_at: serverTimestamp(),
-      });
+      // Claim the person profile
+      await api.post(`/persons/${person.person_id}/claim`);
 
       setSuccess(true);
       
-      // Redirect to person detail page after 2 seconds
       setTimeout(() => {
         navigate(`/person/${person.person_id}`);
       }, 2000);
     } catch (err) {
       console.error('Failed to claim person:', err);
-      if (err.code === 'permission-denied') {
+      if (err.response?.status === 403) {
         setError('Permission denied. Please ensure you are logged in with the correct email address.');
+      } else if (err.response?.status === 400) {
+        setError('This person profile has already been claimed.');
       } else {
         setError('Failed to claim profile. Please try again.');
       }

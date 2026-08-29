@@ -15,17 +15,9 @@ import {
   Autocomplete,
 } from '@mui/material';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
-import { db } from '../firebase';
+import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { isProfileComplete } from '../utils/profileUtils';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-} from 'firebase/firestore';
 
 const AddPerson = () => {
   const { familyId } = useParams();
@@ -67,21 +59,19 @@ const AddPerson = () => {
   useEffect(() => {
     const fetchCommonValues = async () => {
       try {
-        const personsRef = collection(db, 'persons');
-        const personsQuery = query(personsRef, where('family_id', '==', familyId));
-        const snap = await getDocs(personsQuery);
+        const res = await api.get(`/persons/family/${familyId}`);
+        const persons = res.data.persons || [];
         
         const clans = new Set();
         const villages = new Set();
         const places = new Set();
         const occupations = new Set();
 
-        snap.docs.forEach((doc) => {
-          const data = doc.data();
-          if (data.clan_name) clans.add(data.clan_name);
-          if (data.village_origin) villages.add(data.village_origin);
-          if (data.place_of_birth) places.add(data.place_of_birth);
-          if (data.occupation) occupations.add(data.occupation);
+        persons.forEach((p) => {
+          if (p.clan_name) clans.add(p.clan_name);
+          if (p.village_origin) villages.add(p.village_origin);
+          if (p.place_of_birth) places.add(p.place_of_birth);
+          if (p.occupation) occupations.add(p.occupation);
         });
 
         setCommonValues({
@@ -114,16 +104,14 @@ const AddPerson = () => {
     setLoading(true);
 
     try {
-      const personsRef = collection(db, 'persons');
-      const docRef = await addDoc(personsRef, {
+      const res = await api.post('/persons', {
         ...formData,
-        family_id: familyId,
+        family_id: parseInt(familyId),
         date_of_birth: formData.date_of_birth || null,
         date_of_death: formData.date_of_death || null,
-        created_at: serverTimestamp(),
       });
 
-      navigate(`/person/${docRef.id}`);
+      navigate(`/person/${res.data.person.person_id}`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create person');
     } finally {

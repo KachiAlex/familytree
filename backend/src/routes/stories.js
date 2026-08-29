@@ -129,7 +129,7 @@ router.put('/:storyId', async (req, res) => {
 
     const allowedFields = [
       'title', 'story_text', 'narrator_name', 'narrator_relationship',
-      'recorded_date', 'location', 'tags', 'transcription'
+      'recorded_date', 'location', 'tags'
     ];
 
     const updateFields = [];

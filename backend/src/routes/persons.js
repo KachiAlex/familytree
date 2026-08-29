@@ -3,8 +3,21 @@ const { pool } = require('../db/connection');
 const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
 const { checkResourceLimit } = require('../middleware/tierLimits');
 const { body, validationResult } = require('express-validator');
+const multer = require('multer');
+const AWS = require('aws-sdk');
 
 const router = express.Router();
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION || 'us-east-1'
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -47,11 +60,9 @@ router.get('/:personId', async (req, res) => {
 
     // Get relationships
     const relationshipsResult = await pool.query(
-      `SELECT r.*, 
-              CASE 
-                WHEN r.person1_id = $1 THEN p2.*
-                ELSE p1.*
-              END as related_person
+      `SELECT r.*,
+              row_to_json(p1.*) as person1_data,
+              row_to_json(p2.*) as person2_data
        FROM relationships r
        JOIN persons p1 ON r.person1_id = p1.person_id
        JOIN persons p2 ON r.person2_id = p2.person_id
@@ -149,7 +160,7 @@ router.put('/:personId', requireFamilyAccess, async (req, res) => {
       'full_name', 'gender', 'date_of_birth', 'date_of_death',
       'alive_status', 'profile_photo_url', 'place_of_birth',
       'occupation', 'biography', 'clan_name', 'village_origin',
-      'migration_history', 'verified_by_elder'
+      'migration_history', 'verified_by_elder', 'verified_by_user_id'
     ];
 
     const updateFields = [];
@@ -215,6 +226,82 @@ router.delete('/:personId', requireFamilyAccess, async (req, res) => {
   } catch (error) {
     console.error('Error deleting person:', error);
     res.status(500).json({ error: 'Failed to delete person' });
+  }
+});
+
+// Claim a person profile (set owner_user_id)
+router.post('/:personId/claim', async (req, res) => {
+  try {
+    const { personId } = req.params;
+
+    // Check if person exists and doesn't already have an owner
+    const personResult = await pool.query('SELECT * FROM persons WHERE person_id = $1', [personId]);
+    if (personResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+
+    if (personResult.rows[0].owner_user_id) {
+      return res.status(400).json({ error: 'This person profile has already been claimed' });
+    }
+
+    // Set the owner
+    const result = await pool.query(
+      'UPDATE persons SET owner_user_id = $1, updated_at = CURRENT_TIMESTAMP WHERE person_id = $2 RETURNING *',
+      [req.user.user_id, personId]
+    );
+
+    res.json({
+      message: 'Person profile claimed successfully',
+      person: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error claiming person:', error);
+    res.status(500).json({ error: 'Failed to claim person profile' });
+  }
+});
+
+// Upload profile photo
+router.post('/:personId/profile-photo', upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { personId } = req.params;
+
+    // Get person's family_id
+    const personResult = await pool.query('SELECT family_id FROM persons WHERE person_id = $1', [personId]);
+    if (personResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+
+    const familyId = personResult.rows[0].family_id;
+
+    // Upload to S3
+    const fileKey = `profiles/${familyId}/${Date.now()}-${req.file.originalname}`;
+    const uploadParams = {
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: fileKey,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+      ACL: 'public-read'
+    };
+
+    const s3Result = await s3.upload(uploadParams).promise();
+
+    // Update person's profile_photo_url
+    const result = await pool.query(
+      'UPDATE persons SET profile_photo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE person_id = $2 RETURNING *',
+      [s3Result.Location, personId]
+    );
+
+    res.json({
+      message: 'Profile photo uploaded successfully',
+      person: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error uploading profile photo:', error);
+    res.status(500).json({ error: 'Failed to upload profile photo' });
   }
 });
 

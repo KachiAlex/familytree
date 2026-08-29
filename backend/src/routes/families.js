@@ -6,6 +6,41 @@ const { getTierLimits } = require('../config/tiers');
 const crypto = require('crypto');
 
 const router = express.Router();
+
+// Get invitation by token (public lookup for claim page - no auth required)
+router.get('/invite/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const inviteResult = await pool.query(
+      `SELECT i.*, f.family_name 
+       FROM invitations i 
+       JOIN families f ON i.family_id = f.family_id 
+       WHERE i.token = $1`,
+      [token]
+    );
+
+    if (inviteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid invitation link' });
+    }
+
+    const invitation = inviteResult.rows[0];
+
+    if (invitation.status === 'accepted') {
+      return res.status(400).json({ error: 'This invitation has already been claimed' });
+    }
+
+    if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'This invitation has expired' });
+    }
+
+    res.json({ invitation });
+  } catch (error) {
+    console.error('Error fetching invitation:', error);
+    res.status(500).json({ error: 'Failed to fetch invitation' });
+  }
+});
+
 router.use(authenticateToken);
 
 // Create family (additional families - also get free tier)
@@ -134,17 +169,20 @@ router.get('/:familyId', getFamilyUsageInfo, async (req, res) => {
 router.post('/:familyId/invite', checkResourceLimit('member'), async (req, res) => {
   try {
     const { familyId } = req.params;
-    const { email, phone, role = 'member' } = req.body;
+    const { email, phone, role = 'member', person_id } = req.body;
 
-    // Check if user is admin
+    // Check if user is a member of this family
     const memberCheck = await pool.query(
       'SELECT role FROM family_members WHERE family_id = $1 AND user_id = $2',
       [familyId, req.user.user_id]
     );
 
-    if (memberCheck.rows.length === 0 || memberCheck.rows[0].role !== 'admin') {
-      return res.status(403).json({ error: 'Only admins can invite members' });
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
     }
+
+    // Only admins can invite with custom roles; members can invite for person claiming
+    const inviteRole = memberCheck.rows[0].role === 'admin' ? role : 'member';
 
     // Generate invitation token
     const token = crypto.randomBytes(32).toString('hex');
@@ -152,9 +190,9 @@ router.post('/:familyId/invite', checkResourceLimit('member'), async (req, res) 
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
     await pool.query(
-      `INSERT INTO invitations (family_id, email, phone, invited_by_user_id, token, role, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [familyId, email, phone || null, req.user.user_id, token, role, expiresAt]
+      `INSERT INTO invitations (family_id, person_id, email, phone, invited_by_user_id, token, role, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [familyId, person_id || null, email, phone || null, req.user.user_id, token, inviteRole, expiresAt]
     );
 
     // TODO: Send invitation email/SMS
@@ -203,6 +241,49 @@ router.post('/invite/accept/:token', async (req, res) => {
   } catch (error) {
     console.error('Error accepting invitation:', error);
     res.status(500).json({ error: 'Failed to accept invitation' });
+  }
+});
+
+// Delete family (admin only)
+router.delete('/:familyId', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { familyId } = req.params;
+
+    // Check if user is admin of this family
+    const memberCheck = await pool.query(
+      'SELECT role FROM family_members WHERE family_id = $1 AND user_id = $2',
+      [familyId, req.user.user_id]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (memberCheck.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can delete a family' });
+    }
+
+    await client.query('BEGIN');
+
+    // Delete all related data (cascade handles most via FK, but explicit for safety)
+    await client.query('DELETE FROM documents WHERE family_id = $1', [familyId]);
+    await client.query('DELETE FROM stories WHERE family_id = $1', [familyId]);
+    await client.query('DELETE FROM relationships WHERE person1_id IN (SELECT person_id FROM persons WHERE family_id = $1)', [familyId]);
+    await client.query('DELETE FROM persons WHERE family_id = $1', [familyId]);
+    await client.query('DELETE FROM invitations WHERE family_id = $1', [familyId]);
+    await client.query('DELETE FROM family_members WHERE family_id = $1', [familyId]);
+    await client.query('DELETE FROM families WHERE family_id = $1', [familyId]);
+
+    await client.query('COMMIT');
+
+    res.json({ message: 'Family deleted successfully' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting family:', error);
+    res.status(500).json({ error: 'Failed to delete family' });
+  } finally {
+    client.release();
   }
 });
 

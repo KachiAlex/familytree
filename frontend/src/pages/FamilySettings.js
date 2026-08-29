@@ -21,15 +21,8 @@ import {
   ArrowBack as ArrowBackIcon,
   PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
-import { db } from '../firebase';
+import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import {
-  doc,
-  getDoc,
-  collection,
-  addDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
 
 const FamilySettings = () => {
   const { familyId } = useParams();
@@ -47,14 +40,13 @@ const FamilySettings = () => {
 
   const fetchFamilyDetails = async () => {
     try {
-      const familyRef = doc(db, 'families', familyId);
-      const snap = await getDoc(familyRef);
-      if (!snap.exists()) {
+      const res = await api.get(`/families/${familyId}`);
+      if (res.data.family) {
+        setFamily(res.data.family);
+      } else {
         setFamily(null);
-        return;
       }
-      setFamily({ family_id: snap.id, ...snap.data() });
-      // Members & usage tracking not yet implemented in client-only mode
+      // Members not yet implemented in backend
       setMembers([]);
     } catch (error) {
       console.error('Failed to fetch family details:', error);
@@ -75,28 +67,13 @@ const FamilySettings = () => {
     }
 
     try {
-      // Generate invitation token
-      const token = crypto.randomUUID();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
-
-      // Store invitation in Firestore
-      // The email will be sent automatically by Firebase Function trigger
-      const invitationsRef = collection(db, 'familyInvitations');
-      await addDoc(invitationsRef, {
-        family_id: familyId,
+      await api.post(`/families/${familyId}/invite`, {
         email: inviteEmail.trim().toLowerCase(),
-        invited_by_user_id: user?.user_id || user?.uid || null,
-        token: token,
-        role: 'member',
-        status: 'pending',
-        expires_at: expiresAt,
-        created_at: serverTimestamp(),
       });
 
       setSnackbar({ 
         open: true, 
-        message: `Invitation sent to ${inviteEmail}. The email will be sent automatically.`, 
+        message: `Invitation sent to ${inviteEmail}.`, 
         severity: 'success' 
       });
       setInviteEmail('');

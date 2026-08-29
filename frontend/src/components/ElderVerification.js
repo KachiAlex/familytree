@@ -19,8 +19,7 @@ import {
   Cancel as CancelIcon,
   VerifiedUser as VerifiedUserIcon,
 } from '@mui/icons-material';
-import { db } from '../firebase';
-import { doc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import api from '../services/api';
 
 const ElderVerification = ({ person, open, onClose, onVerify, currentUser }) => {
   const [verificationNotes, setVerificationNotes] = useState('');
@@ -32,33 +31,19 @@ const ElderVerification = ({ person, open, onClose, onVerify, currentUser }) => 
     
     setVerifying(true);
     try {
-      const personRef = doc(db, 'persons', person.person_id);
-      await updateDoc(personRef, {
-        verified_by: currentUser.uid,
-        verified_at: serverTimestamp(),
-        verification_status: 'verified',
-        verification_notes: verificationNotes || null,
-      });
-
-      // Create verification record
-      await addDoc(collection(db, 'verifications'), {
-        person_id: person.person_id,
-        family_id: person.family_id,
-        verified_by: currentUser.uid,
-        verified_at: serverTimestamp(),
-        status: 'verified',
-        notes: verificationNotes || null,
+      await api.put(`/persons/${person.person_id}`, {
+        verified_by_elder: true,
+        verified_by_user_id: currentUser.user_id,
       });
 
       if (onVerify) {
-        onVerify({ ...person, verified_by: currentUser.uid, verification_status: 'verified' });
+        onVerify({ ...person, verified_by_elder: true, verified_by_user_id: currentUser.user_id });
       }
       onClose();
       setVerificationNotes('');
     } catch (error) {
       console.error('Failed to verify person:', error);
-      // Error will be handled by parent component via Snackbar
-      throw error; // Re-throw so parent can handle
+      throw error;
     } finally {
       setVerifying(false);
     }
@@ -69,29 +54,17 @@ const ElderVerification = ({ person, open, onClose, onVerify, currentUser }) => 
     
     setVerifying(true);
     try {
-      const personRef = doc(db, 'persons', person.person_id);
-      await updateDoc(personRef, {
-        verification_status: 'rejected',
-        verification_notes: verificationNotes || null,
-      });
-
-      await addDoc(collection(db, 'verifications'), {
-        person_id: person.person_id,
-        family_id: person.family_id,
-        verified_by: currentUser.uid,
-        verified_at: serverTimestamp(),
-        status: 'rejected',
-        notes: verificationNotes || null,
+      await api.put(`/persons/${person.person_id}`, {
+        verified_by_elder: false,
       });
 
       if (onVerify) {
-        onVerify({ ...person, verification_status: 'rejected' });
+        onVerify({ ...person, verified_by_elder: false });
       }
       onClose();
       setVerificationNotes('');
     } catch (error) {
       console.error('Failed to reject verification:', error);
-      // Error will be handled by parent component via Snackbar
     } finally {
       setVerifying(false);
     }

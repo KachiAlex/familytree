@@ -26,20 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import ThemeToggleButton from '../components/ThemeToggleButton';
-import { db } from '../firebase';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  writeBatch,
-} from 'firebase/firestore';
+import api from '../services/api';
 
 const Dashboard = () => {
   const [families, setFamilies] = useState([]);
@@ -56,13 +43,9 @@ const Dashboard = () => {
 
   const fetchFamilies = useCallback(async (showRetry = false) => {
     try {
-      // Wait for auth to finish loading
-      if (authLoading) {
-        return;
-      }
+      if (authLoading) return;
 
       if (!user) {
-        console.warn('No user available for fetching families');
         setFamilies([]);
         setLoading(false);
         return;
@@ -75,69 +58,12 @@ const Dashboard = () => {
       }
       setError(null);
 
-      const userId = user.user_id || user.userId || user.uid;
-      if (!userId) {
-        console.error('Unable to determine user ID:', user);
-        setError('Unable to determine user. Please try logging out and back in.');
-        setFamilies([]);
-        setLoading(false);
-        setRetrying(false);
-        return;
-      }
-
-      console.log('Fetching families for user:', userId);
-
-      const membershipRef = collection(db, 'familyMembers');
-      const membershipsQuery = query(membershipRef, where('user_id', '==', userId));
-      const membershipSnap = await getDocs(membershipsQuery);
-
-      console.log('Found memberships:', membershipSnap.size);
-
-      if (membershipSnap.empty) {
-        console.log('No memberships found for user');
-        setFamilies([]);
-        setLoading(false);
-        setRetrying(false);
-        return;
-      }
-
-      const membershipMap = new Map();
-      membershipSnap.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.family_id) {
-          membershipMap.set(data.family_id, data.role || 'member');
-        }
-      });
-
-      if (membershipMap.size === 0) {
-        console.log('No valid family IDs found in memberships');
-        setFamilies([]);
-        setLoading(false);
-        setRetrying(false);
-        return;
-      }
-
-      console.log('Fetching family documents for IDs:', Array.from(membershipMap.keys()));
-
-      const familyDocs = await Promise.all(
-        Array.from(membershipMap.keys()).map((familyId) => getDoc(doc(db, 'families', familyId)))
-      );
-
-      const list = familyDocs
-        .filter((snap) => snap.exists())
-        .map((snap) => ({
-          family_id: snap.id,
-          ...snap.data(),
-          user_role: membershipMap.get(snap.id) || 'member',
-        }));
-
-      console.log('Successfully loaded families:', list.length);
-      setFamilies(list);
+      const res = await api.get('/families/my-families');
+      setFamilies(res.data.families || []);
       setError(null);
     } catch (error) {
       console.error('Failed to fetch families:', error);
-      setError(`Failed to load families: ${error.message || 'Unknown error'}. Please try again.`);
-      // Don't clear families on error - keep existing data
+      setError(`Failed to load families: ${error.response?.data?.error || error.message || 'Unknown error'}. Please try again.`);
     } finally {
       setLoading(false);
       setRetrying(false);
@@ -182,7 +108,6 @@ const Dashboard = () => {
   }, [user, authLoading, fetchFamilies]);
 
   const handleCreateFamily = async () => {
-    // Note: Users can create additional families, but first family is created during registration
     const familyName = prompt('Enter family name:');
     if (!familyName) return;
 
@@ -190,45 +115,17 @@ const Dashboard = () => {
     const villageOrigin = prompt('Enter village/town of origin (optional):');
 
     try {
-      const userId = user?.user_id || user?.userId || user?.uid;
-      if (!userId) {
-        setError('Unable to determine user. Please re-login.');
-        return;
-      }
-
-      const familiesRef = collection(db, 'families');
-      const docRef = await addDoc(familiesRef, {
+      const res = await api.post('/families', {
         family_name: familyName,
-        family_name_lower: familyName.toLowerCase(),
-        clan_name: clanName || null,
-        village_origin: villageOrigin || null,
-        subscription_tier: 'free',
-        subscription_status: 'active',
-        max_persons: 50,
-        max_documents: 100,
-        max_storage_mb: 500,
-        max_members: 10,
-        created_by_user_id: userId,
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-      });
-
-      const membershipRef = doc(db, 'familyMembers', `${docRef.id}_${userId}`);
-      await setDoc(membershipRef, {
-        family_id: docRef.id,
-        user_id: userId,
-        role: 'admin',
-        invited_by: userId,
-        status: 'active',
-        joined_at: serverTimestamp(),
-        created_at: serverTimestamp(),
+        clan_name: clanName || undefined,
+        village_origin: villageOrigin || undefined,
       });
 
       await fetchFamilies();
-      navigate(`/family/${docRef.id}/tree`);
+      navigate(`/family/${res.data.family.family_id}/tree`);
     } catch (error) {
       console.error('Failed to create family:', error);
-      setError(`Failed to create family: ${error.message || 'Unknown error'}. Please try again.`);
+      setError(`Failed to create family: ${error.response?.data?.error || error.message || 'Unknown error'}. Please try again.`);
     }
   };
 
@@ -256,63 +153,7 @@ const Dashboard = () => {
 
     setDeleting(true);
     try {
-      const familyId = familyToDelete.family_id;
-      const userId = user?.user_id || user?.userId || user?.uid;
-      
-      // Verify ownership before attempting deletion
-      const familyRef = doc(db, 'families', familyId);
-      const familySnap = await getDoc(familyRef);
-      
-      if (!familySnap.exists()) {
-        throw new Error('Family not found');
-      }
-      
-      const familyData = familySnap.data();
-      if (familyData.created_by_user_id !== userId) {
-        throw new Error('You do not have permission to delete this family. Only the family owner can delete it.');
-      }
-      
-      const BATCH_LIMIT = 500; // Firestore batch limit
-      const allRefs = [];
-
-      // Collect all document references to delete (excluding family document)
-      const collections = [
-        { name: 'persons', query: query(collection(db, 'persons'), where('family_id', '==', familyId)) },
-        { name: 'relationships', query: query(collection(db, 'relationships'), where('family_id', '==', familyId)) },
-        { name: 'spouseRelationships', query: query(collection(db, 'spouseRelationships'), where('family_id', '==', familyId)) },
-        { name: 'familyMembers', query: query(collection(db, 'familyMembers'), where('family_id', '==', familyId)) },
-        { name: 'documents', query: query(collection(db, 'documents'), where('family_id', '==', familyId)) },
-        { name: 'stories', query: query(collection(db, 'stories'), where('family_id', '==', familyId)) },
-        { name: 'verifications', query: query(collection(db, 'verifications'), where('family_id', '==', familyId)) },
-        { name: 'personInvitations', query: query(collection(db, 'personInvitations'), where('family_id', '==', familyId)) },
-      ];
-
-      // Fetch all related documents
-      for (const coll of collections) {
-        try {
-          const snap = await getDocs(coll.query);
-          snap.docs.forEach((docSnap) => {
-            allRefs.push(docSnap.ref);
-          });
-        } catch (error) {
-          console.warn(`Error fetching ${coll.name}:`, error);
-          // Continue with other collections even if one fails
-        }
-      }
-
-      // Delete all related documents in batches first
-      for (let i = 0; i < allRefs.length; i += BATCH_LIMIT) {
-        const batch = writeBatch(db);
-        const batchRefs = allRefs.slice(i, i + BATCH_LIMIT);
-        batchRefs.forEach((ref) => {
-          batch.delete(ref);
-        });
-        await batch.commit();
-      }
-
-      // Delete the family document itself last (separate operation)
-      // This ensures the isFamilyOwner() check can still read the family document
-      await deleteDoc(familyRef);
+      await api.delete(`/families/${familyToDelete.family_id}`);
 
       setSnackbar({ 
         open: true, 
@@ -326,7 +167,7 @@ const Dashboard = () => {
       console.error('Failed to delete family:', error);
       setSnackbar({ 
         open: true, 
-        message: `Failed to delete family: ${error.message || 'Unknown error'}`, 
+        message: `Failed to delete family: ${error.response?.data?.error || error.message || 'Unknown error'}`, 
         severity: 'error' 
       });
     } finally {

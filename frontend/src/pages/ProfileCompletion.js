@@ -14,8 +14,7 @@ import {
   CardContent,
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
-import { doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import api from '../services/api';
 import { isProfileComplete } from '../utils/profileUtils';
 
 const ProfileCompletion = () => {
@@ -47,23 +46,20 @@ const ProfileCompletion = () => {
     // Load current user profile
     const loadProfile = async () => {
       try {
-        const userRef = doc(db, 'users', user.user_id);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) {
-          const userData = snap.data();
-          setFormData({
-            full_name: userData.full_name || '',
-            email: userData.email || '',
-            date_of_birth: userData.date_of_birth || '',
-            gender: userData.gender || '',
-            place_of_birth: userData.place_of_birth || '',
-            phone: userData.phone || '',
-            occupation: userData.occupation || '',
-            biography: userData.biography || '',
-            clan_name: userData.clan_name || '',
-            village_origin: userData.village_origin || '',
-          });
-        }
+        const res = await api.get('/auth/me');
+        const userData = res.data.user;
+        setFormData({
+          full_name: userData.full_name || '',
+          email: userData.email || '',
+          date_of_birth: userData.date_of_birth || '',
+          gender: userData.gender || '',
+          place_of_birth: userData.place_of_birth || '',
+          phone: userData.phone || '',
+          occupation: userData.occupation || '',
+          biography: userData.biography || '',
+          clan_name: userData.clan_name || '',
+          village_origin: userData.village_origin || '',
+        });
       } catch (err) {
         console.error('Failed to load profile:', err);
         setError('Failed to load your profile. Please try again.');
@@ -101,10 +97,8 @@ const ProfileCompletion = () => {
     setSaving(true);
 
     try {
-      const userRef = doc(db, 'users', user.user_id);
-      await updateDoc(userRef, {
+      const res = await api.put('/auth/me', {
         full_name: formData.full_name.trim(),
-        email: formData.email.trim(),
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender || null,
         place_of_birth: formData.place_of_birth || null,
@@ -113,16 +107,10 @@ const ProfileCompletion = () => {
         biography: formData.biography || null,
         clan_name: formData.clan_name || null,
         village_origin: formData.village_origin || null,
-        updated_at: serverTimestamp(),
         profile_completed: true,
       });
 
-      // Update user context
-      const updatedUser = {
-        ...user,
-        ...formData,
-        profile_completed: true,
-      };
+      const updatedUser = res.data.user;
       setUser(updatedUser);
 
       setSuccess(true);

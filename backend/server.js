@@ -59,6 +59,8 @@ app.use('/api/documents', require('./src/routes/documents'));
 app.use('/api/families', require('./src/routes/families'));
 app.use('/api/tree', require('./src/routes/tree'));
 app.use('/api/stories', require('./src/routes/stories'));
+app.use('/api/edit-history', require('./src/routes/editHistory'));
+app.use('/api/wisdom-chat', require('./src/routes/wisdomChat'));
 
 // Enhanced health check
 app.get('/api/health', async (req, res) => {
