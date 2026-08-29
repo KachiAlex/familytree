@@ -42,3 +42,5 @@ coverage/
 *.pem
 *.key
 
+.vercel
+.env*
