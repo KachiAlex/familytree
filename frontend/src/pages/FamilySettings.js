@@ -22,7 +22,6 @@ import {
   PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
 
 const FamilySettings = () => {
   const { familyId } = useParams();
