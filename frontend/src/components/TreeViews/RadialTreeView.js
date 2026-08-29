@@ -104,7 +104,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
 
     // Use first root as the center
     const rootId = rootIds[0];
-    const rootPerson = persons.get(rootId);
+    // rootPerson not needed for radial layout
 
     // Build hierarchy for radial layout
     const buildHierarchy = (nodeId, depth = 0) => {

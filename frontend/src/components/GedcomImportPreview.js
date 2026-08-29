@@ -47,6 +47,7 @@ const GedcomImportPreview = ({ open, onClose, onConfirm, parsedData, existingPer
     if (parsedData && existingPersons) {
       detectDuplicates();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsedData, existingPersons]);
 
   const detectDuplicates = () => {

@@ -541,6 +541,7 @@ export const exportFamilyTreeToPDF = async (treeData, familyInfo, format = 'summ
       if (person.village_origin) details.push(`Village Origin: ${person.village_origin}`);
       if (person.occupation) details.push(`Occupation: ${person.occupation}`);
 
+      // eslint-disable-next-line no-loop-func
       details.forEach((detail) => {
         yPosition += addText(detail, margin, yPosition, pageWidth - 2 * margin, 10);
         yPosition += 5;
