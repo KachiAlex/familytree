@@ -1,16 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Container,
-  Paper,
   Typography,
   Box,
   Grid,
   Button,
-  Card,
-  CardContent,
-  CardMedia,
-  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,14 +13,12 @@ import {
   TextField,
   MenuItem,
   IconButton,
-  Tooltip,
   Autocomplete,
   Snackbar,
   Alert,
-  Avatar,
   CircularProgress,
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon } from '@mui/icons-material';
 import { db, storage } from '../firebase';
 import { exportPersonProfileToPDF } from '../utils/pdfExport';
 import { compressImage } from '../utils/imageCompression';
@@ -121,6 +113,7 @@ const PersonDetail = () => {
   });
   const [pendingChangesOpen, setPendingChangesOpen] = useState(false);
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     fetchPersonDetails();
@@ -841,616 +834,548 @@ const PersonDetail = () => {
 
   if (loading) {
     return (
-      <Container>
-        <PersonDetailSkeleton />
-      </Container>
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
+        <div className="thread-band thin" />
+        <Box sx={{ px: { xs: 3, md: 5 }, py: 5 }}>
+          <PersonDetailSkeleton />
+        </Box>
+      </Box>
     );
   }
 
   if (!person) {
-    return <Typography>Person not found</Typography>;
+    return (
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", mb: 1 }}>Person not found</Typography>
+          <Button onClick={() => navigate(-1)} sx={{ color: '#22345E' }}>← Go back</Button>
+        </Box>
+      </Box>
+    );
   }
 
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    try { return new Date(dateStr).toLocaleDateString(); } catch { return dateStr; }
+  };
+
+  const lifeDates = [
+    person.date_of_birth && `b. ${formatDate(person.date_of_birth)}`,
+    person.date_of_death && `d. ${formatDate(person.date_of_death)}`,
+  ].filter(Boolean).join(' · ');
+
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() => navigate(-1)}
-        sx={{ mb: 2 }}
-      >
-        Back
-      </Button>
+    <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
+      {/* Top bar */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 5 }, py: 2.25, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: '#E4D3B0' }}>
+        <Button onClick={() => navigate(-1)} sx={{ color: '#22345E', fontWeight: 600, textTransform: 'none' }}>
+          ← Back to tree
+        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button size="small" startIcon={<PdfIcon />} onClick={async () => {
+            try {
+              setSnackbar({ open: true, message: 'Generating PDF with photo...', severity: 'info' });
+              await exportPersonProfileToPDF(person, { parents, children, spouses, siblings });
+              setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
+            } catch (error) {
+              console.error('Failed to export PDF:', error);
+              setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
+            }
+          }} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
+            Export PDF
+          </Button>
+          <Button size="small" startIcon={<PendingActionsIcon />} onClick={() => setPendingChangesOpen(true)} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
+            Pending
+          </Button>
+          <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
+            History
+          </Button>
+        </Box>
+      </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <Card>
-            <Box sx={{ position: 'relative', width: '100%', height: 300, bgcolor: 'grey.200', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {person.profile_photo_url ? (
-                <CardMedia
-                  component="img"
-                  height="300"
-                  image={person.profile_photo_url}
-                  alt={person.full_name}
-                  sx={{ objectFit: 'cover', width: '100%' }}
-                />
-              ) : (
-                <Avatar sx={{ width: 150, height: 150, fontSize: '3rem' }}>
-                  {person.full_name?.charAt(0)?.toUpperCase() || '?'}
-                </Avatar>
-              )}
-              {canEdit && (
-                <Box sx={{ position: 'absolute', bottom: 8, right: 8 }}>
-                  <input
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    id="profile-picture-upload"
-                    type="file"
-                    onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      if (file.size > 5 * 1024 * 1024) {
-                        setSnackbar({ open: true, message: 'Image size must be less than 5MB', severity: 'error' });
-                        return;
-                      }
-                      setUploadingProfilePicture(true);
-                      try {
-                        // Compress image before upload
-                        const compressedFile = await compressImage(file, 1920, 1920, 0.8);
-                        const fileExt = compressedFile.name.split('.').pop();
-                        const fileName = `profile_${person.person_id}_${Date.now()}.${fileExt}`;
-                        const storageRef = ref(storage, `profiles/${person.family_id}/${fileName}`);
-                        const snapshot = await uploadBytes(storageRef, compressedFile);
-                        const photoUrl = await getDownloadURL(snapshot.ref);
-                        await updateDoc(doc(db, 'persons', person.person_id), {
-                          profile_photo_url: photoUrl,
-                        });
-                        setPerson({ ...person, profile_photo_url: photoUrl });
-                        setSnackbar({ open: true, message: 'Profile picture updated successfully', severity: 'success' });
-                      } catch (error) {
-                        console.error('Failed to upload profile picture:', error);
-                        setSnackbar({ open: true, message: 'Failed to upload profile picture', severity: 'error' });
-                      } finally {
-                        setUploadingProfilePicture(false);
-                      }
-                    }}
-                  />
-                  <label htmlFor="profile-picture-upload">
-                    <IconButton
-                      component="span"
-                      color="primary"
-                      sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
-                      disabled={uploadingProfilePicture}
-                    >
-                      {uploadingProfilePicture ? <CircularProgress size={24} /> : <PhotoCameraIcon />}
-                    </IconButton>
-                  </label>
+      {/* Thread band */}
+      <div className="thread-band thin" />
+
+      {/* Main content */}
+      <Box sx={{ px: { xs: 3, md: 5 }, py: 4 }}>
+        <Grid container spacing={4}>
+          {/* Left column — Profile card */}
+          <Grid item xs={12} md={4}>
+            <Box sx={{
+              bgcolor: 'background.paper', borderRadius: '14px', overflow: 'hidden',
+              border: '1px solid', borderColor: '#E4D3B0', position: 'relative',
+            }}>
+              <div className="thread-band thin" />
+
+              {/* Avatar area */}
+              <Box sx={{ position: 'relative', p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Box sx={{
+                  width: 120, height: 120, borderRadius: '50%',
+                  bgcolor: person.profile_photo_url ? 'transparent' : '#22345E',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden', position: 'relative',
+                }}>
+                  {person.profile_photo_url ? (
+                    <Box component="img" src={person.profile_photo_url} alt={person.full_name}
+                      sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 36, fontWeight: 600, color: '#FFFDF9' }}>
+                      {getInitials(person.full_name)}
+                    </Typography>
+                  )}
+                  {canEdit && (
+                    <>
+                      <input
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        id="profile-picture-upload"
+                        type="file"
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) {
+                            setSnackbar({ open: true, message: 'Image size must be less than 5MB', severity: 'error' });
+                            return;
+                          }
+                          setUploadingProfilePicture(true);
+                          try {
+                            const compressedFile = await compressImage(file, 1920, 1920, 0.8);
+                            const fileExt = compressedFile.name.split('.').pop();
+                            const fileName = `profile_${person.person_id}_${Date.now()}.${fileExt}`;
+                            const storageRef = ref(storage, `profiles/${person.family_id}/${fileName}`);
+                            const snapshot = await uploadBytes(storageRef, compressedFile);
+                            const photoUrl = await getDownloadURL(snapshot.ref);
+                            await updateDoc(doc(db, 'persons', person.person_id), { profile_photo_url: photoUrl });
+                            setPerson({ ...person, profile_photo_url: photoUrl });
+                            setSnackbar({ open: true, message: 'Profile picture updated successfully', severity: 'success' });
+                          } catch (error) {
+                            console.error('Failed to upload profile picture:', error);
+                            setSnackbar({ open: true, message: 'Failed to upload profile picture', severity: 'error' });
+                          } finally {
+                            setUploadingProfilePicture(false);
+                          }
+                        }}
+                      />
+                      <label htmlFor="profile-picture-upload">
+                        <IconButton component="span" sx={{
+                          position: 'absolute', bottom: 0, right: 0,
+                          bgcolor: 'background.paper', border: '1px solid', borderColor: '#D8BF92',
+                          width: 32, height: 32, '&:hover': { bgcolor: '#F1E6D2' },
+                        }} disabled={uploadingProfilePicture}>
+                          {uploadingProfilePicture ? <CircularProgress size={16} /> : <PhotoCameraIcon sx={{ fontSize: 16 }} />}
+                        </IconButton>
+                      </label>
+                    </>
+                  )}
                 </Box>
-              )}
-            </Box>
-            <CardContent>
-              <Typography variant="h4" gutterBottom>
-                {person.full_name}
-              </Typography>
 
-              <Box sx={{ mt: 1, mb: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 22, mt: 2, textAlign: 'center' }}>
+                  {person.full_name}
+                </Typography>
+                {lifeDates && (
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#7A6D5C', mt: 0.5 }}>
+                    {lifeDates}
+                  </Typography>
+                )}
+
+                {/* Verification badge */}
+                <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {person.verified_by_elder && (
+                    <Box sx={{
+                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                      fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace",
+                      px: 1.25, py: 0.5, borderRadius: '20px',
+                      bgcolor: '#E4EDE4', color: '#3F6644',
+                    }}>
+                      <CheckCircleIcon sx={{ fontSize: 14 }} /> Verified by elder
+                    </Box>
+                  )}
+                  {person.alive_status ? (
+                    <Box sx={{ fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: '#E4EDE4', color: '#3F6644' }}>Alive</Box>
+                  ) : (
+                    <Box sx={{ fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: '#F1E6D2', color: '#7A6D5C' }}>Deceased</Box>
+                  )}
+                  {person.gender && (
+                    <Box sx={{ fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: '#E8ECF4', color: '#22345E', textTransform: 'capitalize' }}>
+                      {person.gender}
+                    </Box>
+                  )}
+                </Box>
+
+                {/* Action buttons */}
                 {canEdit && (
-                  <>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={openEdit}
-                    >
+                  <Box sx={{ display: 'flex', gap: 1, mt: 2.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <Button size="small" variant="outlined" onClick={openEdit} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
                       Edit details
                     </Button>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      color="primary"
-                      startIcon={<EmailIcon />}
-                      onClick={() => setInviteDialogOpen(true)}
-                      disabled={!!person.ownerUserId}
-                    >
-                      Invite to Claim
+                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.ownerUserId} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      Invite
                     </Button>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      color="error"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => setDeleteDialogOpen(true)}
-                    >
-                      Delete
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      color="success"
-                      startIcon={<CheckCircleIcon />}
-                      onClick={() => {
-                        setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' });
-                      }}
-                    >
+                    <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ borderColor: '#D8BF92', color: '#3F6644', textTransform: 'none', fontSize: 12 }}>
                       Verify
                     </Button>
-                  </>
+                    <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteDialogOpen(true)} sx={{ borderColor: '#D8BF92', color: '#B8541F', textTransform: 'none', fontSize: 12 }}>
+                      Delete
+                    </Button>
+                  </Box>
                 )}
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<PdfIcon />}
-                  onClick={async () => {
-                    try {
-                      setSnackbar({ open: true, message: 'Generating PDF with photo...', severity: 'info' });
-                      await exportPersonProfileToPDF(person, { parents, children, spouses, siblings });
-                      setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
-                    } catch (error) {
-                      console.error('Failed to export PDF:', error);
-                      setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
-                    }
+              </Box>
+
+              {/* Info rows */}
+              <Box sx={{ p: '0 20px 20px' }}>
+                {[
+                  { label: 'Clan', value: person.clan_name },
+                  { label: 'Village origin', value: person.village_origin },
+                  { label: 'Place of birth', value: person.place_of_birth },
+                  { label: 'Occupation', value: person.occupation },
+                ].filter(row => row.value).map((row, i) => (
+                  <Box key={i} sx={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    py: 1.25, borderBottom: i < 3 ? '1px dashed' : 'none', borderColor: '#E4D3B0',
+                  }}>
+                    <Typography sx={{ fontSize: '12.5px', color: '#7A6D5C' }}>{row.label}</Typography>
+                    <Typography sx={{ fontSize: '13px', fontWeight: 500, color: 'text.primary' }}>{row.value}</Typography>
+                  </Box>
+                ))}
+
+                {/* Relationship to you */}
+                <Box sx={{ mt: 2 }}>
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1 }}>
+                    Your relationship
+                  </Typography>
+                  <TextField
+                    select
+                    fullWidth
+                    size="small"
+                    value={selfRelation?.relationship_to_self || ''}
+                    onChange={handleRelationChange}
+                    disabled={relationSaving}
+                    sx={{ '& .MuiSelect-select': { fontSize: '13px' } }}
+                  >
+                    <MenuItem value=""><em>Not set</em></MenuItem>
+                    <MenuItem value="self">Self</MenuItem>
+                    <MenuItem value="parent">Parent</MenuItem>
+                    <MenuItem value="child">Child</MenuItem>
+                    <MenuItem value="sibling">Sibling</MenuItem>
+                    <MenuItem value="spouse">Spouse</MenuItem>
+                    <MenuItem value="grandparent">Grandparent</MenuItem>
+                    <MenuItem value="grandchild">Grandchild</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                  </TextField>
+                </Box>
+              </Box>
+            </Box>
+          </Grid>
+
+          {/* Right column — Tabs content */}
+          <Grid item xs={12} md={8}>
+            {/* Tab bar */}
+            <Box sx={{ display: 'flex', gap: 0.5, borderBottom: '2px solid #E4D3B0', mb: 3 }}>
+              {['Overview', 'Documents', 'Stories', 'Edit history'].map((tab) => (
+                <Box key={tab} onClick={() => setActiveTab(tab.toLowerCase().replace(' ', '_'))}
+                  sx={{
+                    px: 2.5, py: 1.5, cursor: 'pointer',
+                    fontSize: '14px', fontWeight: 500,
+                    color: activeTab === tab.toLowerCase().replace(' ', '_') ? '#1C1410' : '#7A6D5C',
+                    borderBottom: activeTab === tab.toLowerCase().replace(' ', '_') ? '2px solid #B8541F' : '2px solid transparent',
+                    marginBottom: '-2px', transition: 'color 0.15s',
+                    '&:hover': { color: '#1C1410' },
                   }}
                 >
-                  Export PDF
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<PendingActionsIcon />}
-                  onClick={() => setPendingChangesOpen(true)}
-                >
-                  Pending Changes
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<HistoryIcon />}
-                  onClick={() => setEditHistoryOpen(true)}
-                >
-                  Edit History
-                </Button>
-              </Box>
-
-              {selfRelation && selfRelation.relationship_to_self && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Your relationship: {selfRelation.relationship_to_self}
-                </Typography>
-              )}
-
-              {person.gender && (
-                <Chip label={person.gender} size="small" sx={{ mr: 1, mb: 1 }} />
-              )}
-              {person.alive_status ? (
-                <Chip label="Alive" color="success" size="small" />
-              ) : (
-                <Chip label="Deceased" color="default" size="small" />
-              )}
-              {person.verified_by_elder && (
-                <Chip label="Verified by Elder" color="primary" size="small" sx={{ ml: 1 }} />
-              )}
-
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Your relationship to this person
-                </Typography>
-                <TextField
-                  select
-                  fullWidth
-                  size="small"
-                  label="Relationship to you"
-                  value={selfRelation?.relationship_to_self || ''}
-                  onChange={handleRelationChange}
-                  disabled={relationSaving}
-                >
-                  <MenuItem value="">
-                    <em>Not set</em>
-                  </MenuItem>
-                  <MenuItem value="self">Self</MenuItem>
-                  <MenuItem value="parent">Parent</MenuItem>
-                  <MenuItem value="child">Child</MenuItem>
-                  <MenuItem value="sibling">Sibling</MenuItem>
-                  <MenuItem value="spouse">Spouse</MenuItem>
-                  <MenuItem value="grandparent">Grandparent</MenuItem>
-                  <MenuItem value="grandchild">Grandchild</MenuItem>
-                  <MenuItem value="other">Other</MenuItem>
-                </TextField>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Information
-            </Typography>
-            <Grid container spacing={2}>
-              {person.date_of_birth && (
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Date of Birth
-                  </Typography>
-                  <Typography variant="body1">
-                    {new Date(person.date_of_birth).toLocaleDateString()}
-                  </Typography>
-                </Grid>
-              )}
-              {person.date_of_death && (
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Date of Death
-                  </Typography>
-                  <Typography variant="body1">
-                    {new Date(person.date_of_death).toLocaleDateString()}
-                  </Typography>
-                </Grid>
-              )}
-              {person.place_of_birth && (
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Place of Birth
-                  </Typography>
-                  <Typography variant="body1">{person.place_of_birth}</Typography>
-                </Grid>
-              )}
-              {person.occupation && (
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Occupation
-                  </Typography>
-                  <Typography variant="body1">{person.occupation}</Typography>
-                </Grid>
-              )}
-              {person.clan_name && (
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Clan
-                  </Typography>
-                  <Typography variant="body1">{person.clan_name}</Typography>
-                </Grid>
-              )}
-              {person.village_origin && (
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Village Origin
-                  </Typography>
-                  <Typography variant="body1">{person.village_origin}</Typography>
-                </Grid>
-              )}
-            </Grid>
-            {person.biography && (
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Biography
-                </Typography>
-                <Typography variant="body1" sx={{ mt: 1 }}>
-                  {person.biography}
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6" gutterBottom>
-                Family Relationships
-              </Typography>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => {
-                  setFamilyRelType('parent');
-                  setSelectedFamilyPersonId('');
-                  setAddFamilyOpen(true);
-                }}
-              >
-                Add family
-              </Button>
+                  {tab}
+                </Box>
+              ))}
             </Box>
 
-            {/* Parents section: Father / Mother */}
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Parents
-              </Typography>
-              {parents.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No parents linked yet.
-                </Typography>
-              ) : (
-                <>
-                  {parents.filter(p => p && p.person_id).map((p) => {
-                    let roleLabel = 'Parent';
-                    if (p.gender === 'male') roleLabel = 'Father';
-                    if (p.gender === 'female') roleLabel = 'Mother';
-                    return (
-                      <Box key={p.person_id} sx={{ display: 'inline-flex', alignItems: 'center', mr: 1, mb: 1 }}>
-                        <Chip
-                          label={`${roleLabel}: ${p.full_name}`}
-                          onClick={() => navigate(`/person/${p.person_id}`)}
-                          sx={{ mr: canEdit ? 0.5 : 0 }}
-                        />
-                        {canEdit && p.relationship_id && (
-                          <Tooltip title="Remove relationship">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteRelationship(p.relationship_id, 'parent');
-                              }}
-                              sx={{ ml: 0.5 }}
+            {/* Overview tab */}
+            {activeTab === 'overview' && (
+              <Box>
+                {/* Biography */}
+                {person.biography && (
+                  <Box sx={{
+                    bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
+                    border: '1px solid', borderColor: '#E4D3B0', mb: 2.5,
+                  }}>
+                    <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16, mb: 1 }}>
+                      Biography
+                    </Typography>
+                    <Typography sx={{ fontSize: '14px', lineHeight: 1.65, color: '#463D34' }}>
+                      {person.biography}
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Family relationships */}
+                <Box sx={{
+                  bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
+                  border: '1px solid', borderColor: '#E4D3B0',
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16 }}>
+                      Family relationships
+                    </Typography>
+                    <Button size="small" variant="outlined" onClick={() => { setFamilyRelType('parent'); setSelectedFamilyPersonId(''); setAddFamilyOpen(true); }}
+                      sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      + Add family
+                    </Button>
+                  </Box>
+
+                  {/* Parents */}
+                  <Box sx={{ mb: 2.5 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                      Parents
+                    </Typography>
+                    {parents.length === 0 ? (
+                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No parents linked yet.</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                        {parents.filter(p => p && p.person_id).map((p) => {
+                          let roleLabel = 'Parent';
+                          if (p.gender === 'male') roleLabel = 'Father';
+                          if (p.gender === 'female') roleLabel = 'Mother';
+                          return (
+                            <Box key={p.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#E4D3B0' } }}
+                              onClick={() => navigate(`/person/${p.person_id}`)}
                             >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
+                              <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#22345E', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                                {getInitials(p.full_name)}
+                              </Box>
+                              <Box>
+                                <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{p.full_name}</Typography>
+                                <Typography sx={{ fontSize: '11px', color: '#7A6D5C' }}>{roleLabel}</Typography>
+                              </Box>
+                              {canEdit && p.relationship_id && (
+                                <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteRelationship(p.relationship_id, 'parent'); }} sx={{ ml: 0.5, p: 0.25 }}>
+                                  <DeleteIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
+                            </Box>
+                          );
+                        })}
                       </Box>
-                    );
-                  })}
-                </>
-              )}
-            </Box>
-
-            {/* Siblings section */}
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Siblings
-              </Typography>
-              {siblings.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No siblings linked yet.
-                </Typography>
-              ) : (
-                siblings.filter(s => s && s.person_id).map((s) => {
-                  let roleLabel = 'Sibling';
-                  if (s.gender === 'male') roleLabel = 'Brother';
-                  if (s.gender === 'female') roleLabel = 'Sister';
-                  // Note: Siblings don't have direct relationship_id, they're inferred from shared parents
-                  // We'll need to find the parent relationship to delete
-                  return (
-                    <Chip
-                      key={s.person_id}
-                      label={`${roleLabel}: ${s.full_name}`}
-                      sx={{ mr: 1, mb: 1 }}
-                      onClick={() => navigate(`/person/${s.person_id}`)}
-                    />
-                  );
-                })
-              )}
-            </Box>
-
-            {/* Children section */}
-            <Box sx={{ mt: 1, mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Children
-              </Typography>
-              {children.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No children linked yet.
-                </Typography>
-              ) : (
-                children.filter(c => c && c.person_id).map((c) => (
-                  <Box key={c.person_id} sx={{ display: 'inline-flex', alignItems: 'center', mr: 1, mb: 1 }}>
-                    <Chip
-                      label={c.full_name}
-                      onClick={() => navigate(`/person/${c.person_id}`)}
-                      sx={{ mr: canEdit ? 0.5 : 0 }}
-                    />
-                    {canEdit && c.relationship_id && (
-                      <Tooltip title="Remove relationship">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteRelationship(c.relationship_id, 'child');
-                          }}
-                          sx={{ ml: 0.5 }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
                     )}
                   </Box>
-                ))
-              )}
-            </Box>
 
-            {/* Spouses section */}
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Spouses
-              </Typography>
-              {spouses.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No spouses linked yet.
-                </Typography>
-              ) : (
-                spouses.filter(s => s && s.person_id).map((s) => {
-                  const statusLabels = {
-                    married: 'Married',
-                    divorced: 'Divorced',
-                    widowed: 'Widowed',
-                    separated: 'Separated',
-                  };
-                  const statusColors = {
-                    married: 'success',
-                    divorced: 'error',
-                    widowed: 'default',
-                    separated: 'warning',
-                  };
-                  const maritalStatus = s.marital_status || 'married';
-                  return (
-                    <Box key={s.person_id} sx={{ display: 'inline-flex', alignItems: 'center', mr: 1, mb: 1 }}>
-                      <Chip
-                        label={s.full_name}
-                        onClick={() => navigate(`/person/${s.person_id}`)}
-                        sx={{ mr: 0.5 }}
-                      />
-                      <Chip
-                        label={statusLabels[maritalStatus] || 'Married'}
-                        color={statusColors[maritalStatus] || 'default'}
-                        size="small"
-                        variant="outlined"
-                        sx={{ mr: canEdit ? 0.5 : 0 }}
-                        onClick={canEdit ? () => handleEditMaritalStatus(s) : undefined}
-                        style={canEdit ? { cursor: 'pointer' } : {}}
-                      />
-                      {canEdit && s.relationship_id && (
-                        <>
-                          <Tooltip title="Edit marital status">
-                            <IconButton
-                              size="small"
-                              color="primary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditMaritalStatus(s);
-                              }}
-                              sx={{ ml: 0.5 }}
+                  {/* Spouses */}
+                  <Box sx={{ mb: 2.5 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                      Spouses
+                    </Typography>
+                    {spouses.length === 0 ? (
+                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No spouses linked yet.</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                        {spouses.filter(s => s && s.person_id).map((s) => {
+                          const statusLabels = { married: 'Married', divorced: 'Divorced', widowed: 'Widowed', separated: 'Separated' };
+                          const marital = s.marital_status || 'married';
+                          return (
+                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#E8ECF4', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#D5DDE8' } }}
+                              onClick={() => navigate(`/person/${s.person_id}`)}
                             >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Remove relationship">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteRelationship(s.relationship_id, 'spouse');
-                              }}
-                              sx={{ ml: 0.5 }}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
-                    </Box>
-                  );
-                })
-              )}
-            </Box>
-          </Paper>
+                              <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#22345E', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                                {getInitials(s.full_name)}
+                              </Box>
+                              <Box>
+                                <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{s.full_name}</Typography>
+                                <Typography sx={{ fontSize: '11px', color: '#22345E' }}>{statusLabels[marital] || 'Married'}</Typography>
+                              </Box>
+                              {canEdit && s.relationship_id && (
+                                <>
+                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleEditMaritalStatus(s); }} sx={{ p: 0.25, color: '#22345E' }}>
+                                    <EditIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                  <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteRelationship(s.relationship_id, 'spouse'); }} sx={{ p: 0.25 }}>
+                                    <DeleteIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                </>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </Box>
 
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6">
-                Documents & Photos
-              </Typography>
-              {canEdit && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<UploadIcon />}
-                  onClick={() => setUploadDialogOpen(true)}
-                >
-                  Upload
-                </Button>
-              )}
-            </Box>
-            {documents.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No documents or photos yet. {canEdit && 'Click "Upload" to add photos or documents.'}
-              </Typography>
-            ) : (
-              <Grid container spacing={2}>
-                {documents.map((doc) => (
-                  <Grid item xs={6} sm={4} md={3} key={doc.document_id}>
-                    <Card sx={{ position: 'relative' }}>
-                      {doc.document_type === 'photo' && (
-                        <CardMedia
-                          component="img"
-                          height="200"
-                          image={doc.file_url}
-                          alt={doc.title || 'Photo'}
-                          sx={{ objectFit: 'cover', cursor: 'pointer' }}
-                          onClick={() => window.open(doc.file_url, '_blank')}
-                        />
-                      )}
-                      {doc.document_type !== 'photo' && (
-                        <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f5f5f5', cursor: 'pointer' }} onClick={() => window.open(doc.file_url, '_blank')}>
-                          <Typography variant="h4" color="text.secondary">
-                            {doc.document_type === 'certificate' ? '📜' : doc.document_type === 'audio' ? '🎵' : doc.document_type === 'video' ? '🎬' : '📄'}
-                          </Typography>
-                        </Box>
-                      )}
-                      <CardContent>
-                        <Typography variant="body2" noWrap title={doc.title}>
-                          {doc.title || 'Untitled'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {doc.document_type}
-                        </Typography>
-                        {canEdit && (
-                          <IconButton
-                            size="small"
-                            color="error"
-                            sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(255,255,255,0.9)' }}
-                            onClick={async () => {
-                              if (window.confirm('Delete this document?')) {
-                                try {
-                                  // Delete from Storage
-                                  if (doc.file_path) {
-                                    const fileRef = ref(storage, doc.file_path);
-                                    await deleteObject(fileRef);
-                                  }
-                                  // Delete from Firestore
-                                  await deleteDoc(doc(db, 'documents', doc.document_id));
-                                  // Refresh documents
-                                  await fetchDocuments(person.person_id, person.family_id);
-                                } catch (error) {
-                                  console.error('Failed to delete document:', error);
-                                  setSnackbar({ open: true, message: 'Failed to delete document', severity: 'error' });
-                                }
-                              }
-                            }}
+                  {/* Children */}
+                  <Box sx={{ mb: 2.5 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                      Children
+                    </Typography>
+                    {children.length === 0 ? (
+                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No children linked yet.</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                        {children.filter(c => c && c.person_id).map((c) => (
+                          <Box key={c.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#E4D3B0' } }}
+                            onClick={() => navigate(`/person/${c.person_id}`)}
                           >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            )}
-          </Paper>
+                            <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#3F6644', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              {getInitials(c.full_name)}
+                            </Box>
+                            <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{c.full_name}</Typography>
+                            {canEdit && c.relationship_id && (
+                              <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteRelationship(c.relationship_id, 'child'); }} sx={{ p: 0.25 }}>
+                                <DeleteIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            )}
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
 
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6">
-                Stories & Oral History
-              </Typography>
-              {canEdit && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<BookIcon />}
-                  onClick={() => setStoryDialogOpen(true)}
-                >
-                  Add Story
-                </Button>
-              )}
-            </Box>
-            {stories.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No stories yet. {canEdit && 'Click "Add Story" to preserve oral history and family stories.'}
-              </Typography>
-            ) : (
-              <Box>
-                {stories.map((story) => (
-                  <Card key={story.story_id} sx={{ mb: 2 }}>
-                    <CardContent>
-                      <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
-                        <Typography variant="h6" component="div">
-                          {story.title || 'Untitled Story'}
-                        </Typography>
-                        {canEdit && (
-                          <Box>
-                            <IconButton
-                              size="small"
-                              color="primary"
-                              onClick={() => {
+                  {/* Siblings */}
+                  <Box>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                      Siblings
+                    </Typography>
+                    {siblings.length === 0 ? (
+                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No siblings linked yet.</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                        {siblings.filter(s => s && s.person_id).map((s) => {
+                          let roleLabel = 'Sibling';
+                          if (s.gender === 'male') roleLabel = 'Brother';
+                          if (s.gender === 'female') roleLabel = 'Sister';
+                          return (
+                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#E4D3B0' } }}
+                              onClick={() => navigate(`/person/${s.person_id}`)}
+                            >
+                              <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#C7930A', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                                {getInitials(s.full_name)}
+                              </Box>
+                              <Box>
+                                <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{s.full_name}</Typography>
+                                <Typography sx={{ fontSize: '11px', color: '#7A6D5C' }}>{roleLabel}</Typography>
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {/* Documents tab */}
+            {activeTab === 'documents' && (
+              <Box sx={{
+                bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
+                border: '1px solid', borderColor: '#E4D3B0',
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
+                  <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16 }}>
+                    Documents & Photos
+                  </Typography>
+                  {canEdit && (
+                    <Button size="small" variant="outlined" startIcon={<UploadIcon />} onClick={() => setUploadDialogOpen(true)}
+                      sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      Upload
+                    </Button>
+                  )}
+                </Box>
+                {documents.length === 0 ? (
+                  <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>
+                    No documents or photos yet. {canEdit && 'Click "Upload" to add photos or documents.'}
+                  </Typography>
+                ) : (
+                  <Grid container spacing={2}>
+                    {documents.map((doc) => (
+                      <Grid item xs={6} sm={4} md={3} key={doc.document_id}>
+                        <Box sx={{
+                          bgcolor: 'background.paper', borderRadius: '10px', overflow: 'hidden',
+                          border: '1px solid', borderColor: '#E4D3B0', position: 'relative',
+                          transition: 'transform 0.12s', '&:hover': { transform: 'translateY(-2px)' },
+                        }}>
+                          {doc.document_type === 'photo' ? (
+                            <Box component="img" src={doc.file_url} alt={doc.title || 'Photo'}
+                              sx={{ width: '100%', height: 140, objectFit: 'cover', cursor: 'pointer' }}
+                              onClick={() => window.open(doc.file_url, '_blank')}
+                            />
+                          ) : (
+                            <Box sx={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#F1E6D2', cursor: 'pointer' }}
+                              onClick={() => window.open(doc.file_url, '_blank')}
+                            >
+                              <Typography sx={{ fontSize: 32 }}>
+                                {doc.document_type === 'certificate' ? '📜' : doc.document_type === 'audio' ? '🎵' : doc.document_type === 'video' ? '🎬' : '📄'}
+                              </Typography>
+                            </Box>
+                          )}
+                          <Box sx={{ p: 1.25 }}>
+                            <Typography sx={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {doc.title || 'Untitled'}
+                            </Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace" }}>
+                              {doc.document_type}
+                            </Typography>
+                          </Box>
+                          {canEdit && (
+                            <IconButton size="small" color="error" sx={{ position: 'absolute', top: 6, right: 6, bgcolor: 'rgba(255,253,249,0.9)' }}
+                              onClick={async () => {
+                                if (window.confirm('Delete this document?')) {
+                                  try {
+                                    if (doc.file_path) { const fileRef = ref(storage, doc.file_path); await deleteObject(fileRef); }
+                                    await deleteDoc(doc(db, 'documents', doc.document_id));
+                                    await fetchDocuments(person.person_id, person.family_id);
+                                  } catch (error) {
+                                    console.error('Failed to delete document:', error);
+                                    setSnackbar({ open: true, message: 'Failed to delete document', severity: 'error' });
+                                  }
+                                }
+                              }}
+                            >
+                              <DeleteIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          )}
+                        </Box>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
+              </Box>
+            )}
+
+            {/* Stories tab */}
+            {activeTab === 'stories' && (
+              <Box sx={{
+                bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
+                border: '1px solid', borderColor: '#E4D3B0',
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
+                  <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16 }}>
+                    Stories & Oral History
+                  </Typography>
+                  {canEdit && (
+                    <Button size="small" variant="outlined" startIcon={<BookIcon />} onClick={() => setStoryDialogOpen(true)}
+                      sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      Add story
+                    </Button>
+                  )}
+                </Box>
+                {stories.length === 0 ? (
+                  <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>
+                    No stories yet. {canEdit && 'Click "Add story" to preserve oral history and family stories.'}
+                  </Typography>
+                ) : (
+                  <Box>
+                    {stories.map((story) => (
+                      <Box key={story.story_id} sx={{
+                        mb: 2, p: '16px 20px', borderRadius: '12px',
+                        bgcolor: '#FBF6EE', border: '1px solid', borderColor: '#E4D3B0',
+                      }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="h5" sx={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600 }}>
+                            {story.title || 'Untitled Story'}
+                          </Typography>
+                          {canEdit && (
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <IconButton size="small" color="primary" onClick={() => {
                                 setEditingStoryId(story.story_id);
                                 setStoryTitle(story.title || '');
                                 setStoryContent(story.content || story.transcription || '');
@@ -1460,24 +1385,17 @@ const PersonDetail = () => {
                                 setStoryTags(story.tags ? story.tags.join(', ') : '');
                                 setStoryAudioFile(null);
                                 setStoryDialogOpen(true);
-                              }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={async () => {
+                              }}>
+                                <EditIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                              <IconButton size="small" color="error" onClick={async () => {
                                 if (window.confirm('Delete this story?')) {
                                   try {
-                                    // Delete audio file from Storage if exists
                                     if (story.audio_url && story.audio_path) {
                                       const audioRef = ref(storage, story.audio_path);
                                       await deleteObject(audioRef);
                                     }
-                                    // Delete from Firestore
                                     await deleteDoc(doc(db, 'stories', story.story_id));
-                                    // Refresh stories
                                     await fetchStories(person.person_id, person.family_id);
                                     setSnackbar({ open: true, message: 'Story deleted successfully', severity: 'success' });
                                   } catch (error) {
@@ -1485,53 +1403,79 @@ const PersonDetail = () => {
                                     setSnackbar({ open: true, message: 'Failed to delete story', severity: 'error' });
                                   }
                                 }
-                              }}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                              }}>
+                                <DeleteIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Box>
+                          )}
+                        </Box>
+                        {story.narrator && (
+                          <Typography sx={{ fontSize: '12px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
+                            Narrator: {story.narrator}
+                          </Typography>
+                        )}
+                        {(story.recorded_date || story.recorded_location) && (
+                          <Typography sx={{ fontSize: '12px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
+                            {story.recorded_date && formatDate(story.recorded_date)}
+                            {story.recorded_date && story.recorded_location && ' · '}
+                            {story.recorded_location}
+                          </Typography>
+                        )}
+                        <Typography sx={{ fontSize: '14px', lineHeight: 1.65, color: '#463D34', mt: 1, whiteSpace: 'pre-wrap' }}>
+                          {story.content || story.transcription}
+                        </Typography>
+                        {story.audio_url && (
+                          <Box sx={{ mt: 2 }}>
+                            <audio controls style={{ width: '100%', maxWidth: '500px' }}>
+                              <source src={story.audio_url} type="audio/mpeg" />
+                              <source src={story.audio_url} type="audio/wav" />
+                              <source src={story.audio_url} type="audio/ogg" />
+                              Your browser does not support the audio element.
+                            </audio>
+                          </Box>
+                        )}
+                        {story.tags && story.tags.length > 0 && (
+                          <Box sx={{ mt: 1.5, display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                            {story.tags.map((tag, idx) => (
+                              <Box key={idx} sx={{
+                                fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace",
+                                px: 1, py: 0.375, borderRadius: '20px',
+                                bgcolor: '#E8ECF4', color: '#22345E',
+                              }}>
+                                {tag}
+                              </Box>
+                            ))}
                           </Box>
                         )}
                       </Box>
-                      {story.narrator && (
-                        <Typography variant="body2" color="text.secondary" gutterBottom>
-                          Narrator: {story.narrator}
-                        </Typography>
-                      )}
-                      {(story.recorded_date || story.recorded_location) && (
-                        <Typography variant="body2" color="text.secondary" gutterBottom>
-                          {story.recorded_date && new Date(story.recorded_date).toLocaleDateString()}
-                          {story.recorded_date && story.recorded_location && ' • '}
-                          {story.recorded_location}
-                        </Typography>
-                      )}
-                      <Typography variant="body1" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
-                        {story.content || story.transcription}
-                      </Typography>
-                      {story.audio_url && (
-                        <Box sx={{ mt: 2 }}>
-                          <audio controls style={{ width: '100%', maxWidth: '500px' }}>
-                            <source src={story.audio_url} type="audio/mpeg" />
-                            <source src={story.audio_url} type="audio/wav" />
-                            <source src={story.audio_url} type="audio/ogg" />
-                            Your browser does not support the audio element.
-                          </audio>
-                        </Box>
-                      )}
-                      {story.tags && story.tags.length > 0 && (
-                        <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                          {story.tags.map((tag, idx) => (
-                            <Chip key={idx} label={tag} size="small" variant="outlined" />
-                          ))}
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                    ))}
+                  </Box>
+                )}
               </Box>
             )}
-          </Paper>
+
+            {/* Edit history tab */}
+            {activeTab === 'edit_history' && (
+              <Box sx={{
+                bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
+                border: '1px solid', borderColor: '#E4D3B0',
+                textAlign: 'center',
+              }}>
+                <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16, mb: 1 }}>
+                  Edit history
+                </Typography>
+                <Typography sx={{ fontSize: '13px', color: '#7A6D5C', mb: 2 }}>
+                  View all changes made to this person's profile over time.
+                </Typography>
+                <Button variant="outlined" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)}
+                  sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>
+                  Open edit history
+                </Button>
+              </Box>
+            )}
+          </Grid>
         </Grid>
-      </Grid>
+      </Box>
 
       {/* Add/Edit Story Dialog */}
       <Dialog open={storyDialogOpen} onClose={() => {
@@ -2535,7 +2479,7 @@ const PersonDetail = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 };
 

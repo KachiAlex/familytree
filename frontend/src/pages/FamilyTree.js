@@ -2,14 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
-  AppBar,
-  Toolbar,
   Typography,
   Button,
   IconButton,
   Tabs,
   Tab,
-  Paper,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,7 +15,6 @@ import {
   TextField,
   InputAdornment,
   Autocomplete,
-  Chip,
   Menu,
   MenuItem,
   Snackbar,
@@ -532,87 +528,159 @@ const FamilyTree = () => {
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AppBar position="static">
-        <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={() => navigate('/dashboard')}
-            sx={{ mr: 2 }}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Family Tree
-          </Typography>
-          <Button
-            color="inherit"
-            startIcon={<AddIcon />}
-            onClick={handleAddPersonClick}
-          >
-            Add Person
-          </Button>
-          <IconButton
-            color="inherit"
-            onClick={() => navigate(`/family/${familyId}/settings`)}
-          >
-            <SettingsIcon />
-          </IconButton>
-          <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
-            <Button
-              color="inherit"
-              startIcon={<FileDownloadIcon />}
-              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-            >
-              Export
-            </Button>
-            <Button
-              color="inherit"
-              startIcon={<UploadIcon />}
-              onClick={() => setGedcomImportOpen(true)}
-            >
-              Import GEDCOM
-            </Button>
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      {/* Search and Filters - Collapsible */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Box 
-          sx={{ 
-            p: 1.5, 
-            bgcolor: 'background.paper', 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            cursor: 'pointer',
-            gap: 2,
-          }}
-          onClick={() => setSearchFiltersExpanded(!searchFiltersExpanded)}
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Sidebar Rail */}
+      <Box sx={{
+        width: 220, bgcolor: 'background.paper', borderRight: '1px solid', borderColor: '#E4D3B0',
+        p: '20px 14px', flexShrink: 0,
+        display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
+      }}>
+        <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16, px: 1, pb: 2, cursor: 'pointer' }}
+          onClick={() => navigate('/dashboard')}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
-            <SearchIcon sx={{ color: 'text.secondary' }} />
-            <Typography variant="body2" sx={{ color: 'text.secondary', flex: 1, minWidth: 0 }}>
-              {searchQuery || clanFilter || villageFilter 
-                ? `Search: ${searchQuery || ''} ${clanFilter ? `| Clan: ${clanFilter}` : ''} ${villageFilter ? `| Village: ${villageFilter}` : ''}`
-                : 'Search and Filters'
-              }
-            </Typography>
-          </Box>
-          <IconButton 
-            size="small" 
-            onClick={(e) => {
-              e.stopPropagation();
-              setSearchFiltersExpanded(!searchFiltersExpanded);
+          ← {familyInfo?.family_name || 'Family'}
+        </Typography>
+
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
+          Structure
+        </Typography>
+        {[
+          { label: 'Vertical', value: 'vertical', icon: '↓' },
+          { label: 'Horizontal', value: 'horizontal', icon: '→' },
+          { label: 'Radial', value: 'radial', icon: '◎' },
+          { label: '3D view', value: '3d', icon: '◈' },
+        ].map((tab) => (
+          <Button key={tab.value} onClick={() => setViewType(tab.value)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px',
+              fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%',
+              color: viewType === tab.value ? '#FFFDF9' : '#4E4436',
+              bgcolor: viewType === tab.value ? '#22345E' : 'transparent',
+              '&:hover': { bgcolor: viewType === tab.value ? '#22345E' : '#F1E6D2' },
+              textTransform: 'none', minWidth: 0,
             }}
           >
-            {searchFiltersExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </IconButton>
+            <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>{tab.icon}</Box>
+            {tab.label}
+          </Button>
+        ))}
+
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
+          Chronology
+        </Typography>
+        {[
+          { label: 'Timeline', value: 'timeline', icon: '▤' },
+          { label: 'Migration map', value: 'map', icon: '⛝' },
+        ].map((tab) => (
+          <Button key={tab.value} onClick={() => setViewType(tab.value)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px',
+              fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%',
+              color: viewType === tab.value ? '#FFFDF9' : '#4E4436',
+              bgcolor: viewType === tab.value ? '#22345E' : 'transparent',
+              '&:hover': { bgcolor: viewType === tab.value ? '#22345E' : '#F1E6D2' },
+              textTransform: 'none', minWidth: 0,
+            }}
+          >
+            <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>{tab.icon}</Box>
+            {tab.label}
+          </Button>
+        ))}
+
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
+          Manage
+        </Typography>
+        <Button onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#4E4436', '&:hover': { bgcolor: '#F1E6D2' }, textTransform: 'none', minWidth: 0 }}>
+          <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⇩</Box>
+          Export tree
+        </Button>
+        <Button onClick={() => setGedcomImportOpen(true)}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#4E4436', '&:hover': { bgcolor: '#F1E6D2' }, textTransform: 'none', minWidth: 0 }}>
+          <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⇧</Box>
+          Import GEDCOM
+        </Button>
+        <Button onClick={() => navigate(`/family/${familyId}/settings`)}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#4E4436', '&:hover': { bgcolor: '#F1E6D2' }, textTransform: 'none', minWidth: 0 }}>
+          <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⚙</Box>
+          Settings
+        </Button>
+      </Box>
+
+      {/* Main tree area */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Tree header */}
+        <Box sx={{
+          px: 3.5, py: 2.25, borderBottom: '1px solid', borderColor: '#E4D3B0', bgcolor: 'background.paper',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2.5, flexWrap: 'wrap',
+        }}>
+          {/* Mobile back + view tabs */}
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1 }}>
+            <IconButton size="small" onClick={() => navigate('/dashboard')} sx={{ color: '#22345E' }}>
+              <ArrowBackIcon />
+            </IconButton>
+            <Tabs value={viewType} onChange={handleViewChange} variant="scrollable" scrollButtons="auto">
+              <Tab label="Vert" value="vertical" sx={{ textTransform: 'none', fontSize: 12 }} />
+              <Tab label="Horiz" value="horizontal" sx={{ textTransform: 'none', fontSize: 12 }} />
+              <Tab label="Radial" value="radial" sx={{ textTransform: 'none', fontSize: 12 }} />
+              <Tab label="3D" value="3d" sx={{ textTransform: 'none', fontSize: 12 }} />
+              <Tab label="Time" value="timeline" sx={{ textTransform: 'none', fontSize: 12 }} />
+              <Tab label="Map" value="map" sx={{ textTransform: 'none', fontSize: 12 }} />
+            </Tabs>
+          </Box>
+
+          {/* Search box */}
+          <Box onClick={() => setSearchFiltersExpanded(!searchFiltersExpanded)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '9px',
+              px: 1.75, py: 1.125, fontSize: '13.5px', color: '#7A6D5C', minWidth: 220, cursor: 'pointer',
+            }}
+          >
+            <SearchIcon sx={{ fontSize: 18 }} />
+            <Typography sx={{ fontSize: '13.5px', color: '#7A6D5C', flex: 1 }}>
+              {searchQuery || clanFilter || villageFilter
+                ? `${searchQuery || ''} ${clanFilter ? `| Clan: ${clanFilter}` : ''} ${villageFilter ? `| Village: ${villageFilter}` : ''}`
+                : 'Search people…'}
+            </Typography>
+            {searchFiltersExpanded ? <ExpandLessIcon sx={{ fontSize: 18 }} /> : <ExpandMoreIcon sx={{ fontSize: 18 }} />}
+          </Box>
+
+          {/* Filter chips */}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Box onClick={() => setSearchFiltersExpanded(true)} sx={{
+              fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.5, py: 0.75, borderRadius: '20px',
+              bgcolor: 'background.paper', border: '1px solid', borderColor: '#D8BF92', color: '#5A5042', cursor: 'pointer',
+            }}>
+              Clan: {clanFilter || 'any'} ▾
+            </Box>
+            <Box onClick={() => setSearchFiltersExpanded(true)} sx={{
+              fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.5, py: 0.75, borderRadius: '20px',
+              bgcolor: 'background.paper', border: '1px solid', borderColor: '#D8BF92', color: '#5A5042', cursor: 'pointer',
+            }}>
+              Village: {villageFilter || 'any'} ▾
+            </Box>
+          </Box>
+
+          {/* Action buttons */}
+          <Box sx={{ display: 'flex', gap: 1.25 }}>
+            <IconButton onClick={(e) => setExportMenuAnchor(e.currentTarget)} sx={{
+              width: 36, height: 36, borderRadius: '9px', border: '1px solid', borderColor: '#D8BF92',
+              bgcolor: 'background.paper', color: '#5A5042',
+            }}>
+              <FileDownloadIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+            <IconButton onClick={() => navigate(`/family/${familyId}/settings`)} sx={{
+              width: 36, height: 36, borderRadius: '9px', border: '1px solid', borderColor: '#D8BF92',
+              bgcolor: 'background.paper', color: '#5A5042',
+            }}>
+              <SettingsIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Box>
         </Box>
+
+        {/* Collapsible search filters */}
         <Collapse in={searchFiltersExpanded}>
-          <Box sx={{ p: 2, bgcolor: 'background.paper' }}>
+          <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: '#E4D3B0' }}>
             <TextField
               fullWidth
               variant="outlined"
@@ -621,43 +689,22 @@ const FamilyTree = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               size="small"
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
+                startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>),
                 endAdornment: searchQuery && (
                   <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={() => setSearchQuery('')}
-                      edge="end"
-                    >
+                    <IconButton size="small" onClick={() => setSearchQuery('')} edge="end">
                       <ClearIcon />
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
             />
-            {searchQuery && filteredTreeData && (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Found {filteredTreeData.nodes.length} person{filteredTreeData.nodes.length !== 1 ? 's' : ''} matching "{searchQuery}"
-              </Typography>
-            )}
             <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <Autocomplete
                 options={clanOptions}
                 value={clanFilter || null}
                 onChange={(e, value) => setClanFilter(value || '')}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Filter by Clan"
-                    variant="outlined"
-                    placeholder="Select clan"
-                    size="small"
-                  />
-                )}
+                renderInput={(params) => <TextField {...params} label="Filter by Clan" variant="outlined" placeholder="Select clan" size="small" />}
                 sx={{ minWidth: 200, flex: '1 1 200px' }}
                 clearOnEscape
                 freeSolo={false}
@@ -666,216 +713,114 @@ const FamilyTree = () => {
                 options={villageOptions}
                 value={villageFilter || null}
                 onChange={(e, value) => setVillageFilter(value || '')}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Filter by Village/Town"
-                    variant="outlined"
-                    placeholder="Select village"
-                    size="small"
-                  />
-                )}
+                renderInput={(params) => <TextField {...params} label="Filter by Village/Town" variant="outlined" placeholder="Select village" size="small" />}
                 sx={{ minWidth: 200, flex: '1 1 200px' }}
                 clearOnEscape
                 freeSolo={false}
               />
               {(clanFilter || villageFilter || searchQuery) && (
-                <Button
-                  startIcon={<ClearIcon />}
-                  onClick={() => {
-                    setSearchQuery('');
-                    setClanFilter('');
-                    setVillageFilter('');
-                  }}
-                  size="small"
-                  variant="outlined"
-                >
+                <Button startIcon={<ClearIcon />} onClick={() => { setSearchQuery(''); setClanFilter(''); setVillageFilter(''); }} size="small" variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>
                   Clear Filters
                 </Button>
               )}
             </Box>
           </Box>
         </Collapse>
-      </Box>
 
-      {/* Statistics Panel - Collapsible */}
-      {stats && (
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Box 
-            sx={{ 
-              p: 2, 
-              bgcolor: '#f9fafb', 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              cursor: 'pointer',
-            }}
-            onClick={() => setInsightsExpanded(!insightsExpanded)}
-          >
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              Family Insights
-            </Typography>
-            <IconButton 
-              size="small" 
-              onClick={(e) => {
-                e.stopPropagation();
-                setInsightsExpanded(!insightsExpanded);
-              }}
-            >
-              {insightsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </IconButton>
-          </Box>
-          <Collapse in={insightsExpanded}>
-            <Box sx={{ p: 2, bgcolor: '#f9fafb', display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              <Paper sx={{ p: 2, flex: '1 1 200px' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Total Persons
-                </Typography>
-                <Typography variant="h5">{stats.total}</Typography>
-              </Paper>
-              <Paper sx={{ p: 2, flex: '1 1 200px' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Gender Distribution
-                </Typography>
-                <Typography variant="body1">
-                  Male: {stats.maleCount} • Female: {stats.femaleCount} • Other: {stats.otherCount}
-                </Typography>
-              </Paper>
-              <Paper sx={{ p: 2, flex: '1 1 300px' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Top Clans
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                  {Object.entries(stats.clanCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 3)
-                    .map(([clan, count]) => (
-                      <Chip key={clan} label={`${clan} (${count})`} size="small" />
-                    ))}
-                  {Object.keys(stats.clanCounts).length === 0 && (
-                    <Typography variant="body2" color="text.secondary">
-                      No clan data yet
-                    </Typography>
-                  )}
-                </Box>
-              </Paper>
-              <Paper sx={{ p: 2, flex: '1 1 300px' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Top Villages/Towns
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                  {Object.entries(stats.villageCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 3)
-                    .map(([village, count]) => (
-                      <Chip key={village} label={`${village} (${count})`} size="small" />
-                    ))}
-                  {Object.keys(stats.villageCounts).length === 0 && (
-                    <Typography variant="body2" color="text.secondary">
-                      No village data yet
-                    </Typography>
-                  )}
-                </Box>
-              </Paper>
+        {/* Tree canvas */}
+        <Box ref={treeContainerRef} className="tree-canvas-bg" sx={{ flex: 1, position: 'relative', overflow: 'hidden' }} data-tree-container>
+          {renderTreeView}
+
+          {/* Insights panel */}
+          {stats && (
+            <Box sx={{
+              position: 'absolute', top: 20, right: 20, bgcolor: 'background.paper', borderRadius: '12px',
+              p: '16px 18px', border: '1px solid', borderColor: '#E4D3B0', fontSize: '12.5px', width: 180,
+              boxShadow: '0 6px 18px rgba(28,20,16,0.06)', zIndex: 10,
+            }}>
+              <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                Tree insights
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed', borderColor: '#E4D3B0', '&:last-child': { borderBottom: 'none' } }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Total people</Typography>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{stats.total}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed', borderColor: '#E4D3B0' }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Male</Typography>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{stats.maleCount}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed', borderColor: '#E4D3B0' }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Female</Typography>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{stats.femaleCount}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625 }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Clans</Typography>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{Object.keys(stats.clanCounts).length}</Typography>
+              </Box>
+              <Box sx={{ mt: 1.25, pt: 1.25, borderTop: '1px dashed', borderColor: '#E4D3B0' }}>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#9C8D77', mb: 0.5 }}>Top clans</Typography>
+                {Object.entries(stats.clanCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([clan, count]) => (
+                  <Typography key={clan} sx={{ fontSize: '11.5px', color: '#5A5042' }}>{clan} ({count})</Typography>
+                ))}
+                {Object.keys(stats.clanCounts).length === 0 && (
+                  <Typography sx={{ fontSize: '11.5px', color: '#9C8D77' }}>No clan data</Typography>
+                )}
+              </Box>
             </Box>
-          </Collapse>
+          )}
+
+          {/* Add person FAB */}
+          <Button
+            onClick={handleAddPersonClick}
+            sx={{
+              position: 'absolute', bottom: 24, right: 24, bgcolor: '#B8541F', color: '#FFFDF9',
+              px: 2.75, py: 1.625, borderRadius: '30px', fontSize: 14, fontWeight: 600,
+              textTransform: 'none', boxShadow: '0 6px 18px rgba(184,84,31,0.35)',
+              display: 'flex', alignItems: 'center', gap: 1, zIndex: 10,
+              '&:hover': { bgcolor: '#B8541F', transform: 'translateY(-1px)' },
+            }}
+          >
+            <AddIcon sx={{ fontSize: 18 }} /> Add person
+          </Button>
         </Box>
-      )}
-
-      <Paper sx={{ borderRadius: 0 }}>
-        <Tabs
-          value={viewType}
-          onChange={handleViewChange}
-          variant="scrollable"
-          scrollButtons="auto"
-        >
-          <Tab label="Vertical" value="vertical" />
-          <Tab label="Horizontal" value="horizontal" />
-          <Tab label="Radial" value="radial" />
-          <Tab label="3D" value="3d" />
-          <Tab label="Timeline" value="timeline" />
-          <Tab label="Migration Map" value="map" />
-        </Tabs>
-      </Paper>
-
-      <Box ref={treeContainerRef} sx={{ flex: 1, overflow: 'auto', p: 0, position: 'relative' }} data-tree-container>
-        {renderTreeView}
       </Box>
 
       {/* Export Menu */}
-      <Menu
-        anchorEl={exportMenuAnchor}
-        open={Boolean(exportMenuAnchor)}
-        onClose={() => setExportMenuAnchor(null)}
-      >
-        <MenuItem onClick={() => handleExport('json')}>
-          <FileDownloadIcon sx={{ mr: 1 }} /> Export JSON
-        </MenuItem>
-        <MenuItem onClick={() => handleExport('csv')}>
-          <FileDownloadIcon sx={{ mr: 1 }} /> Export CSV
-        </MenuItem>
-        <MenuItem onClick={() => handleExport('gedcom')}>
-          <FileDownloadIcon sx={{ mr: 1 }} /> Export GEDCOM
-        </MenuItem>
-        <MenuItem onClick={() => handleExport('pdf-summary')}>
-          <PdfIcon sx={{ mr: 1 }} /> Export PDF (Summary)
-        </MenuItem>
-        <MenuItem onClick={() => handleExport('pdf-book')}>
-          <PdfIcon sx={{ mr: 1 }} /> Export PDF (Book)
-        </MenuItem>
-        <MenuItem onClick={() => handleExport('pdf-tree')}>
-          <PdfIcon sx={{ mr: 1 }} /> Export PDF (Tree)
-        </MenuItem>
+      <Menu anchorEl={exportMenuAnchor} open={Boolean(exportMenuAnchor)} onClose={() => setExportMenuAnchor(null)}>
+        <MenuItem onClick={() => handleExport('json')}><FileDownloadIcon sx={{ mr: 1 }} /> Export JSON</MenuItem>
+        <MenuItem onClick={() => handleExport('csv')}><FileDownloadIcon sx={{ mr: 1 }} /> Export CSV</MenuItem>
+        <MenuItem onClick={() => handleExport('gedcom')}><FileDownloadIcon sx={{ mr: 1 }} /> Export GEDCOM</MenuItem>
+        <MenuItem onClick={() => handleExport('pdf-summary')}><PdfIcon sx={{ mr: 1 }} /> Export PDF (Summary)</MenuItem>
+        <MenuItem onClick={() => handleExport('pdf-book')}><PdfIcon sx={{ mr: 1 }} /> Export PDF (Book)</MenuItem>
+        <MenuItem onClick={() => handleExport('pdf-tree')}><PdfIcon sx={{ mr: 1 }} /> Export PDF (Tree)</MenuItem>
       </Menu>
 
       {/* GEDCOM Import Dialog */}
-      <Dialog open={gedcomImportOpen} onClose={() => setGedcomImportOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Import GEDCOM File</DialogTitle>
+      <Dialog open={gedcomImportOpen} onClose={() => setGedcomImportOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: '14px' } }}>
+        <DialogTitle sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Import GEDCOM File</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
             Select a GEDCOM file (.ged) to import family tree data. You'll be able to preview and review the data before importing.
           </DialogContentText>
-          <input
-            accept=".ged"
-            style={{ display: 'none' }}
-            id="gedcom-upload"
-            type="file"
-            onChange={(e) => {
-              const file = e.target.files[0];
-              if (file) {
-                handleGedcomFileSelect(file);
-              }
-            }}
+          <input accept=".ged" style={{ display: 'none' }} id="gedcom-upload" type="file"
+            onChange={(e) => { const file = e.target.files[0]; if (file) handleGedcomFileSelect(file); }}
             disabled={importingGedcom}
           />
           <label htmlFor="gedcom-upload">
-            <Button
-              variant="outlined"
-              component="span"
-              fullWidth
-              startIcon={<UploadIcon />}
-              disabled={importingGedcom}
-              sx={{ py: 2 }}
-            >
+            <Button variant="outlined" component="span" fullWidth startIcon={<UploadIcon />} disabled={importingGedcom} sx={{ py: 2, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>
               Choose GEDCOM File
             </Button>
           </label>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setGedcomImportOpen(false)} disabled={importingGedcom}>
-            Cancel
-          </Button>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setGedcomImportOpen(false)} disabled={importingGedcom} variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>Cancel</Button>
         </DialogActions>
       </Dialog>
 
       {/* GEDCOM Import Preview Dialog */}
       <GedcomImportPreview
         open={gedcomPreviewOpen}
-        onClose={() => {
-          setGedcomPreviewOpen(false);
-          setParsedGedcomData(null);
-          setExistingPersons([]);
-        }}
+        onClose={() => { setGedcomPreviewOpen(false); setParsedGedcomData(null); setExistingPersons([]); }}
         onConfirm={handleGedcomImportConfirm}
         parsedData={parsedGedcomData}
         existingPersons={existingPersons}
@@ -883,41 +828,30 @@ const FamilyTree = () => {
       />
 
       {/* Profile Completion Dialog */}
-      <Dialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)}>
-        <DialogTitle>Complete Your Profile First</DialogTitle>
+      <Dialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)} PaperProps={{ sx: { borderRadius: '14px' } }}>
+        <DialogTitle sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Complete Your Profile First</DialogTitle>
         <DialogContent>
           <DialogContentText>
             Before you can add family members to your tree, please complete your profile information.
-            This helps us create a more accurate family tree and ensures you're properly represented
-            in your family history.
+            This helps us create a more accurate family tree and ensures you're properly represented in your family history.
           </DialogContentText>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setProfileDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={() => {
-              sessionStorage.setItem('returnAfterProfileCompletion', `/family/${familyId}/tree`);
-              navigate('/profile-completion');
-            }}
-            variant="contained"
-          >
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setProfileDialogOpen(false)} variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => { sessionStorage.setItem('returnAfterProfileCompletion', `/family/${familyId}/tree`); navigate('/profile-completion'); }} variant="contained">
             Complete Profile
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for notifications */}
+      {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 2 }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
