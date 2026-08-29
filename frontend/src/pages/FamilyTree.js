@@ -69,7 +69,6 @@ const FamilyTree = () => {
   const [parsedGedcomData, setParsedGedcomData] = useState(null);
   const [existingPersons, setExistingPersons] = useState([]);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [insightsExpanded, setInsightsExpanded] = useState(false); // Default to collapsed
   const [searchFiltersExpanded, setSearchFiltersExpanded] = useState(false); // Default to collapsed
   const treeContainerRef = useRef(null); // Ref for tree container to capture visualization
 
@@ -96,7 +95,7 @@ const FamilyTree = () => {
       setLoading(true);
 
       const res = await api.get(`/tree/family/${familyId}`);
-      const { nodes: apiNodes, edges: apiEdges, rootNodes: apiRootNodes } = res.data;
+      const { nodes: apiNodes, edges: apiEdges } = res.data;
 
       const persons = apiNodes.map((n) => n.data);
 

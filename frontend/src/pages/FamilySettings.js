@@ -27,7 +27,6 @@ import { useAuth } from '../contexts/AuthContext';
 const FamilySettings = () => {
   const { familyId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [family, setFamily] = useState(null);
   const [members, setMembers] = useState([]);
   const [inviteEmail, setInviteEmail] = useState('');

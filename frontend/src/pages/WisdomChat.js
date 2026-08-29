@@ -10,7 +10,6 @@ import {
   Avatar,
   Tooltip,
   Button,
-  Divider,
   Container,
   Chip,
 } from '@mui/material';
@@ -48,6 +47,7 @@ const WisdomChat = () => {
   useEffect(() => {
     fetchAvailability();
     fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId]);
 
   useEffect(() => {

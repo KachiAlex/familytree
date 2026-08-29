@@ -20,7 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 const ClaimPerson = () => {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading: authLoading, login, register, setUser } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, login, setUser } = useAuth();
   const [invitation, setInvitation] = useState(null);
   const [person, setPerson] = useState(null);
   const [loading, setLoading] = useState(true);
