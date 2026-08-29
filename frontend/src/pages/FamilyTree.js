@@ -34,17 +34,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
-import { db } from '../firebase';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  addDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import api from '../services/api';
 import { exportFamilyTreeToPDF } from '../utils/pdfExport';
 import { exportGEDCOM, parseGEDCOM } from '../utils/gedcomExport';
 import { useAuth } from '../contexts/AuthContext';
@@ -92,10 +82,9 @@ const FamilyTree = () => {
 
   const fetchFamilyInfo = async () => {
     try {
-      const familyRef = doc(db, 'families', familyId);
-      const familySnap = await getDoc(familyRef);
-      if (familySnap.exists()) {
-        setFamilyInfo({ family_id: familySnap.id, ...familySnap.data() });
+      const res = await api.get(`/families/${familyId}`);
+      if (res.data.family) {
+        setFamilyInfo(res.data.family);
       }
     } catch (error) {
       console.error('Failed to fetch family info:', error);
@@ -106,62 +95,61 @@ const FamilyTree = () => {
     try {
       setLoading(true);
 
-      // Fetch persons, relationships, and spouse relationships in parallel
-      const [personsSnap, relSnap, spouseSnap] = await Promise.all([
-        getDocs(query(collection(db, 'persons'), where('family_id', '==', familyId))),
-        getDocs(query(collection(db, 'relationships'), where('family_id', '==', familyId))),
-        getDocs(query(collection(db, 'spouseRelationships'), where('family_id', '==', familyId))),
-      ]);
+      const res = await api.get(`/tree/family/${familyId}`);
+      const { nodes: apiNodes, edges: apiEdges, rootNodes: apiRootNodes } = res.data;
 
-      const persons = personsSnap.docs.map((docSnap) => ({
-        person_id: docSnap.id,
-        ...docSnap.data(),
-      }));
+      const persons = apiNodes.map((n) => n.data);
 
-      const nodes = persons.map((p) => ({
-        id: p.person_id,
+      const nodes = apiNodes.map((n) => ({
+        id: n.id,
         data: {
-          ...p,
-          label: p.full_name,
+          ...n.data,
+          person_id: n.id,
+          label: n.data.full_name,
         },
       }));
 
-      const edges = relSnap.docs.map((relDoc) => {
-        const rel = relDoc.data();
+      // Map backend edges to frontend format
+      // Backend: person1_id=parent, person2_id=child for 'parent' type
+      // Backend: person1_id/person2_id for 'spouse' type
+      const edges = apiEdges.map((e) => {
+        if (e.type === 'parent') {
+          return {
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            type: 'parent',
+            verified: e.verified || false,
+            label: 'parent',
+          };
+        } else if (e.type === 'spouse') {
+          return {
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            type: 'spouse',
+            verified: e.verified || false,
+            label: 'spouse',
+            marital_status: 'married',
+          };
+        }
         return {
-          id: relDoc.id,
-          source: rel.parent_id,
-          target: rel.child_id,
-          type: 'parent',
-          verified: false,
-          label: 'parent',
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          type: e.type,
+          verified: e.verified || false,
+          label: e.type,
         };
       });
 
-      // Add spouse relationships as edges
-      const spouseEdges = spouseSnap.docs.map((spouseDoc) => {
-        const spouse = spouseDoc.data();
-        return {
-          id: spouseDoc.id,
-          source: spouse.spouse1_id,
-          target: spouse.spouse2_id,
-          type: 'spouse',
-          verified: false,
-          label: 'spouse',
-          marital_status: spouse.marital_status || 'married', // Include marital status
-        };
-      });
-
-      // Combine all edges
-      const allEdges = [...edges, ...spouseEdges];
-
-      // Find root nodes (nodes with no parents) - optimized
-      const hasParent = new Set(edges.map((e) => e.target));
+      const parentEdges = edges.filter((e) => e.type === 'parent');
+      const hasParent = new Set(parentEdges.map((e) => e.target));
       const rootNodes = nodes.filter((n) => !hasParent.has(n.id)).map((n) => n.id);
 
       const data = {
         nodes,
-        edges: allEdges,
+        edges,
         rootNodes,
       };
       setTreeData(data);
@@ -413,12 +401,10 @@ const FamilyTree = () => {
       const parsed = parseGEDCOM(text);
 
       // Fetch existing persons for duplicate detection
-      const existingPersonsRef = collection(db, 'persons');
-      const existingQuery = query(existingPersonsRef, where('family_id', '==', familyId));
-      const existingSnap = await getDocs(existingQuery);
-      const existing = existingSnap.docs.map((docSnap) => ({
-        person_id: docSnap.id,
-        ...docSnap.data(),
+      const existingRes = await api.get(`/persons/family/${familyId}`);
+      const existing = (existingRes.data.persons || []).map((p) => ({
+        ...p,
+        person_id: p.person_id,
       }));
 
       setParsedGedcomData(parsed);
@@ -438,7 +424,6 @@ const FamilyTree = () => {
     setGedcomPreviewOpen(false);
 
     try {
-      const personsRef = collection(db, 'persons');
       const personIdMap = new Map();
       const duplicateIds = new Set(duplicates.map((d) => d.import.person_id));
 
@@ -450,61 +435,55 @@ const FamilyTree = () => {
       let importedCount = 0;
       let skippedCount = 0;
 
-      // Create persons in Firestore with progress tracking
+      // Create persons via API
       for (let i = 0; i < personsToImport.length; i++) {
         const person = personsToImport[i];
         const personData = {
-          family_id: familyId,
+          family_id: parseInt(familyId),
           full_name: person.full_name || 'Unknown',
           gender: person.gender || null,
           date_of_birth: person.date_of_birth || null,
           date_of_death: person.date_of_death || null,
           place_of_birth: person.place_of_birth || null,
-          place_of_death: person.place_of_death || null,
           occupation: person.occupation || null,
           biography: person.biography || null,
           clan_name: null,
           village_origin: null,
-          created_at: serverTimestamp(),
         };
 
-        const docRef = await addDoc(personsRef, personData);
-        personIdMap.set(person.person_id, docRef.id);
+        const res = await api.post('/persons', personData);
+        const newPersonId = res.data.person.person_id;
+        personIdMap.set(person.person_id, newPersonId);
         importedCount++;
       }
 
       skippedCount = skipDuplicates ? duplicates.length : 0;
 
-      // Create relationships
-      const relationshipsRef = collection(db, 'relationships');
+      // Create relationships via API
       let relationshipCount = 0;
       for (const rel of parsedGedcomData.relationships) {
         const parentId = personIdMap.get(rel.parent_id);
         const childId = personIdMap.get(rel.child_id);
         if (parentId && childId) {
-          await addDoc(relationshipsRef, {
-            family_id: familyId,
-            parent_id: parentId,
-            child_id: childId,
-            created_at: serverTimestamp(),
+          await api.post('/relationships', {
+            person1_id: parentId,
+            person2_id: childId,
+            relationship_type: 'parent',
           });
           relationshipCount++;
         }
       }
 
-      // Create spouse relationships
-      const spouseRelationshipsRef = collection(db, 'spouseRelationships');
+      // Create spouse relationships via API
       let spouseCount = 0;
       for (const spouseRel of parsedGedcomData.spouseRelationships) {
         const spouse1Id = personIdMap.get(spouseRel.spouse1_id);
         const spouse2Id = personIdMap.get(spouseRel.spouse2_id);
         if (spouse1Id && spouse2Id) {
-          await addDoc(spouseRelationshipsRef, {
-            family_id: familyId,
-            spouse1_id: spouse1Id,
-            spouse2_id: spouse2Id,
-            marital_status: spouseRel.marital_status || 'married',
-            created_at: serverTimestamp(),
+          await api.post('/relationships', {
+            person1_id: spouse1Id,
+            person2_id: spouse2Id,
+            relationship_type: 'spouse',
           });
           spouseCount++;
         }

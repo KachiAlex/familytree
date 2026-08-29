@@ -37,7 +37,20 @@ const authenticateToken = async (req, res, next) => {
 
 const requireFamilyAccess = async (req, res, next) => {
   try {
-    const familyId = req.params.familyId || req.body.family_id;
+    let familyId = req.params.familyId || req.body.family_id;
+
+    // If no familyId but personId is in params, look up family_id from persons table
+    if (!familyId && req.params.personId) {
+      const personResult = await pool.query(
+        'SELECT family_id FROM persons WHERE person_id = $1',
+        [req.params.personId]
+      );
+      if (personResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Person not found' });
+      }
+      familyId = personResult.rows[0].family_id;
+    }
+
     if (!familyId) {
       return res.status(400).json({ error: 'Family ID required' });
     }

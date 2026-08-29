@@ -13,9 +13,9 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
     const { familyId } = req.params;
 
     const result = await pool.query(
-      `SELECT r.*, 
-              p1.full_name as person1_name,
-              p2.full_name as person2_name
+      `SELECT r.*,
+              row_to_json(p1.*) as person1_data,
+              row_to_json(p2.*) as person2_data
        FROM relationships r
        JOIN persons p1 ON r.person1_id = p1.person_id
        JOIN persons p2 ON r.person2_id = p2.person_id
@@ -72,14 +72,13 @@ router.post('/', [
       return res.status(400).json({ error: 'Relationship already exists' });
     }
 
-    // Create relationship (always store with smaller ID first for consistency)
-    const [id1, id2] = person1_id < person2_id ? [person1_id, person2_id] : [person2_id, person1_id];
-
+    // For parent relationships: person1_id = parent, person2_id = child (order matters)
+    // For other types (spouse, sibling, etc.): order doesn't matter, store as-is
     const result = await pool.query(
       `INSERT INTO relationships (person1_id, person2_id, relationship_type, notes, verified_by_user_id)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [id1, id2, relationship_type, notes || null, req.user.user_id]
+      [person1_id, person2_id, relationship_type, notes || null, req.user.user_id]
     );
 
     res.status(201).json({

@@ -20,13 +20,10 @@ import {
 } from '@mui/material';
 import { History as HistoryIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
 import { getEditHistory } from '../utils/editHistory';
-import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
 
 const EditHistoryDialog = ({ person, open, onClose }) => {
   const [editHistory, setEditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userNames, setUserNames] = useState({});
 
   useEffect(() => {
     if (open && person) {
@@ -42,29 +39,6 @@ const EditHistoryDialog = ({ person, open, onClose }) => {
     try {
       const history = await getEditHistory(person.person_id, 50);
       setEditHistory(history);
-
-      // Fetch user names
-      const userIds = new Set([
-        ...history.map((h) => h.changed_by),
-        ...history.map((h) => h.approved_by).filter(Boolean),
-      ]);
-      const names = {};
-      
-      for (const userId of userIds) {
-        try {
-          const userRef = doc(db, 'users', userId);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            names[userId] = userSnap.data().full_name || userSnap.data().email || userId;
-          } else {
-            names[userId] = userId;
-          }
-        } catch (error) {
-          names[userId] = userId;
-        }
-      }
-      
-      setUserNames(names);
     } catch (error) {
       console.error('Failed to fetch edit history:', error);
     } finally {
@@ -139,16 +113,14 @@ const EditHistoryDialog = ({ person, open, onClose }) => {
                   <TableRow key={historyItem.history_id}>
                     <TableCell>
                       {historyItem.created_at
-                        ? new Date(historyItem.created_at.toDate()).toLocaleString()
+                        ? new Date(historyItem.created_at.seconds ? historyItem.created_at.seconds * 1000 : historyItem.created_at).toLocaleString()
                         : '-'}
                     </TableCell>
                     <TableCell>
-                      {userNames[historyItem.changed_by] || historyItem.changed_by}
+                      {historyItem.changed_by_name || historyItem.changed_by_user_id || '-'}
                     </TableCell>
                     <TableCell>
-                      {historyItem.approved_by
-                        ? userNames[historyItem.approved_by] || historyItem.approved_by
-                        : '-'}
+                      {historyItem.approved_by_name || historyItem.approved_by_user_id || '-'}
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>

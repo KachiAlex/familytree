@@ -13,10 +13,43 @@ async function createTables(pool) {
         password_hash VARCHAR(255) NOT NULL,
         full_name VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'member',
+        date_of_birth DATE,
+        gender VARCHAR(50),
+        place_of_birth VARCHAR(255),
+        occupation VARCHAR(255),
+        biography TEXT,
+        clan_name VARCHAR(255),
+        village_origin VARCHAR(255),
+        profile_completed BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add columns if they don't exist (for existing databases)
+    const addColumnIfNotExists = async (tableName, columnName, columnDef) => {
+      try {
+        await client.query(`
+          DO $$ 
+          BEGIN 
+            BEGIN
+              ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef};
+            EXCEPTION
+              WHEN duplicate_column THEN NULL;
+            END;
+          END $$;
+        `);
+      } catch (e) { /* ignore */ }
+    };
+
+    await addColumnIfNotExists('users', 'date_of_birth', 'DATE');
+    await addColumnIfNotExists('users', 'gender', 'VARCHAR(50)');
+    await addColumnIfNotExists('users', 'place_of_birth', 'VARCHAR(255)');
+    await addColumnIfNotExists('users', 'occupation', 'VARCHAR(255)');
+    await addColumnIfNotExists('users', 'biography', 'TEXT');
+    await addColumnIfNotExists('users', 'clan_name', 'VARCHAR(255)');
+    await addColumnIfNotExists('users', 'village_origin', 'VARCHAR(255)');
+    await addColumnIfNotExists('users', 'profile_completed', 'BOOLEAN DEFAULT false');
 
     // Families table (for grouping family trees) - Multi-tenant
     await client.query(`
@@ -70,6 +103,7 @@ async function createTables(pool) {
         clan_name VARCHAR(255),
         village_origin VARCHAR(255),
         migration_history JSONB,
+        owner_user_id INTEGER REFERENCES users(user_id),
         created_by_user_id INTEGER REFERENCES users(user_id),
         verified_by_elder BOOLEAN DEFAULT false,
         verified_by_user_id INTEGER REFERENCES users(user_id),
@@ -77,6 +111,8 @@ async function createTables(pool) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    await addColumnIfNotExists('persons', 'owner_user_id', 'INTEGER REFERENCES users(user_id)');
 
     // Relationships table (graph structure)
     await client.query(`
@@ -141,6 +177,7 @@ async function createTables(pool) {
       CREATE TABLE IF NOT EXISTS invitations (
         invitation_id SERIAL PRIMARY KEY,
         family_id INTEGER REFERENCES families(family_id) ON DELETE CASCADE,
+        person_id INTEGER REFERENCES persons(person_id) ON DELETE CASCADE,
         email VARCHAR(255) NOT NULL,
         phone VARCHAR(50),
         invited_by_user_id INTEGER REFERENCES users(user_id),
@@ -148,6 +185,64 @@ async function createTables(pool) {
         role VARCHAR(50) DEFAULT 'member',
         status VARCHAR(50) DEFAULT 'pending',
         expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await addColumnIfNotExists('invitations', 'person_id', 'INTEGER REFERENCES persons(person_id) ON DELETE CASCADE');
+
+    // Pending changes table (for collaborative editing / elder approval workflow)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pending_changes (
+        pending_change_id SERIAL PRIMARY KEY,
+        person_id INTEGER REFERENCES persons(person_id) ON DELETE CASCADE,
+        family_id INTEGER REFERENCES families(family_id) ON DELETE CASCADE,
+        changed_by_user_id INTEGER REFERENCES users(user_id),
+        changes JSONB NOT NULL,
+        changed_fields TEXT[] NOT NULL,
+        reason TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        approved_by_user_id INTEGER REFERENCES users(user_id),
+        approved_at TIMESTAMP,
+        approval_notes TEXT,
+        rejected_by_user_id INTEGER REFERENCES users(user_id),
+        rejected_at TIMESTAMP,
+        rejection_reason TEXT,
+        conflicts_with INTEGER[],
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Edit history table (audit trail of approved changes)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS edit_history (
+        edit_history_id SERIAL PRIMARY KEY,
+        person_id INTEGER REFERENCES persons(person_id) ON DELETE CASCADE,
+        family_id INTEGER REFERENCES families(family_id) ON DELETE CASCADE,
+        changed_by_user_id INTEGER REFERENCES users(user_id),
+        approved_by_user_id INTEGER REFERENCES users(user_id),
+        changes JSONB NOT NULL,
+        reason TEXT,
+        approval_notes TEXT,
+        status VARCHAR(50) DEFAULT 'approved',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Wisdom chats table (Elder Wisdom AI - conversational ancestor)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS wisdom_chats (
+        chat_id SERIAL PRIMARY KEY,
+        family_id INTEGER REFERENCES families(family_id) ON DELETE CASCADE,
+        person_id INTEGER REFERENCES persons(person_id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        retrieved_story_ids INTEGER[],
+        model VARCHAR(100),
+        tokens_used INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -160,6 +255,13 @@ async function createTables(pool) {
       CREATE INDEX IF NOT EXISTS idx_documents_person_id ON documents(person_id);
       CREATE INDEX IF NOT EXISTS idx_family_members_family_id ON family_members(family_id);
       CREATE INDEX IF NOT EXISTS idx_family_members_user_id ON family_members(user_id);
+      CREATE INDEX IF NOT EXISTS idx_pending_changes_person_id ON pending_changes(person_id);
+      CREATE INDEX IF NOT EXISTS idx_pending_changes_family_id ON pending_changes(family_id);
+      CREATE INDEX IF NOT EXISTS idx_pending_changes_status ON pending_changes(status);
+      CREATE INDEX IF NOT EXISTS idx_edit_history_person_id ON edit_history(person_id);
+      CREATE INDEX IF NOT EXISTS idx_edit_history_family_id ON edit_history(family_id);
+      CREATE INDEX IF NOT EXISTS idx_wisdom_chats_person_id ON wisdom_chats(person_id);
+      CREATE INDEX IF NOT EXISTS idx_wisdom_chats_family_id ON wisdom_chats(family_id);
     `);
 
     await client.query('COMMIT');

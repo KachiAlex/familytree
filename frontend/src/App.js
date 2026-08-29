@@ -15,6 +15,7 @@ import FamilySettings from './pages/FamilySettings';
 import AddPerson from './pages/AddPerson';
 import ProfileCompletion from './pages/ProfileCompletion';
 import ClaimPerson from './pages/ClaimPerson';
+import WisdomChat from './pages/WisdomChat';
 
 function App() {
   return (
@@ -51,6 +52,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <PersonDetail />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/person/:personId/wisdom-chat"
+              element={
+                <PrivateRoute>
+                  <WisdomChat />
                 </PrivateRoute>
               }
             />

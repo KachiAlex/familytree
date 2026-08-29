@@ -28,8 +28,6 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { getPendingChanges, approvePendingChange, rejectPendingChange } from '../utils/editHistory';
-import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
 
 const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesResolved }) => {
   const [pendingChanges, setPendingChanges] = useState([]);
@@ -38,7 +36,6 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
   const [selectedChange, setSelectedChange] = useState(null);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
-  const [userNames, setUserNames] = useState({});
 
   useEffect(() => {
     if (open && person) {
@@ -54,26 +51,6 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
     try {
       const changes = await getPendingChanges(person.person_id);
       setPendingChanges(changes);
-
-      // Fetch user names for display
-      const userIds = new Set(changes.map((c) => c.changed_by));
-      const names = {};
-      
-      for (const userId of userIds) {
-        try {
-          const userRef = doc(db, 'users', userId);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            names[userId] = userSnap.data().full_name || userSnap.data().email || userId;
-          } else {
-            names[userId] = userId;
-          }
-        } catch (error) {
-          names[userId] = userId;
-        }
-      }
-      
-      setUserNames(names);
     } catch (error) {
       console.error('Failed to fetch pending changes:', error);
     } finally {
@@ -86,7 +63,7 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
     
     setProcessing(true);
     try {
-      await approvePendingChange(change.pending_change_id, currentUser.uid, approvalNotes);
+      await approvePendingChange(change.pending_change_id, currentUser.user_id, approvalNotes);
       setApprovalNotes('');
       setSelectedChange(null);
       await fetchPendingChanges();
@@ -107,7 +84,7 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
     
     setProcessing(true);
     try {
-      await rejectPendingChange(change.pending_change_id, currentUser.uid, rejectionReason);
+      await rejectPendingChange(change.pending_change_id, currentUser.user_id, rejectionReason);
       setRejectionReason('');
       setSelectedChange(null);
       await fetchPendingChanges();
@@ -188,7 +165,7 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
 
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary">
-                    Proposed by: <strong>{userNames[selectedChange.changed_by] || selectedChange.changed_by}</strong>
+                    Proposed by: <strong>{selectedChange.changed_by_name || selectedChange.changed_by_user_id}</strong>
                   </Typography>
                   {selectedChange.reason && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -274,7 +251,7 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
                     {pendingChanges.map((change) => (
                       <TableRow key={change.pending_change_id} hover>
                         <TableCell>
-                          {userNames[change.changed_by] || change.changed_by}
+                          {change.changed_by_name || change.changed_by_user_id}
                         </TableCell>
                         <TableCell>
                           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
@@ -317,7 +294,7 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
                         </TableCell>
                         <TableCell>
                           {change.created_at
-                            ? new Date(change.created_at.toDate()).toLocaleDateString()
+                            ? new Date(change.created_at.seconds ? change.created_at.seconds * 1000 : change.created_at).toLocaleDateString()
                             : '-'}
                         </TableCell>
                         <TableCell align="right">
