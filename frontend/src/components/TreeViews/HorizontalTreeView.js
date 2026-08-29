@@ -357,7 +357,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
     // STEP 2: Position children under their mothers (to the right) AND position siblings
     sortedLevels.forEach((level) => {
       const personIds = levelMap.get(level);
-      const childX = padding + level * levelSpacing; // X increases with level (left to right)
+      // childX unused in this scope
       
       personIds.forEach((id) => {
         // Skip if already positioned (e.g., as a root)
@@ -392,7 +392,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           }
           
           // Position children to the right (at child's level, X increases)
-          const childX = padding + level * levelSpacing;
+          // childX is computed via levelSpacing below
           let childY = motherY;
           let firstChildIndex = 0;
           

@@ -18,7 +18,6 @@ import {
   Chip,
   TextField,
   Divider,
-  IconButton,
   Tooltip,
   CircularProgress,
 } from '@mui/material';
@@ -45,6 +44,7 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
     if (open && person) {
       fetchPendingChanges();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, person]);
 
   const fetchPendingChanges = async () => {

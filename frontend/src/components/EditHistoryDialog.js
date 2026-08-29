@@ -15,7 +15,6 @@ import {
   TableRow,
   Paper,
   Chip,
-  Divider,
   CircularProgress,
   Alert,
 } from '@mui/material';
@@ -33,6 +32,7 @@ const EditHistoryDialog = ({ person, open, onClose }) => {
     if (open && person) {
       fetchEditHistory();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, person]);
 
   const fetchEditHistory = async () => {

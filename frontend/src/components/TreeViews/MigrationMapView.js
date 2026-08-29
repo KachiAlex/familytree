@@ -22,7 +22,7 @@ const MigrationMapView = ({ familyId }) => {
   const [yearRange, setYearRange] = useState([1800, new Date().getFullYear()]);
   const [selectedYear, setSelectedYear] = useState(null); // For timeline slider
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1000); // ms per year
+  const [playbackSpeed] = useState(1000); // ms per year
 
   useEffect(() => {
     fetchPersons();
