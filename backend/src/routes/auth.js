@@ -10,7 +10,7 @@ const router = express.Router();
 
 // Register an invited user (joins existing family via invitation, no family_name required)
 router.post('/register/invited', authLimiter, [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('password').isLength({ min: 6 }),
   body('full_name').notEmpty().trim(),
   body('invitation_token').notEmpty().trim()
@@ -113,7 +113,7 @@ router.post('/register/invited', authLimiter, [
 
 // Family Registration (Multi-tenant: Family-first registration)
 router.post('/register', authLimiter, [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('password').isLength({ min: 6 }),
   body('full_name').notEmpty().trim(),
   body('family_name').notEmpty().trim()
@@ -233,7 +233,7 @@ router.post('/register', authLimiter, [
 
 // Login
 router.post('/login', authLimiter, [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('password').notEmpty()
 ], async (req, res) => {
   try {
@@ -369,7 +369,7 @@ router.put('/me', async (req, res) => {
 
 // On-screen reset password (no email, for use before domain email is configured)
 router.post('/reset-password', authLimiter, [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('password').isLength({ min: 6 })
 ], async (req, res) => {
   const client = await pool.connect();
