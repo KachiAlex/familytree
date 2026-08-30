@@ -158,9 +158,15 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
       .attr('transform', `translate(${width / 2},${height / 2})`);
 
     // Add zoom behavior
-    const zoom = d3.zoom().on('zoom', (event) => {
-      g.attr('transform', `translate(${width / 2 + event.transform.x},${height / 2 + event.transform.y}) scale(${event.transform.k})`);
-    });
+    const zoom = d3.zoom()
+      .scaleExtent([0.2, 3])
+      .wheelDelta((event) => {
+        // Normalize trackpad scroll speed
+        return -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode === 2 ? 1 : 0.002) * (event.ctrlKey ? 10 : 1);
+      })
+      .on('zoom', (event) => {
+        g.attr('transform', `translate(${width / 2 + event.transform.x},${height / 2 + event.transform.y}) scale(${event.transform.k})`);
+      });
     svg.call(zoom);
 
     // Find ALL root nodes (no parents)

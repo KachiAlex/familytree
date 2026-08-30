@@ -318,37 +318,71 @@ function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
     return { nodes: nodePositions, connections };
   }, [data, focalPersonId]);
 
-  // Smooth camera flight and target tracking
-  useFrame(({ camera }) => {
-    if (nodes.length === 0) return;
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionProgress = useRef(0);
+  const startPos = useRef(new THREE.Vector3());
+  const startTarget = useRef(new THREE.Vector3());
+  const endPos = useRef(new THREE.Vector3());
+  const endTarget = useRef(new THREE.Vector3());
+
+  // Trigger flight when focus changes
+  useEffect(() => {
+    if (nodes.length === 0 || !controlsRef.current) return;
     
-    let targetPos = new THREE.Vector3(0, 0, 20);
-    let lookAtPos = new THREE.Vector3(0, 0, 0);
+    const camera = controlsRef.current.object;
+    const newTargetPos = new THREE.Vector3(0, 0, 20);
+    const newLookAtPos = new THREE.Vector3(0, 0, 0);
 
     if (focalPersonId) {
       const focalNode = nodes.find(n => String(n.node.id) === focalPersonId);
       if (focalNode) {
         const [fx, fy, fz] = focalNode.position;
-        targetPos.set(fx, fy, fz + 10);
-        lookAtPos.set(fx, fy, fz);
+        newTargetPos.set(fx, fy, fz + 10);
+        newLookAtPos.set(fx, fy, fz);
       }
     } else {
       const posArr = nodes.map(n => n.position);
-      const minX = Math.min(...posArr.map(p => p[0]));
-      const maxX = Math.max(...posArr.map(p => p[0]));
-      const minY = Math.min(...posArr.map(p => p[1]));
-      const maxY = Math.max(...posArr.map(p => p[1]));
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
-      const dist = Math.max(maxX - minX, maxY - minY) * 1.2 || 15;
-      targetPos.set(centerX, centerY, dist);
-      lookAtPos.set(centerX, centerY, 0);
+      if (posArr.length > 0) {
+        const minX = Math.min(...posArr.map(p => p[0]));
+        const maxX = Math.max(...posArr.map(p => p[0]));
+        const minY = Math.min(...posArr.map(p => p[1]));
+        const maxY = Math.max(...posArr.map(p => p[1]));
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const dist = Math.max(maxX - minX, maxY - minY) * 1.2 || 15;
+        newTargetPos.set(centerX, centerY, dist);
+        newLookAtPos.set(centerX, centerY, 0);
+      }
     }
 
-    camera.position.lerp(targetPos, 0.05);
-    if (controlsRef.current) {
-      controlsRef.current.target.lerp(lookAtPos, 0.05);
-      controlsRef.current.update();
+    startPos.current.copy(camera.position);
+    startTarget.current.copy(controlsRef.current.target);
+    endPos.current.copy(newTargetPos);
+    endTarget.current.copy(newLookAtPos);
+    transitionProgress.current = 0;
+    setIsTransitioning(true);
+  }, [focalPersonId, nodes]);
+
+  // Handle the smooth transition and user interaction
+  useFrame((state, delta) => {
+    // 1. Handle auto-rotation when no one is selected
+    if (groupRef.current && !focalPersonId && !isTransitioning) {
+      groupRef.current.rotation.y += delta * 0.05;
+    }
+
+    // 2. Handle programmatic flight
+    if (isTransitioning && controlsRef.current) {
+      transitionProgress.current += delta * 1.5; // Flight speed
+      const t = Math.min(1, transitionProgress.current);
+      const ease = 1 - Math.pow(1 - t, 3); // Cubic ease out
+      
+      const camera = controlsRef.current.object;
+      camera.position.lerpVectors(startPos.current, endPos.current, ease);
+      controlsRef.current.target.lerpVectors(startTarget.current, endTarget.current, ease);
+      
+      if (t >= 1) {
+        setIsTransitioning(false);
+      }
     }
   });
 
@@ -375,7 +409,22 @@ function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
           }}
         />
       ))}
-      <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.05} />
+      <OrbitControls 
+        ref={controlsRef} 
+        makeDefault
+        enableDamping 
+        dampingFactor={0.1}
+        rotateSpeed={0.6}
+        zoomSpeed={0.8}
+        panSpeed={0.8}
+        screenSpacePanning={true}
+        minDistance={2}
+        maxDistance={100}
+        onStart={() => {
+          // Immediately stop any programmatic flight if user interacts
+          setIsTransitioning(false);
+        }}
+      />
     </group>
   );
 }
