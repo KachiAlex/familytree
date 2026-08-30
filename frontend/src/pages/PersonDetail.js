@@ -635,13 +635,13 @@ const PersonDetail = () => {
               bgcolor: 'background.paper', borderRadius: '14px', overflow: 'hidden',
               border: '1px solid', borderColor: '#E4D3B0', position: 'relative',
             }}>
-              <div className="thread-band thin" />
 
               {/* Avatar area */}
-              <Box sx={{ position: 'relative', p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', mx: -3, mt: -3, overflow: 'hidden' }}>
                 <Box sx={{
-                  width: 120, height: 120, borderRadius: '50%',
-                  bgcolor: person.profile_photo_url ? 'transparent' : '#22345E',
+                  width: '100%', aspectRatio: '1 / 1',
+                  bgcolor: 'transparent',
+                  background: 'linear-gradient(135deg, #22345E, #3A4F82)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   overflow: 'hidden', position: 'relative',
                 }}>
@@ -649,7 +649,7 @@ const PersonDetail = () => {
                     <Box component="img" src={person.profile_photo_url} alt={person.full_name}
                       sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 36, fontWeight: 600, color: '#FFFDF9' }}>
+                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 56, fontWeight: 600, color: '#FFFDF9' }}>
                       {getInitials(person.full_name)}
                     </Typography>
                   )}
@@ -699,52 +699,58 @@ const PersonDetail = () => {
                   )}
                 </Box>
 
-                <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 22, mt: 2, textAlign: 'center' }}>
-                  {person.full_name}
-                </Typography>
-                {lifeDates && (
-                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#7A6D5C', mt: 0.5 }}>
-                    {lifeDates}
-                  </Typography>
-                )}
+                <Box className="thread-band thin" sx={{ width: '100%' }} />
 
-                {/* Verification badge */}
-                <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, mb: 0.25, mt: 3 }}>
+                  <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 22 }}>
+                    {person.full_name}
+                  </Typography>
                   {person.verified_by_elder && (
                     <Box sx={{
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace",
-                      px: 1.25, py: 0.5, borderRadius: '20px',
-                      bgcolor: '#E4EDE4', color: '#3F6644',
+                      width: 18, height: 18, borderRadius: '50%', bgcolor: '#3F6644', color: '#FFFDF9',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                     }}>
-                      <CheckCircleIcon sx={{ fontSize: 14 }} /> Verified by elder
-                    </Box>
-                  )}
-                  {person.alive_status ? (
-                    <Box sx={{ fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: '#E4EDE4', color: '#3F6644' }}>Alive</Box>
-                  ) : (
-                    <Box sx={{ fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: '#F1E6D2', color: '#7A6D5C' }}>Deceased</Box>
-                  )}
-                  {person.gender && (
-                    <Box sx={{ fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: '#E8ECF4', color: '#22345E', textTransform: 'capitalize' }}>
-                      {person.gender}
+                      <CheckCircleIcon sx={{ fontSize: 10 }} />
                     </Box>
                   )}
                 </Box>
+                {(lifeDates || person.place_of_birth) && (
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: '#7A6D5C', px: 3, mb: 2.25 }}>
+                    {[lifeDates, person.place_of_birth].filter(Boolean).join(' · ')}
+                  </Typography>
+                )}
 
                 {/* Action buttons */}
                 {canEdit && (
-                  <Box sx={{ display: 'flex', gap: 1, mt: 2.5, flexWrap: 'wrap', justifyContent: 'center' }}>
-                    <Button size="small" variant="outlined" onClick={openEdit} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
-                      Edit details
+                  <Box sx={{ display: 'flex', gap: 1, px: 3, mt: 1.5, mb: 2.25, flexWrap: 'wrap', width: '100%' }}>
+                    <Button size="small" variant="outlined" onClick={openEdit} sx={{ flex: 1, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
+                      Edit
                     </Button>
-                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.owner_user_id} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<PdfIcon />}
+                      onClick={async () => {
+                        try {
+                          setSnackbar({ open: true, message: 'Generating PDF with photo...', severity: 'info' });
+                          await exportPersonProfileToPDF(person, { parents, children, spouses, siblings });
+                          setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
+                        } catch (error) {
+                          console.error('Failed to export PDF:', error);
+                          setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
+                        }
+                      }}
+                      sx={{ flex: 1, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12.5, py: 0.75 }}
+                    >
+                      Export PDF
+                    </Button>
+                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.owner_user_id} sx={{ flex: 1, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Invite
                     </Button>
-                    <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ borderColor: '#D8BF92', color: '#3F6644', textTransform: 'none', fontSize: 12 }}>
+                    <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ flex: 1, borderColor: '#D8BF92', color: '#3F6644', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Verify
                     </Button>
-                    <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteDialogOpen(true)} sx={{ borderColor: '#D8BF92', color: '#B8541F', textTransform: 'none', fontSize: 12 }}>
+                    <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteDialogOpen(true)} sx={{ flex: 1, borderColor: '#D8BF92', color: '#B8541F', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Delete
                     </Button>
                   </Box>
@@ -752,19 +758,20 @@ const PersonDetail = () => {
               </Box>
 
               {/* Info rows */}
-              <Box sx={{ p: '0 20px 20px' }}>
+              <Box sx={{ p: 3, pt: 0 }}>
                 {[
+                  { label: 'Gender', value: person.gender ? (person.gender.charAt(0).toUpperCase() + person.gender.slice(1)) : null },
                   { label: 'Clan', value: person.clan_name },
-                  { label: 'Village origin', value: person.village_origin },
-                  { label: 'Place of birth', value: person.place_of_birth },
+                  { label: 'Village', value: person.village_origin },
                   { label: 'Occupation', value: person.occupation },
-                ].filter(row => row.value).map((row, i) => (
+                  { label: 'Status', value: person.alive_status ? 'Living' : 'Deceased' },
+                ].filter(row => row.value).map((row, i, arr) => (
                   <Box key={i} sx={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    py: 1.25, borderBottom: i < 3 ? '1px dashed' : 'none', borderColor: '#E4D3B0',
+                    py: 1.125, borderBottom: i < arr.length - 1 ? '1px solid' : 'none', borderColor: '#F1E6D2',
                   }}>
-                    <Typography sx={{ fontSize: '12.5px', color: '#7A6D5C' }}>{row.label}</Typography>
-                    <Typography sx={{ fontSize: '13px', fontWeight: 500, color: 'text.primary' }}>{row.value}</Typography>
+                    <Typography sx={{ fontSize: 13, color: '#9C8D77' }}>{row.label}</Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{row.value}</Typography>
                   </Box>
                 ))}
 
