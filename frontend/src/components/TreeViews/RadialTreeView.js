@@ -411,8 +411,6 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .text('DIVORCED');
       }
     });
-
-    console.log(`🔵 [RADIAL] Rendered ${allNodeIds.length} nodes`);
   }, [personsData, hasDivorcedRelationship, onPersonClick]);
 
   return (

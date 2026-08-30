@@ -3,6 +3,11 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Line } from '@react-three/drei';
 import { Box } from '@mui/material';
 import * as THREE from 'three';
+import { 
+  generationColors, 
+  maritalStatusColors,
+  layoutConfig 
+} from '../../config/treeConfig';
 
 // Person node component
 function PersonNode({ position, person, onClick, depth = 0 }) {
@@ -21,9 +26,8 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
 
   // Color based on depth
   const color = useMemo(() => {
-    // Redesign palette: indigo, leaf, clay, gold, indigo-light
-    const colors = ['#22345E', '#3F6644', '#C1622D', '#D79A1E', '#3A4F82'];
-    return colors[depth % colors.length];
+    const levelIndex = Math.min(depth, generationColors.background.length - 1);
+    return generationColors.background[levelIndex];
   }, [depth]);
 
   return (
@@ -42,7 +46,7 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
       <Text
         position={[0, -0.8, 0]}
         fontSize={0.15}
-        color="white"
+        color="#1C1410"
         anchorX="center"
         anchorY="middle"
         maxWidth={2}
@@ -53,7 +57,7 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
         <Text
           position={[0, -1, 0]}
           fontSize={0.1}
-          color="#aaa"
+          color="#5C5346"
           anchorX="center"
           anchorY="middle"
         >
@@ -68,7 +72,7 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
 function ConnectionLine({ start, end, type }) {
   const points = useMemo(() => [start, end], [start, end]);
   // Redesign palette: clay for parent-child, gold for spouse
-  const color = type === 'spouse' ? '#D79A1E' : '#C1622D';
+  const color = type === 'spouse' ? maritalStatusColors.married.border : generationColors.border[2];
   return (
     <Line
       points={points}

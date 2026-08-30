@@ -9,7 +9,6 @@ import {
 } from '../../config/treeConfig';
 
 const VerticalTreeView = ({ data, onPersonClick }) => {
-  console.log('🔵 VerticalTreeView component loaded', data);
   const svgRef = useRef();
   const [showLegend, setShowLegend] = useState(true);
   const containerRef = useRef();
@@ -280,12 +279,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const { nodeWidth, levelSpacing, siblingSpacing, spouseSpacing, familyUnitGap, padding } = layoutConfig;
     
     // Identify family units: person + ALL their spouses grouped together
-    // Strategy: For each person with spouses, create a unit with that person as the main person
     const familyUnits = new Map(); // personId -> { personId, spouseIds: [], isRoot: boolean }
     const personToUnit = new Map(); // personId -> unit personId
-    
-    console.log('[FAMILY UNITS] Building family units from spouses map...');
-    console.log('[FAMILY UNITS] Total spouses entries:', spouses.size);
     
     // First pass: collect all spouse relationships (bidirectional)
     const spouseRelationships = new Map(); // personId -> Set of spouseIds
@@ -372,14 +367,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       group.forEach(personId => {
         personToUnit.set(personId, centerPersonId);
       });
-      
-      const centerPersonName = persons.get(centerPersonId)?.name || centerPersonId;
-      const spouseNames = spouseIds.map(sid => persons.get(sid)?.name || sid).join(', ');
-      console.log(`[FAMILY UNITS] Created merged unit for ${centerPersonName} with spouses: ${spouseNames}`);
     });
     
-    console.log('[FAMILY UNITS] Total family units created:', familyUnits.size);
-
     // Group children by their mother
     const childrenByMother = new Map(); // motherId -> [childIds]
     childrenByParent.forEach((childIds, parentId) => {
@@ -403,43 +392,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       });
     });
 
-    // Debug: Log the structure
-    console.log('=== LAYOUT DEBUG START ===');
-    console.log('Total persons:', persons.size);
-    console.log('Root nodes:', roots.map(id => persons.get(id)?.name || id));
-    console.log('Levels after spouse fix:', Array.from(levelMap.keys()).sort((a, b) => a - b));
-    
-    // Log all levels and who's in them
-    Array.from(levelMap.keys()).sort((a, b) => a - b).forEach(level => {
-      const peopleAtLevel = levelMap.get(level).map(id => {
-        const person = persons.get(id);
-        const spouseInfo = spouses.get(id);
-        const spouseName = spouseInfo ? persons.get(spouseInfo.spouseId)?.name : null;
-        return `${person?.name || id}${spouseName ? ` (spouse: ${spouseName})` : ''}`;
-      });
-      console.log(`Level ${level}:`, peopleAtLevel);
-    });
-    
-    console.log('Children by mother:', Array.from(childrenByMother.entries()).map(([mid, cids]) => ({
-      mother: persons.get(mid)?.name || mid,
-      children: cids.map(cid => persons.get(cid)?.name || cid)
-    })));
-    
-    // Log all spouse relationships
-    console.log('Spouse relationships:');
-    const loggedSpouses = new Set();
-    spouses.forEach((spouseInfo, id) => {
-      if (!loggedSpouses.has(id) && !loggedSpouses.has(spouseInfo.spouseId)) {
-        const person1 = persons.get(id);
-        const person2 = persons.get(spouseInfo.spouseId);
-        const level1 = levels.get(id);
-        const level2 = levels.get(spouseInfo.spouseId);
-        console.log(`  ${person1?.name || id} (level ${level1}) <-> ${person2?.name || spouseInfo.spouseId} (level ${level2}) [${spouseInfo.marital_status || 'married'}]`);
-        loggedSpouses.add(id);
-        loggedSpouses.add(spouseInfo.spouseId);
-      }
-    });
-    
     // STEP 1: Position ONLY true root nodes (from roots array)
     const sortedLevels = Array.from(levelMap.keys()).sort((a, b) => a - b);
     let currentX = padding;
@@ -455,7 +407,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         if (rootsSet.has(id) && !positions.has(id)) {
           positions.set(id, { x: currentX, y, level });
           currentX += nodeWidth + siblingSpacing * 2;
-          console.log(`[STEP 1] Positioned root: ${persons.get(id)?.name || id} at X:${currentX - nodeWidth - siblingSpacing * 2}`);
         }
       });
     });
@@ -490,7 +441,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           // Position mother if not already positioned
           if (!positions.has(id)) {
             positions.set(id, { x: motherX, y, level });
-            console.log(`[STEP 2] Positioned mother: ${persons.get(id)?.name || id} at X:${motherX}`);
           } else {
             motherX = positions.get(id).x;
           }
@@ -518,13 +468,11 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             if (index === firstChildIndex) {
               // First unpositioned child directly under mother
               positions.set(childId, { x: motherX, y: childY, level: childLevel });
-              console.log(`[STEP 2] Positioned child: ${persons.get(childId)?.name || childId} under mother at X:${motherX}`);
               childX = motherX;
             } else {
               // Subsequent siblings to the right
               childX += nodeWidth + siblingSpacing;
               positions.set(childId, { x: childX, y: childY, level: childLevel });
-              console.log(`[STEP 2] Positioned sibling: ${persons.get(childId)?.name || childId} at X:${childX}`);
             }
           });
           
@@ -534,22 +482,9 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     });
     
     // STEP 3: Position family units as groups (person + spouses together)
-    console.log('[STEP 3] Starting family unit positioning...');
-    console.log('[STEP 3] Family units map:', Array.from(familyUnits.entries()).map(([uid, unit]) => ({
-      unitId: uid,
-      person: persons.get(unit.personId)?.name || unit.personId,
-      spouses: unit.spouseIds.map(sid => persons.get(sid)?.name || sid)
-    })));
-    console.log('[STEP 3] Person to unit map:', Array.from(personToUnit.entries()).slice(0, 10).map(([pid, uid]) => ({
-      person: persons.get(pid)?.name || pid,
-      unitId: uid
-    })));
-    
     sortedLevels.forEach((level) => {
       const personIds = levelMap.get(level);
       let unitX = padding;
-      
-      console.log(`[STEP 3] Processing level ${level} with ${personIds.length} people`);
       
       // Group people at this level by their family units
       const unitsAtLevel = new Map(); // unitId -> { personId, spouseIds: [] }
@@ -587,11 +522,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       
       // Position each family unit
       unitsAtLevel.forEach((unit, unitId) => {
-        const mainPersonName = persons.get(unit.personId)?.name || unit.personId;
-        console.log(`[STEP 3] Processing family unit for ${mainPersonName} with ${unit.spouseIds.length} spouses`);
-        
         // Find the person with the most spouses to use as the center
-        // This ensures that if someone has multiple spouses, they're centered
         const allUnitMembers = [unit.personId, ...unit.spouseIds];
         let centerPersonId = unit.personId;
         let maxSpouseCount = unit.spouseIds.length;
@@ -614,15 +545,11 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           }
         });
         
-        const centerPersonName = persons.get(centerPersonId)?.name || centerPersonId;
-        console.log(`[STEP 3] Using ${centerPersonName} as center person (has ${maxSpouseCount} spouses in unit)`);
-        
         // Get the center person's position (should already be positioned)
         let centerPersonX = unitX;
         const centerPersonPos = positions.get(centerPersonId);
         if (centerPersonPos) {
           centerPersonX = centerPersonPos.x;
-          console.log(`[STEP 3] Center person ${centerPersonName} already positioned at X:${centerPersonX}`);
         } else {
           // Position center person if not positioned
           positions.set(centerPersonId, {
@@ -630,7 +557,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             y: padding + level * levelSpacing,
             level
           });
-          console.log(`[STEP 3] Positioned center person ${centerPersonName} at X:${centerPersonX}`);
         }
         
         // Separate spouses by number of children
@@ -644,8 +570,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         // Count children for each spouse (only count children where this spouse is the MOTHER)
         spousesToPosition.forEach(spouseId => {
           const children = childrenByMother.get(spouseId) || [];
-          const spouseName = persons.get(spouseId)?.name || spouseId;
-          console.log(`[STEP 3] Spouse ${spouseName} has ${children.length} children (as mother)`);
           spouseWithChildren.push({ id: spouseId, childCount: children.length });
         });
         
@@ -676,43 +600,28 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           spouseWithChildren.slice(midPoint).forEach(s => rightSpouses.push(s.id));
         }
         
-        console.log(`[STEP 3] Left spouses (fewer children): ${leftSpouses.map(id => persons.get(id)?.name || id).join(', ')}`);
-        console.log(`[STEP 3] Right spouses (more children): ${rightSpouses.map(id => persons.get(id)?.name || id).join(', ')}`);
-        
         // Position all spouses with equal spacing relative to the CENTER person
         // IMPORTANT: Always reposition spouses even if they were positioned in STEP 2
         let leftX = centerPersonX;
         leftSpouses.forEach((spouseId) => {
-          const oldPos = positions.get(spouseId);
           leftX = leftX - nodeWidth - spouseSpacing;
           positions.set(spouseId, {
             x: leftX,
             y: padding + level * levelSpacing,
             level
           });
-          const spouseName = persons.get(spouseId)?.name || spouseId;
-          const oldX = oldPos ? oldPos.x : 'not positioned';
-          console.log(`[STEP 3] Positioned spouse (left, fewer children): ${spouseName} from X:${oldX} to X:${leftX} (spacing: ${spouseSpacing}px)`);
         });
         
         // Position spouses to the RIGHT with same spacing
         let rightX = centerPersonX;
         rightSpouses.forEach((spouseId) => {
-          const oldPos = positions.get(spouseId);
           rightX = rightX + nodeWidth + spouseSpacing;
           positions.set(spouseId, {
             x: rightX,
             y: padding + level * levelSpacing,
             level
           });
-          const spouseName = persons.get(spouseId)?.name || spouseId;
-          const oldX = oldPos ? oldPos.x : 'not positioned';
-          console.log(`[STEP 3] Positioned spouse (right, more children): ${spouseName} from X:${oldX} to X:${rightX} (spacing: ${spouseSpacing}px)`);
         });
-        
-        console.log(`[STEP 3] Final positions - Center: ${centerPersonName} at X:${centerPersonX}, Left spouses: ${leftSpouses.length}, Right spouses: ${rightSpouses.length}, Spacing: ${spouseSpacing}px`);
-        
-        console.log(`[STEP 3] Family unit for ${mainPersonName}: ${leftSpouses.length} left (fewer children), ${rightSpouses.length} right (more children)`);
         
         // Calculate unit width and move to next position
         const unitRight = Math.max(centerPersonX, rightX);
@@ -721,7 +630,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     });
     
     // STEP 3.5: Center fathers above their children (mean average position)
-    console.log('[STEP 3.5] Centering fathers above their children...');
     sortedLevels.forEach((level) => {
       const personIds = levelMap.get(level);
       
@@ -763,10 +671,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         // Update father's X position to center above children
         currentPos.x = avgX;
         positions.set(id, currentPos);
-        console.log(`[STEP 3.5] Centered father ${person.name || id} from X:${oldX} to X:${avgX} (average of ${childPositions.length} children, delta: ${deltaX})`);
         
         // Also adjust positions of ALL spouses to maintain family unit grouping
-        // Find ALL family units that contain this person (as main person or as spouse)
         if (Math.abs(deltaX) > 1) {
           const adjustedSpouses = new Set(); // Track which spouses we've already adjusted
           
@@ -783,8 +689,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
                     memberPos.x += deltaX;
                     positions.set(memberId, memberPos);
                     adjustedSpouses.add(memberId);
-                    const memberName = persons.get(memberId)?.name || memberId;
-                    console.log(`[STEP 3.5] Adjusted ${memberName} position by ${deltaX} to maintain family unit (main unit)`);
                   }
                 }
               });
@@ -800,8 +704,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
                 mainPersonPos.x += deltaX;
                 positions.set(unitPersonId, mainPersonPos);
                 adjustedSpouses.add(unitPersonId);
-                const mainPersonName = persons.get(unitPersonId)?.name || unitPersonId;
-                console.log(`[STEP 3.5] Adjusted ${mainPersonName} position by ${deltaX} to maintain family unit (spouse unit)`);
               }
               
               // Also adjust other spouses in this unit
@@ -812,8 +714,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
                     spousePos.x += deltaX;
                     positions.set(spouseId, spousePos);
                     adjustedSpouses.add(spouseId);
-                    const spouseName = persons.get(spouseId)?.name || spouseId;
-                    console.log(`[STEP 3.5] Adjusted ${spouseName} position by ${deltaX} to maintain family unit (spouse unit)`);
                   }
                 }
               });
@@ -845,7 +745,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             const parentPos = positions.get(parentId);
             if (parentPos) {
               positions.set(id, { x: parentPos.x, y, level });
-              console.log(`[STEP 4] Positioned fallback: ${persons.get(id)?.name || id} under parent at X:${parentPos.x}`);
               break;
             }
           }
@@ -864,7 +763,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           y: padding + maxLevel * levelSpacing,
           level: maxLevel
         });
-        console.log(`[STEP 5] Positioned orphaned node: ${person.name || id} at X:${fallbackX}, level:${maxLevel}`);
         fallbackX += nodeWidth + siblingSpacing * 2;
         
         // Also add to levelMap if not already there
@@ -876,9 +774,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         }
       }
     });
-    
-    console.log('=== LAYOUT DEBUG END ===');
-    console.log(`Total persons: ${persons.size}, Positioned: ${positions.size}`);
 
     return { positions, levelMap };
   }, [personsData, getMotherId]);
@@ -918,10 +813,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
     const { positions } = computeLayout();
 
-    console.log(`🔵 Rendering: ${persons.size} persons, ${positions.size} positions`);
-
     if (positions.size === 0) {
-      console.warn('⚠️ No positions calculated, cannot render tree');
       svg.attr('width', containerWidth).attr('height', 600);
       return;
     }
@@ -929,7 +821,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     // Calculate SVG dimensions
     const allPositions = Array.from(positions.values());
     if (allPositions.length === 0) {
-      console.warn('⚠️ No positions in array, cannot calculate dimensions');
       svg.attr('width', containerWidth).attr('height', 600);
       return;
     }
@@ -939,8 +830,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const minY = Math.min(...allPositions.map(p => p.y));
     const maxY = Math.max(...allPositions.map(p => p.y));
     
-    console.log(`🔵 SVG bounds: X[${minX}, ${maxX}], Y[${minY}, ${maxY}]`);
-
     const contentWidth = maxX - minX + padding * 2 + nodeWidth;
     const contentHeight = maxY - minY + padding * 2 + nodeHeight;
 
@@ -1215,7 +1104,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
-      // Add diagonal slash line for divorced relationships (slashing across the connection)
       if (isDivorced) {
         const midX = (x1 + x2) / 2;
         const slashLength = 40; // Increased length for better visibility
@@ -1227,7 +1115,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('cy', y)
           .attr('r', circleRadius)
           .attr('fill', '#ffffff')
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 2);
         
         // Draw diagonal slash line at 45-degree angle across the horizontal connection
@@ -1237,7 +1125,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('y1', y - slashLength / 2)
           .attr('x2', midX + slashLength / 2)
           .attr('y2', y + slashLength / 2)
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 5)
           .attr('stroke-linecap', 'round');
         
@@ -1247,7 +1135,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('y1', y + slashLength / 2)
           .attr('x2', midX + slashLength / 2)
           .attr('y2', y - slashLength / 2)
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 5)
           .attr('stroke-linecap', 'round');
       }
@@ -1255,7 +1143,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
     // Draw nodes
     const nodeIds = Array.from(positions.keys());
-    console.log(`🔵 Rendering ${nodeIds.length} nodes`);
     
     const nodeGroups = g
       .selectAll('.node')
@@ -1266,7 +1153,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       .attr('transform', (id) => {
         const pos = positions.get(id);
         if (!pos) {
-          console.warn(`⚠️ No position found for node ${id}`);
           return `translate(0,0)`;
         }
         return `translate(${pos.x + xOffset},${pos.y + yOffset})`;
@@ -1283,7 +1169,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       const group = d3.select(this);
       const person = persons.get(id);
       if (!person) {
-        console.warn(`⚠️ Person data not found for id: ${id}`);
         return;
       }
       renderedCount++;
@@ -1424,8 +1309,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .text('DIVORCED');
       }
     });
-    
-    console.log(`🔵 Successfully rendered ${renderedCount} nodes`);
   }, [personsData, computeLayout, getMotherId, onPersonClick, data]);
 
   // Generation color labels
