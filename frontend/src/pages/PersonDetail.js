@@ -209,33 +209,54 @@ const PersonDetail = () => {
 
     try {
       let relationships = preloadedRelationships;
-      if (!relationships) {
+      if (!relationships || relationships.length === 0) {
         const res = await api.get(`/relationships/family/${familyId}`);
         relationships = res.data.relationships || [];
       }
 
-      const pid = personData.person_id;
+      const pid = parseInt(personData.person_id);
+
+      // Helper to safely get person data from relationship record
+      const getPersonData = (data) => {
+        if (!data) return {};
+        if (typeof data === 'string') {
+          try {
+            return JSON.parse(data);
+          } catch (e) {
+            console.error('Failed to parse person data:', e);
+            return {};
+          }
+        }
+        return data;
+      };
 
       // Parents: relationships where type='parent' and person2_id = this person (child)
       const parentRels = relationships.filter(
-        (r) => r.relationship_type === 'parent' && r.person2_id === pid
+        (r) => r.relationship_type === 'parent' && parseInt(r.person2_id) === pid
       );
-      const parentPersons = parentRels.map((r) => ({
-        ...r.person1_data,
-        person_id: r.person1_id,
-        relationship_id: r.relationship_id,
-      }));
+      
+      const parentPersons = parentRels.map((r) => {
+        const pData = getPersonData(r.person1_data);
+        return {
+          ...pData,
+          person_id: r.person1_id,
+          relationship_id: r.relationship_id,
+        };
+      });
       setParents(parentPersons.filter((p) => p && p.person_id));
 
       // Children: relationships where type='parent' and person1_id = this person (parent)
       const childRels = relationships.filter(
-        (r) => r.relationship_type === 'parent' && r.person1_id === pid
+        (r) => r.relationship_type === 'parent' && parseInt(r.person1_id) === pid
       );
-      const childPersons = childRels.map((r) => ({
-        ...r.person2_data,
-        person_id: r.person2_id,
-        relationship_id: r.relationship_id,
-      }));
+      const childPersons = childRels.map((r) => {
+        const pData = getPersonData(r.person2_data);
+        return {
+          ...pData,
+          person_id: r.person2_id,
+          relationship_id: r.relationship_id,
+        };
+      });
       setChildren(childPersons.filter((c) => c && c.person_id));
 
       // Siblings: other persons who share a parent with this person
@@ -243,12 +264,13 @@ const PersonDetail = () => {
       for (const parent of parentPersons) {
         if (!parent || !parent.person_id) continue;
         const siblingRels = relationships.filter(
-          (r) => r.relationship_type === 'parent' && r.person1_id === parent.person_id && r.person2_id !== pid
+          (r) => r.relationship_type === 'parent' && parseInt(r.person1_id) === parseInt(parent.person_id) && parseInt(r.person2_id) !== pid
         );
         for (const sRel of siblingRels) {
+          const sData = getPersonData(sRel.person2_data);
           if (!siblingMap.has(sRel.person2_id)) {
             siblingMap.set(sRel.person2_id, {
-              ...sRel.person2_data,
+              ...sData,
               person_id: sRel.person2_id,
             });
           }
@@ -258,16 +280,17 @@ const PersonDetail = () => {
 
       // Spouses: relationships where type='spouse' and this person is either person1 or person2
       const spouseRels = relationships.filter(
-        (r) => r.relationship_type === 'spouse' && (r.person1_id === pid || r.person2_id === pid)
+        (r) => r.relationship_type === 'spouse' && (parseInt(r.person1_id) === pid || parseInt(r.person2_id) === pid)
       );
       const spousePersons = spouseRels.map((r) => {
-        const isPerson1 = r.person1_id === pid;
+        const isPerson1 = parseInt(r.person1_id) === pid;
         const spouseId = isPerson1 ? r.person2_id : r.person1_id;
+        const pData = getPersonData(isPerson1 ? r.person2_data : r.person1_data);
         return {
-          ...(isPerson1 ? r.person2_data : r.person1_data),
+          ...pData,
           person_id: spouseId,
           relationship_id: r.relationship_id,
-          marital_status: 'married',
+          marital_status: r.notes || 'married', // Use notes for marital status fallback
         };
       });
       setSpouses(spousePersons.filter((s) => s && s.person_id));
@@ -565,8 +588,11 @@ const PersonDetail = () => {
   }
 
   const getInitials = (name) => {
-    if (!name) return '?';
-    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    if (!name || typeof name !== 'string') return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 0 || !parts[0]) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
   const formatDate = (dateStr) => {
@@ -702,13 +728,28 @@ const PersonDetail = () => {
                           }
                         }}
                       />
-                      <label htmlFor="profile-picture-upload">
+                      <label htmlFor="profile-picture-upload" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                        <Box sx={{
+                          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          bgcolor: 'rgba(34, 52, 94, 0.4)', opacity: 0,
+                          transition: 'opacity 0.2s ease', cursor: 'pointer',
+                          '&:hover': { opacity: 1 },
+                        }}>
+                          <Box sx={{ textAlign: 'center', color: '#fff' }}>
+                            <PhotoCameraIcon sx={{ fontSize: 40, mb: 1 }} />
+                            <Typography sx={{ fontSize: 14, fontWeight: 600 }}>Change Photo</Typography>
+                          </Box>
+                        </Box>
                         <IconButton component="span" sx={{
-                          position: 'absolute', bottom: 0, right: 0,
-                          bgcolor: '#FFFFFF', border: '1px solid #E7DCC8',
-                          width: 32, height: 32, '&:hover': { bgcolor: '#F3ECE0' },
+                          position: 'absolute', bottom: 12, right: 12,
+                          bgcolor: '#D79A1E', color: '#fff', border: '2px solid #fff',
+                          width: 42, height: 42, 
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                          '&:hover': { bgcolor: '#C58D1B' },
+                          zIndex: 2
                         }} disabled={uploadingProfilePicture}>
-                          {uploadingProfilePicture ? <CircularProgress size={16} /> : <PhotoCameraIcon sx={{ fontSize: 16 }} />}
+                          {uploadingProfilePicture ? <CircularProgress size={20} color="inherit" /> : <PhotoCameraIcon sx={{ fontSize: 22 }} />}
                         </IconButton>
                       </label>
                     </>
@@ -892,7 +933,7 @@ const PersonDetail = () => {
                                 {getInitials(p.full_name)}
                               </Box>
                               <Box>
-                                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{p.full_name}</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{p.full_name || 'Unknown Parent'}</Typography>
                                 <Typography sx={{ fontSize: 11, color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace" }}>{roleLabel}</Typography>
                               </Box>
                               {canEdit && p.relationship_id && (
@@ -1433,7 +1474,7 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Add Family Relationship Dialog */}
-      <Dialog open={addFamilyOpen} onClose={() => setAddFamilyOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
+      <Dialog open={addFamilyOpen} onClose={() => setAddFamilyOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Add family relationship for {person.full_name}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
@@ -1530,7 +1571,6 @@ const PersonDetail = () => {
         }}
         fullWidth
         maxWidth="sm"
-        disableEnforceFocus
       >
         <DialogTitle>Add New Family Member</DialogTitle>
         <DialogContent>
@@ -1812,7 +1852,7 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Upload Document Dialog */}
-      <Dialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
+      <Dialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Upload Document or Photo</DialogTitle>
         <DialogContent>
           <TextField
@@ -1949,7 +1989,7 @@ const PersonDetail = () => {
       </Dialog>
 
       {/* Edit Person Dialog */}
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Edit {person.full_name}</DialogTitle>
         <DialogContent>
           {editValues && (
@@ -2118,7 +2158,7 @@ const PersonDetail = () => {
 
       {/* Snackbar for notifications */}
       {/* Edit Marital Status Dialog */}
-      <Dialog open={editMaritalStatusOpen} onClose={() => setEditMaritalStatusOpen(false)} fullWidth maxWidth="sm" disableEnforceFocus>
+      <Dialog open={editMaritalStatusOpen} onClose={() => setEditMaritalStatusOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Edit Marital Status</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>

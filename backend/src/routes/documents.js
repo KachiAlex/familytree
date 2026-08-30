@@ -4,17 +4,10 @@ const { authenticateToken, requireFamilyAccess } = require('../middleware/auth')
 const { checkResourceLimit, getFamilyUsageInfo } = require('../middleware/tierLimits');
 const { uploadLimiter } = require('../middleware/rateLimiter');
 const multer = require('multer');
-const AWS = require('aws-sdk');
+const { uploadToR2, deleteFromR2 } = require('../utils/s3');
 
 const router = express.Router();
 router.use(authenticateToken);
-
-// Configure AWS S3
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1'
-});
 
 // Configure multer for file uploads
 const upload = multer({
@@ -47,17 +40,9 @@ router.post('/upload', uploadLimiter, upload.single('file'), requireFamilyAccess
       });
     }
 
-    // Upload to S3
+    // Upload to R2
     const fileKey = `documents/${family_id}/${Date.now()}-${req.file.originalname}`;
-    const uploadParams = {
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: fileKey,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-      ACL: 'public-read'
-    };
-
-    const s3Result = await s3.upload(uploadParams).promise();
+    const s3Result = await uploadToR2(req.file, fileKey);
 
     // Save to database
     const result = await pool.query(
@@ -139,12 +124,9 @@ router.delete('/:documentId', async (req, res) => {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Delete from S3
-    const fileKey = docResult.rows[0].file_url.split('.com/')[1];
-    await s3.deleteObject({
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: fileKey
-    }).promise();
+    // Delete from R2
+    const fileKey = docResult.rows[0].file_url.split('.com/')[1] || docResult.rows[0].file_url.split('.dev/')[1] || docResult.rows[0].file_url.split('/').pop();
+    await deleteFromR2(fileKey);
 
     // Delete from database
     await pool.query(
