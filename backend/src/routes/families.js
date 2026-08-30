@@ -107,7 +107,10 @@ router.post('/', async (req, res) => {
 router.get('/my-families', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT f.*, fm.role as user_role
+      `SELECT f.*, fm.role as user_role,
+        (SELECT COUNT(*) FROM persons p WHERE p.family_id = f.family_id) as person_count,
+        (SELECT COUNT(*) FROM documents d WHERE d.family_id = f.family_id) as document_count,
+        (SELECT COUNT(*) FROM stories s WHERE s.family_id = f.family_id) as story_count
        FROM families f
        JOIN family_members fm ON f.family_id = fm.family_id
        WHERE fm.user_id = $1
