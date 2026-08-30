@@ -130,6 +130,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     if (roots.length === 0) return { positions, levelMap };
 
     // Compute levels using BFS (parent-child relationships)
+    // CRITICAL: We now follow both children AND spouse relationships to ensure everyone in a component is discovered
     const levels = new Map();
     const queue = roots.map(id => ({ id, level: 0 }));
     const visited = new Set();
@@ -152,7 +153,40 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           queue.push({ id: childId, level: level + 1 });
         }
       });
+      
+      // Also add spouse to queue (same level)
+      const spouseInfo = spouses.get(id);
+      if (spouseInfo && !visited.has(spouseInfo.spouseId)) {
+        queue.push({ id: spouseInfo.spouseId, level: level });
+      }
     }
+
+    // Final discovery: some people might still be missing if they are in completely disconnected islands
+    // with no identified roots (e.g. loops, though rare).
+    persons.forEach((person, id) => {
+      if (!visited.has(id)) {
+        // Start a new BFS for this island
+        queue.push({ id, level: 0 });
+        while (queue.length > 0) {
+          const { id: islandId, level: islandLevel } = queue.shift();
+          if (visited.has(islandId)) continue;
+          visited.add(islandId);
+          
+          levels.set(islandId, islandLevel);
+          if (!levelMap.has(islandLevel)) levelMap.set(islandLevel, []);
+          levelMap.get(islandLevel).push(islandId);
+          
+          const islandChildren = childrenByParent.get(islandId) || [];
+          islandChildren.forEach(childId => {
+            if (!visited.has(childId)) queue.push({ id: childId, level: islandLevel + 1 });
+          });
+          const islandSpouseInfo = spouses.get(islandId);
+          if (islandSpouseInfo && !visited.has(islandSpouseInfo.spouseId)) {
+            queue.push({ id: islandSpouseInfo.spouseId, level: islandLevel });
+          }
+        }
+      }
+    });
 
     // CRITICAL FIX: Ensure spouses are on the same level
     // Multiple passes to propagate spouse levels correctly
@@ -982,14 +1016,13 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('height', containerHeight)
         .attr('rx', 12)
         .attr('ry', 12)
-        .attr('fill', 'rgba(184, 84, 31, 0.08)')
-        .attr('stroke', 'rgba(184, 84, 31, 0.3)')
+        .attr('fill', 'rgba(193, 98, 45, 0.08)')
+        .attr('stroke', 'rgba(193, 98, 45, 0.3)')
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '5,5')
         .lower(); // Send to back
     });
 
-    // Helper function to determine which parent is the mother
     const getMotherId = (parentIds) => {
       if (parentIds.length === 0) return null;
       if (parentIds.length === 1) return parentIds[0]; // Single parent
@@ -1135,7 +1168,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
                 .attr('y1', motherTopY)
                 .attr('x2', Math.max(fatherCenterX, motherCenterX))
                 .attr('y2', motherTopY)
-                .attr('stroke', '#5A5042')
+                .attr('stroke', '#5C5346')
                 .attr('stroke-width', 2.5)
                 .attr('stroke-dasharray', '5,5');
             }
@@ -1169,7 +1202,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', y - 2)
         .attr('x2', x2)
         .attr('y2', y - 2)
-        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
+        .attr('stroke', isDivorced ? '#C1622D' : isWidowed ? '#5C5346' : '#D79A1E')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -1178,7 +1211,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', y + 2)
         .attr('x2', x2)
         .attr('y2', y + 2)
-        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
+        .attr('stroke', isDivorced ? '#C1622D' : isWidowed ? '#5C5346' : '#D79A1E')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -1353,7 +1386,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
               .attr('y', 20)
               .attr('text-anchor', 'middle')
               .attr('font-size', '10px')
-              .attr('fill', '#F1E6D2')
+              .attr('fill', '#FBF7F0')
               .text(dateText);
           }
         } catch (err) {
@@ -1375,8 +1408,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('width', 60)
           .attr('height', 16)
           .attr('rx', 8)
-          .attr('fill', '#B8541F')
-          .attr('stroke', '#FFFDF9')
+          .attr('fill', '#FFFFFF')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 1);
         
         // "DIVORCED" text
@@ -1387,7 +1420,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '8px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#FFFDF9')
+          .attr('fill', '#C1622D')
           .text('DIVORCED');
       }
     });
@@ -1474,73 +1507,24 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             Marital Status
           </Typography>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Box
-              sx={{
-                width: 32,
-                height: 20,
-                backgroundColor: '#fff3e0',
-                border: '2px solid #ff9800',
-                borderRadius: '3px',
-                mr: 1,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Married
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Box
-              sx={{
-                width: 32,
-                height: 20,
-                backgroundColor: '#ffebee',
-                border: '2px solid #d32f2f',
-                borderRadius: '3px',
-                mr: 1,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Divorced
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Box
-              sx={{
-                width: 32,
-                height: 20,
-                backgroundColor: '#f5f5f5',
-                border: '2px solid #757575',
-                borderRadius: '3px',
-                mr: 1,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Widowed
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Box
-              sx={{
-                width: 32,
-                height: 20,
-                backgroundColor: '#ffffff',
-                border: '2px solid #1976d2',
-                borderRadius: '3px',
-                mr: 1,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Single
-            </Typography>
-          </Box>
+          {Object.entries(maritalStatusColors).map(([key, colors]) => (
+            <Box key={key} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+              <Box
+                sx={{
+                  width: 32,
+                  height: 20,
+                  backgroundColor: colors.background,
+                  border: `2px solid ${colors.border}`,
+                  borderRadius: '3px',
+                  mr: 1,
+                  flexShrink: 0,
+                }}
+              />
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+                {colors.label}
+              </Typography>
+            </Box>
+          ))}
           
           <Divider sx={{ my: 1 }} />
           
@@ -1570,7 +1554,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
               sx={{
                 width: 32,
                 height: 2,
-                backgroundColor: '#ff9800',
+                backgroundColor: maritalStatusColors.married.border,
                 borderRadius: '2px',
                 mr: 1,
                 flexShrink: 0,
@@ -1586,8 +1570,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
               sx={{
                 width: 32,
                 height: 2,
-                backgroundColor: '#d32f2f',
-                backgroundImage: 'repeating-linear-gradient(90deg, #d32f2f 0, #d32f2f 3px, transparent 3px, transparent 6px)',
+                backgroundColor: maritalStatusColors.divorced.border,
+                backgroundImage: `repeating-linear-gradient(90deg, ${maritalStatusColors.divorced.border} 0, ${maritalStatusColors.divorced.border} 3px, transparent 3px, transparent 6px)`,
                 borderRadius: '2px',
                 mr: 1,
                 flexShrink: 0,
