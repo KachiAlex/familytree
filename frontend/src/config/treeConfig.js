@@ -8,25 +8,25 @@
  * across the platform.
  */
 
-// Generation-based color scheme (Redesign palette: indigo, leaf, gold)
+// Generation-based color scheme (Redesign palette only: indigo, clay, leaf, gold)
 export const generationColors = {
   background: [
     '#22345E', // Level 0: Indigo (root/ancestors)
-    '#3A4F82', // Level 1: Lighter indigo
-    '#4A5F92', // Level 2: Muted indigo
-    '#3F6644', // Level 3: Leaf green
-    '#4A7654', // Level 4: Muted leaf
-    '#C7930A', // Level 5: Gold
-    '#D6A21A', // Level 6+: Light gold
+    '#3A4F82', // Level 1: Indigo-light
+    '#B8541F', // Level 2: Clay
+    '#3F6644', // Level 3: Leaf
+    '#C7930A', // Level 4: Gold
+    '#22345E', // Level 5: Indigo (cycle)
+    '#3F6644', // Level 6+: Leaf (cycle)
   ],
   border: [
-    '#1A274A', // Level 0: Dark indigo border
-    '#2A3F6A', // Level 1: Darker indigo border
-    '#3A4F82', // Level 2: Indigo border
-    '#2F4F34', // Level 3: Dark leaf border
-    '#3F6644', // Level 4: Leaf border
-    '#9A7008', // Level 5: Dark gold border
-    '#B8840A', // Level 6+: Gold border
+    '#22345E', // Level 0
+    '#22345E', // Level 1
+    '#8a3d15', // Level 2: Clay dark
+    '#3F6644', // Level 3
+    '#C7930A', // Level 4
+    '#22345E', // Level 5
+    '#3F6644', // Level 6+
   ]
 };
 
@@ -41,26 +41,26 @@ export const generationLabels = [
   'Level 6+'
 ];
 
-// Marital status colors
+// Marital status colors (Redesign palette)
 export const maritalStatusColors = {
   married: {
-    background: '#fff3e0',
-    border: '#ff9800',
+    background: '#F4E0D2',
+    border: '#B8541F',
     label: 'Married'
   },
   divorced: {
-    background: '#ffebee',
-    border: '#d32f2f',
+    background: '#E8ECF4',
+    border: '#22345E',
     label: 'Divorced'
   },
   widowed: {
-    background: '#f5f5f5',
-    border: '#757575',
+    background: '#E4EDE4',
+    border: '#3F6644',
     label: 'Widowed'
   },
   single: {
-    background: '#ffffff',
-    border: '#1976d2',
+    background: '#FFFDF9',
+    border: '#D8BF92',
     label: 'Single (No Spouse)'
   }
 };

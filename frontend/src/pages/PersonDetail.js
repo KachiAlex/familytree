@@ -1017,33 +1017,31 @@ const PersonDetail = () => {
                     No documents or photos yet. {canEdit && 'Click "Upload" to add photos or documents.'}
                   </Typography>
                 ) : (
-                  <Grid container spacing={2}>
+                  <Grid container spacing={1.5}>
                     {documents.map((doc) => (
                       <Grid item xs={6} sm={4} md={3} key={doc.document_id}>
                         <Box sx={{
-                          bgcolor: 'background.paper', borderRadius: '10px', overflow: 'hidden',
-                          border: '1px solid', borderColor: '#E4D3B0', position: 'relative',
-                          transition: 'transform 0.12s', '&:hover': { transform: 'translateY(-2px)' },
-                        }}>
+                          aspectRatio: '3 / 4', borderRadius: '10px', overflow: 'hidden',
+                          border: '1px solid', borderColor: '#D8BF92', position: 'relative',
+                          cursor: 'pointer', transition: 'transform 0.12s', '&:hover': { transform: 'translateY(-2px)' },
+                          display: 'flex', flexDirection: 'column',
+                        }} onClick={() => window.open(doc.file_url, '_blank')}>
                           {doc.document_type === 'photo' ? (
                             <Box component="img" src={doc.file_url} alt={doc.title || 'Photo'}
-                              sx={{ width: '100%', height: 140, objectFit: 'cover', cursor: 'pointer' }}
-                              onClick={() => window.open(doc.file_url, '_blank')}
+                              sx={{ width: '100%', flex: 1, objectFit: 'cover' }}
                             />
                           ) : (
-                            <Box sx={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#F1E6D2', cursor: 'pointer' }}
-                              onClick={() => window.open(doc.file_url, '_blank')}
-                            >
-                              <Typography sx={{ fontSize: 32 }}>
+                            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#E4D3B0' }}>
+                              <Typography sx={{ fontSize: 20, color: '#9C8D77' }}>
                                 {doc.document_type === 'certificate' ? '📜' : doc.document_type === 'audio' ? '🎵' : doc.document_type === 'video' ? '🎬' : '📄'}
                               </Typography>
                             </Box>
                           )}
-                          <Box sx={{ p: 1.25 }}>
-                            <Typography sx={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <Box sx={{ p: 1, bgcolor: '#FFFDF9' }}>
+                            <Typography sx={{ fontSize: '11px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {doc.title || 'Untitled'}
                             </Typography>
-                            <Typography sx={{ fontSize: '11px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace" }}>
+                            <Typography sx={{ fontSize: '10px', color: '#9C8D77', fontFamily: "'IBM Plex Mono', monospace" }}>
                               {doc.document_type}
                             </Typography>
                           </Box>

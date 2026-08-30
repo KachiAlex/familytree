@@ -225,7 +225,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       g.append('path')
         .attr('d', path.toString())
         .attr('fill', 'none')
-        .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
+        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -237,16 +237,16 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('y1', midY - slashLength / 2)
           .attr('x2', midX + slashLength / 2)
           .attr('y2', midY + slashLength / 2)
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#B8541F')
           .attr('stroke-width', 4)
           .attr('stroke-linecap', 'round');
-        
+
         g.append('line')
           .attr('x1', midX - slashLength / 2)
           .attr('y1', midY + slashLength / 2)
           .attr('x2', midX + slashLength / 2)
           .attr('y2', midY - slashLength / 2)
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#B8541F')
           .attr('stroke-width', 4)
           .attr('stroke-linecap', 'round');
       }
@@ -349,7 +349,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '10px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#333')
+          .attr('fill', '#FFFDF9')
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
           .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
       });
@@ -368,7 +368,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
               .attr('y', 18)
               .attr('text-anchor', 'middle')
               .attr('font-size', '9px')
-              .attr('fill', '#666')
+              .attr('fill', '#F1E6D2')
               .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
               .text(dateText);
           }
@@ -389,8 +389,8 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('width', 50)
           .attr('height', 12)
           .attr('rx', 6)
-          .attr('fill', '#d32f2f')
-          .attr('stroke', '#ffffff')
+          .attr('fill', '#B8541F')
+          .attr('stroke', '#FFFDF9')
           .attr('stroke-width', 1)
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
         
@@ -401,7 +401,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '7px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#ffffff')
+          .attr('fill', '#FFFDF9')
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
           .text('DIVORCED');
       }
@@ -411,7 +411,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
   }, [personsData, hasDivorcedRelationship, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5', position: 'relative' }}>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#F1E6D2', position: 'relative' }}>
       <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
       
       {/* Color Legend Panel - Bottom Left Corner */}
@@ -424,15 +424,16 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             left: 16,
             padding: 1.5,
             width: 260,
-            backgroundColor: 'white',
+            backgroundColor: '#FFFDF9',
+            border: '1px solid #E4D3B0',
             zIndex: 1000,
             maxHeight: 'calc(100vh - 120px)',
             overflowY: 'auto',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: '0 6px 18px rgba(28,20,16,0.06)',
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#333' }}>
+            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#1C1410' }}>
               Color Legend
             </Typography>
             <Chip
@@ -443,15 +444,15 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                 cursor: 'pointer',
                 height: 24,
                 fontSize: '0.75rem',
-                backgroundColor: '#f5f5f5',
-                '&:hover': { backgroundColor: '#e0e0e0' }
+                backgroundColor: '#F1E6D2',
+                '&:hover': { backgroundColor: '#E4D3B0' }
               }}
             />
           </Box>
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5A5042', fontSize: '0.8rem' }}>
             Generation Levels (Center → Outward)
           </Typography>
           {generationLabels.slice(0, 5).map((label, index) => (
@@ -467,20 +468,20 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
                 {label}
               </Typography>
             </Box>
           ))}
           {generationLabels.length > 5 && (
-            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#999', fontStyle: 'italic', ml: 5 }}>
+            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#9C8D77', fontStyle: 'italic', ml: 5 }}>
               + {generationLabels.length - 5} more levels
             </Typography>
           )}
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5A5042', fontSize: '0.8rem' }}>
             Marital Status
           </Typography>
           
@@ -497,7 +498,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
                 {statusColor.label}
               </Typography>
             </Box>
@@ -505,7 +506,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5A5042', fontSize: '0.8rem' }}>
             Connections
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
@@ -520,7 +521,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
               Parent-Child (Radial)
             </Typography>
           </Box>
@@ -530,13 +531,13 @@ const RadialTreeView = ({ data, onPersonClick }) => {
               sx={{
                 width: 32,
                 height: 2,
-                backgroundColor: '#ff9800',
+                backgroundColor: '#C7930A',
                 borderRadius: '2px',
                 mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
               Married (Curved)
             </Typography>
           </Box>
@@ -546,14 +547,14 @@ const RadialTreeView = ({ data, onPersonClick }) => {
               sx={{
                 width: 32,
                 height: 2,
-                backgroundColor: '#d32f2f',
-                backgroundImage: 'repeating-linear-gradient(90deg, #d32f2f 0, #d32f2f 3px, transparent 3px, transparent 6px)',
+                backgroundColor: '#B8541F',
+                backgroundImage: 'repeating-linear-gradient(90deg, #B8541F 0, #B8541F 3px, transparent 3px, transparent 6px)',
                 borderRadius: '2px',
                 mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
               Divorced (Curved)
             </Typography>
           </Box>
@@ -571,9 +572,10 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             left: 16,
             cursor: 'pointer',
             zIndex: 1000,
-            backgroundColor: 'white',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            '&:hover': { backgroundColor: '#f5f5f5', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }
+            backgroundColor: '#FFFDF9',
+            border: '1px solid #E4D3B0',
+            boxShadow: '0 6px 18px rgba(28,20,16,0.06)',
+            '&:hover': { backgroundColor: '#F1E6D2', boxShadow: '0 4px 12px rgba(28,20,16,0.1)' }
           }}
         />
       )}
