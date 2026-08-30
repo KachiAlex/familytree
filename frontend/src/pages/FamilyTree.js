@@ -516,7 +516,7 @@ const FamilyTree = () => {
         <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16, px: 1, pb: 2, cursor: 'pointer' }}
           onClick={() => navigate('/dashboard')}
         >
-          ← {familyInfo?.family_name || 'Family'}
+          {familyInfo?.family_name || 'Family'}
         </Typography>
 
         <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
