@@ -367,5 +367,51 @@ router.put('/me', async (req, res) => {
   }
 });
 
+// On-screen reset password (no email, for use before domain email is configured)
+router.post('/reset-password', authLimiter, [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password } = req.body;
+
+    const userResult = await client.query(
+      'SELECT user_id FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'No account found with this email.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await client.query(
+      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
+      [passwordHash, email]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Password updated. You can now log in.' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
 
