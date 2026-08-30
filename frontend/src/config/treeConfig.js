@@ -8,26 +8,25 @@
  * across the platform.
  */
 
-// Generation-based color scheme (Professional Blue Gradient)
-// This color scheme helps visually distinguish different generations in the family tree
+// Generation-based color scheme (Redesign palette: indigo, leaf, gold)
 export const generationColors = {
   background: [
-    '#e3f2fd', // Level 0: Light blue (ancestors/root)
-    '#bbdefb', // Level 1: Lighter blue
-    '#90caf9', // Level 2: Sky blue
-    '#64b5f6', // Level 3: Bright blue
-    '#42a5f5', // Level 4: Medium blue
-    '#2196f3', // Level 5: Standard blue
-    '#1e88e5', // Level 6+: Deep blue
+    '#22345E', // Level 0: Indigo (root/ancestors)
+    '#3A4F82', // Level 1: Lighter indigo
+    '#4A5F92', // Level 2: Muted indigo
+    '#3F6644', // Level 3: Leaf green
+    '#4A7654', // Level 4: Muted leaf
+    '#C7930A', // Level 5: Gold
+    '#D6A21A', // Level 6+: Light gold
   ],
   border: [
-    '#1565c0', // Level 0: Deep blue border
-    '#1976d2', // Level 1: Blue border
-    '#0288d1', // Level 2: Teal-blue border
-    '#0277bd', // Level 3: Darker teal border
-    '#01579b', // Level 4: Deep teal border
-    '#004d40', // Level 5: Teal-green border
-    '#00695c', // Level 6+: Dark teal border
+    '#1A274A', // Level 0: Dark indigo border
+    '#2A3F6A', // Level 1: Darker indigo border
+    '#3A4F82', // Level 2: Indigo border
+    '#2F4F34', // Level 3: Dark leaf border
+    '#3F6644', // Level 4: Leaf border
+    '#9A7008', // Level 5: Dark gold border
+    '#B8840A', // Level 6+: Gold border
   ]
 };
 
