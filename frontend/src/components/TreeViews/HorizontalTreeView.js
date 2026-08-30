@@ -9,7 +9,6 @@ import {
 } from '../../config/treeConfig';
 
 const HorizontalTreeView = ({ data, onPersonClick }) => {
-  console.log('🔵 HorizontalTreeView component loaded', data);
   const svgRef = useRef();
   const [showLegend, setShowLegend] = useState(true);
   const containerRef = useRef();
@@ -365,11 +364,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
     const sortedLevels = Array.from(levelMap.keys()).sort((a, b) => a - b);
     
-    console.log('🔵 [HORIZONTAL LAYOUT] Starting layout computation...');
-    console.log('🔵 [HORIZONTAL LAYOUT] Total persons:', persons.size);
-    console.log('🔵 [HORIZONTAL LAYOUT] Root nodes:', roots.map(id => persons.get(id)?.name || id));
-    console.log('🔵 [HORIZONTAL LAYOUT] Levels:', sortedLevels);
-    
     // STEP 1: Position ONLY true root nodes (leftmost column, X = padding)
     let currentY = padding;
     const rootsSet = new Set(roots);
@@ -380,7 +374,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       personIds.forEach((id) => {
         if (rootsSet.has(id) && !positions.has(id)) {
           positions.set(id, { x: padding, y: currentY, level });
-          console.log(`🔵 [STEP 1] Positioned root: ${persons.get(id)?.name || id} at X:${padding}, Y:${currentY}`);
           currentY += nodeHeight + siblingSpacing * 2;
         }
       });
@@ -418,7 +411,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
             const parentLevel = level - 1;
             const parentX = padding + parentLevel * levelSpacing;
             positions.set(id, { x: parentX, y: motherY, level: parentLevel });
-            console.log(`🔵 [STEP 2] Positioned mother: ${persons.get(id)?.name || id} at X:${parentX}, Y:${motherY}`);
           } else {
             motherY = positions.get(id).y;
           }
@@ -446,11 +438,9 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
             if (index === firstChildIndex) {
               positions.set(childId, { x: childXPos, y: motherY, level: childLevel });
               childY = motherY;
-              console.log(`🔵 [STEP 2] Positioned child: ${persons.get(childId)?.name || childId} under mother at X:${childXPos}, Y:${motherY}`);
             } else {
               childY += nodeHeight + siblingSpacing;
               positions.set(childId, { x: childXPos, y: childY, level: childLevel });
-              console.log(`🔵 [STEP 2] Positioned sibling: ${persons.get(childId)?.name || childId} at X:${childXPos}, Y:${childY}`);
             }
           });
           
@@ -469,13 +459,10 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           }
           
           positions.set(id, { x: siblingX, y: siblingY, level });
-          console.log(`🔵 [STEP 2] Positioned sibling (no children): ${persons.get(id)?.name || id} at X:${siblingX}, Y:${siblingY}`);
           currentY = Math.max(currentY, siblingY + nodeHeight + siblingSpacing * 2);
         }
       });
     });
-    
-    console.log(`🔵 [STEP 2 COMPLETE] Positioned ${positions.size} people so far`);
     
     // STEP 3: Position family units (spouses together)
     sortedLevels.forEach((level) => {
@@ -737,9 +724,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         }
       }
     });
-
-    console.log(`🔵 [HORIZONTAL LAYOUT COMPLETE] Total positioned: ${positions.size} out of ${persons.size}`);
-    console.log(`🔵 [HORIZONTAL LAYOUT] Position ranges - X: [${Math.min(...Array.from(positions.values()).map(p => p.x))}, ${Math.max(...Array.from(positions.values()).map(p => p.x))}], Y: [${Math.min(...Array.from(positions.values()).map(p => p.y))}, ${Math.max(...Array.from(positions.values()).map(p => p.y))}]`);
     
     return { positions, levelMap };
   }, [personsData, getMotherId]);
@@ -1064,8 +1048,6 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           .text('DIVORCED');
       }
     });
-    
-    console.log(`🔵 Successfully rendered ${renderedCount} nodes`);
   }, [personsData, computeLayout, getMotherId, onPersonClick, data]);
 
   return (

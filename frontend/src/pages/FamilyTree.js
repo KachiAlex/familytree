@@ -143,8 +143,8 @@ const FamilyTree = () => {
       });
 
       const parentEdges = edges.filter((e) => e.type === 'parent');
-      const hasParent = new Set(parentEdges.map((e) => e.target));
-      const rootNodes = nodes.filter((n) => !hasParent.has(n.id)).map((n) => n.id);
+      const hasParent = new Set(parentEdges.map((e) => String(e.target)));
+      const rootNodes = nodes.filter((n) => !hasParent.has(String(n.id))).map((n) => n.id);
 
       const data = {
         nodes,
@@ -234,19 +234,19 @@ const FamilyTree = () => {
       return matchesSearch && matchesClan && matchesVillage;
     });
 
-    const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+    const filteredNodeIds = new Set(filteredNodes.map((n) => String(n.id)));
 
     // Include edges that connect filtered nodes
     const filteredEdges = treeData.edges.filter(
-      (edge) => filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
+      (edge) => filteredNodeIds.has(String(edge.source)) && filteredNodeIds.has(String(edge.target))
     );
 
     // Find root nodes from filtered nodes
     const hasParent = new Set(
-      filteredEdges.filter((e) => e.type === 'parent').map((e) => e.target)
+      filteredEdges.filter((e) => e.type === 'parent').map((e) => String(e.target))
     );
     const filteredRootNodes = filteredNodes
-      .filter((n) => !hasParent.has(n.id))
+      .filter((n) => !hasParent.has(String(n.id)))
       .map((n) => n.id);
 
     setFilteredTreeData({
