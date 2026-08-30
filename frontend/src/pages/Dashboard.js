@@ -312,10 +312,26 @@ const Dashboard = () => {
                           {family.user_role || 'member'}
                         </Box>
                       </Box>
-                      <Typography sx={{ fontSize: 13, color: '#5A5042', lineHeight: 1.5, mb: 2, minHeight: 38 }}>
+                      <Typography sx={{ fontSize: 13, color: '#5A5042', lineHeight: 1.5, mb: 1.5, minHeight: 38 }}>
                         {family.clan_name ? `Clan: ${family.clan_name}` : 'No clan set'}
                         {family.village_origin ? ` · ${family.village_origin}` : ''}
                       </Typography>
+                      <Box sx={{ display: 'flex', gap: 1, pt: 1.5, borderTop: '1px solid #F1E6D2' }}>
+                        {[
+                          { label: 'Members', value: family.person_count || 0 },
+                          { label: 'Docs', value: family.document_count || 0 },
+                          { label: 'Stories', value: family.story_count || 0 },
+                        ].map((stat, i) => (
+                          <Box key={i} sx={{ flex: 1, textAlign: 'center' }}>
+                            <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: '#22345E', lineHeight: 1.1 }}>
+                              {stat.value}
+                            </Typography>
+                            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#7A6D5C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              {stat.label}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
                       {isOwner && (
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
                           <Button
