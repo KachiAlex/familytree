@@ -316,17 +316,17 @@ const Dashboard = () => {
                         {family.clan_name ? `Clan: ${family.clan_name}` : 'No clan set'}
                         {family.village_origin ? ` · ${family.village_origin}` : ''}
                       </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, pt: 1.5, borderTop: '1px solid #F1E6D2' }}>
+                      <Box sx={{ display: 'flex', gap: 2.25 }}>
                         {[
                           { label: 'Members', value: family.person_count || 0 },
-                          { label: 'Docs', value: family.document_count || 0 },
+                          { label: 'Generations', value: family.generation_count || 0 },
                           { label: 'Stories', value: family.story_count || 0 },
                         ].map((stat, i) => (
                           <Box key={i} sx={{ flex: 1, textAlign: 'center' }}>
-                            <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: '#22345E', lineHeight: 1.1 }}>
+                            <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 700, color: '#1C1410', lineHeight: 1.1, display: 'block' }}>
                               {stat.value}
                             </Typography>
-                            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#7A6D5C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#7A6D5C', textTransform: 'lowercase', letterSpacing: '0.04em' }}>
                               {stat.label}
                             </Typography>
                           </Box>

@@ -110,7 +110,11 @@ router.get('/my-families', async (req, res) => {
       `SELECT f.*, fm.role as user_role,
         (SELECT COUNT(*) FROM persons p WHERE p.family_id = f.family_id) as person_count,
         (SELECT COUNT(*) FROM documents d WHERE d.family_id = f.family_id) as document_count,
-        (SELECT COUNT(*) FROM stories s WHERE s.family_id = f.family_id) as story_count
+        (SELECT COUNT(*) FROM stories s WHERE s.family_id = f.family_id) as story_count,
+        (SELECT COALESCE(MAX(g) - MIN(g) + 1, 0) FROM (
+          SELECT FLOOR(EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth)) / 30) as g
+          FROM persons WHERE family_id = f.family_id AND date_of_birth IS NOT NULL AND date_of_birth <= CURRENT_DATE
+        ) sub) as generation_count
        FROM families f
        JOIN family_members fm ON f.family_id = fm.family_id
        WHERE fm.user_id = $1
