@@ -93,7 +93,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .append('g')
       .attr('transform', `translate(${width / 2},${height / 2})`);
 
-    // Find root nodes (no parents)
+    // Find ALL root nodes (no parents)
     const hasParent = new Set();
     childrenByParent.forEach((childIds, parentId) => {
       childIds.forEach(childId => hasParent.add(childId));
@@ -102,11 +102,8 @@ const RadialTreeView = ({ data, onPersonClick }) => {
     const rootIds = Array.from(persons.keys()).filter(id => !hasParent.has(id));
     if (rootIds.length === 0) return;
 
-    // Use first root as the center
-    const rootId = rootIds[0];
-    // rootPerson not needed for radial layout
-
     // Build hierarchy for radial layout
+    // Support multiple roots by creating a virtual parent if necessary
     const buildHierarchy = (nodeId, depth = 0) => {
       const person = persons.get(nodeId);
       if (!person) return null;
@@ -125,7 +122,19 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       };
     };
 
-    const rootData = buildHierarchy(rootId);
+    let rootData;
+    if (rootIds.length === 1) {
+      rootData = buildHierarchy(rootIds[0]);
+    } else {
+      // Multiple roots - create a virtual common ancestor
+      rootData = {
+        id: 'virtual-root',
+        name: '',
+        virtual: true,
+        children: rootIds.map(id => buildHierarchy(id, 1)).filter(Boolean)
+      };
+    }
+    
     if (!rootData) return;
 
     const root = d3.hierarchy(rootData);
@@ -187,6 +196,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         .radius(d => d.y))
       .attr('fill', 'none')
       .attr('stroke', (d) => {
+        if (d.source.data.virtual) return 'none'; // Hide links from virtual root
         const childDepth = d.target.depth;
         const levelIndex = Math.min(childDepth, generationColors.border.length - 1);
         return generationColors.border[levelIndex];
@@ -225,7 +235,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       g.append('path')
         .attr('d', path.toString())
         .attr('fill', 'none')
-        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
+        .attr('stroke', isDivorced ? '#C1622D' : isWidowed ? '#5C5346' : '#D79A1E')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -237,7 +247,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('y1', midY - slashLength / 2)
           .attr('x2', midX + slashLength / 2)
           .attr('y2', midY + slashLength / 2)
-          .attr('stroke', '#B8541F')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 4)
           .attr('stroke-linecap', 'round');
 
@@ -246,7 +256,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('y1', midY + slashLength / 2)
           .attr('x2', midX + slashLength / 2)
           .attr('y2', midY - slashLength / 2)
-          .attr('stroke', '#B8541F')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 4)
           .attr('stroke-linecap', 'round');
       }
@@ -268,6 +278,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         const y = pos.radius * Math.sin(pos.angle - Math.PI / 2);
         return `translate(${x},${y})`;
       })
+      .style('display', (id) => id === 'virtual-root' ? 'none' : 'block')
       .style('cursor', onPersonClick ? 'pointer' : 'default')
       .on('click', (event, id) => {
         if (onPersonClick) {
@@ -295,21 +306,18 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       
       if (hasSpouse) {
         if (isDivorced) {
-          const divorcedColors = maritalStatusColors.divorced;
-          backgroundColor = divorcedColors.background;
-          borderColor = divorcedColors.border;
+          backgroundColor = maritalStatusColors.divorced.background;
+          borderColor = maritalStatusColors.divorced.border;
         } else if (isWidowed) {
-          const widowedColors = maritalStatusColors.widowed;
-          backgroundColor = widowedColors.background;
-          borderColor = widowedColors.border;
+          backgroundColor = maritalStatusColors.widowed.background;
+          borderColor = maritalStatusColors.widowed.border;
         } else {
-          const marriedColors = maritalStatusColors.married;
-          backgroundColor = marriedColors.background;
-          borderColor = marriedColors.border;
+          backgroundColor = maritalStatusColors.married.background;
+          borderColor = maritalStatusColors.married.border;
         }
       }
 
-      // Draw node rectangle (rotated to face outward)
+      // Draw node rectangle
       group
         .append('rect')
         .attr('x', -nodeWidth / 2)
@@ -323,7 +331,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
         .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
 
-      // Add name text (rotated to be readable)
+      // Add name text
       const name = person.name;
       const maxCharsPerLine = 15;
       const words = name.split(' ');
@@ -349,7 +357,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '10px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#FFFDF9')
+          .attr('fill', '#FFFFFF')
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
           .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
       });
@@ -368,20 +376,17 @@ const RadialTreeView = ({ data, onPersonClick }) => {
               .attr('y', 18)
               .attr('text-anchor', 'middle')
               .attr('font-size', '9px')
-              .attr('fill', '#F1E6D2')
+              .attr('fill', '#FBF7F0')
               .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
               .text(dateText);
           }
-        } catch (err) {
-          // ignore invalid dates
-        }
+        } catch (err) {}
       }
 
       // Add divorce indicator badge
       if (isDivorced && hasSpouse) {
         const badgeX = nodeWidth / 2 - 40;
         const badgeY = -nodeHeight / 2 + 6;
-        
         group
           .append('rect')
           .attr('x', badgeX - 25)
@@ -389,8 +394,8 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('width', 50)
           .attr('height', 12)
           .attr('rx', 6)
-          .attr('fill', '#B8541F')
-          .attr('stroke', '#FFFDF9')
+          .attr('fill', '#FFFFFF')
+          .attr('stroke', '#C1622D')
           .attr('stroke-width', 1)
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
         
@@ -401,7 +406,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '7px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#FFFDF9')
+          .attr('fill', '#C1622D')
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
           .text('DIVORCED');
       }
@@ -411,7 +416,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
   }, [personsData, hasDivorcedRelationship, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#F1E6D2', position: 'relative' }}>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#FBF7F0', position: 'relative' }}>
       <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
       
       {/* Color Legend Panel - Bottom Left Corner */}
@@ -424,12 +429,11 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             left: 16,
             padding: 1.5,
             width: 260,
-            backgroundColor: '#FFFDF9',
-            border: '1px solid #E4D3B0',
+            backgroundColor: 'white',
             zIndex: 1000,
             maxHeight: 'calc(100vh - 120px)',
             overflowY: 'auto',
-            boxShadow: '0 6px 18px rgba(28,20,16,0.06)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -444,15 +448,15 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                 cursor: 'pointer',
                 height: 24,
                 fontSize: '0.75rem',
-                backgroundColor: '#F1E6D2',
-                '&:hover': { backgroundColor: '#E4D3B0' }
+                backgroundColor: '#FBF7F0',
+                '&:hover': { backgroundColor: '#E7DCC8' }
               }}
             />
           </Box>
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5A5042', fontSize: '0.8rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5C5346', fontSize: '0.8rem' }}>
             Generation Levels (Center → Outward)
           </Typography>
           {generationLabels.slice(0, 5).map((label, index) => (
@@ -468,45 +472,45 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
                 {label}
               </Typography>
             </Box>
           ))}
           {generationLabels.length > 5 && (
-            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#9C8D77', fontStyle: 'italic', ml: 5 }}>
+            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#8C8171', fontStyle: 'italic', ml: 5 }}>
               + {generationLabels.length - 5} more levels
             </Typography>
           )}
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5A5042', fontSize: '0.8rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5C5346', fontSize: '0.8rem' }}>
             Marital Status
           </Typography>
           
-          {Object.values(maritalStatusColors).map((statusColor, index) => (
-            <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+          {Object.entries(maritalStatusColors).map(([key, colors]) => (
+            <Box key={key} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
               <Box
                 sx={{
                   width: 32,
                   height: 20,
-                  backgroundColor: statusColor.background,
-                  border: `2px solid ${statusColor.border}`,
+                  backgroundColor: colors.background,
+                  border: `2px solid ${colors.border}`,
                   borderRadius: '3px',
                   mr: 1,
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
-                {statusColor.label}
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
+                {colors.label}
               </Typography>
             </Box>
           ))}
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5A5042', fontSize: '0.8rem' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5C5346', fontSize: '0.8rem' }}>
             Connections
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
@@ -521,7 +525,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
               Parent-Child (Radial)
             </Typography>
           </Box>
@@ -531,13 +535,13 @@ const RadialTreeView = ({ data, onPersonClick }) => {
               sx={{
                 width: 32,
                 height: 2,
-                backgroundColor: '#C7930A',
+                backgroundColor: maritalStatusColors.married.border,
                 borderRadius: '2px',
                 mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
               Married (Curved)
             </Typography>
           </Box>
@@ -547,14 +551,14 @@ const RadialTreeView = ({ data, onPersonClick }) => {
               sx={{
                 width: 32,
                 height: 2,
-                backgroundColor: '#B8541F',
-                backgroundImage: 'repeating-linear-gradient(90deg, #B8541F 0, #B8541F 3px, transparent 3px, transparent 6px)',
+                backgroundColor: maritalStatusColors.divorced.border,
+                backgroundImage: `repeating-linear-gradient(90deg, ${maritalStatusColors.divorced.border} 0, ${maritalStatusColors.divorced.border} 3px, transparent 3px, transparent 6px)`,
                 borderRadius: '2px',
                 mr: 1,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5A5042' }}>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
               Divorced (Curved)
             </Typography>
           </Box>
@@ -572,10 +576,9 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             left: 16,
             cursor: 'pointer',
             zIndex: 1000,
-            backgroundColor: '#FFFDF9',
-            border: '1px solid #E4D3B0',
-            boxShadow: '0 6px 18px rgba(28,20,16,0.06)',
-            '&:hover': { backgroundColor: '#F1E6D2', boxShadow: '0 4px 12px rgba(28,20,16,0.1)' }
+            backgroundColor: 'white',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            '&:hover': { backgroundColor: '#f5f5f5', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }
           }}
         />
       )}

@@ -21,7 +21,8 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
 
   // Color based on depth
   const color = useMemo(() => {
-    const colors = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#7b1fa2'];
+    // Redesign palette: indigo, leaf, clay, gold, indigo-light
+    const colors = ['#22345E', '#3F6644', '#C1622D', '#D79A1E', '#3A4F82'];
     return colors[depth % colors.length];
   }, [depth]);
 
@@ -64,14 +65,17 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
 }
 
 // Connection line component
-function ConnectionLine({ start, end }) {
+function ConnectionLine({ start, end, type }) {
   const points = useMemo(() => [start, end], [start, end]);
+  // Redesign palette: clay for parent-child, gold for spouse
+  const color = type === 'spouse' ? '#D79A1E' : '#C1622D';
   return (
     <Line
       points={points}
-      color="#888"
-      lineWidth={2}
-      dashed={false}
+      color={color}
+      lineWidth={type === 'spouse' ? 3 : 2}
+      dashed={type === 'spouse'}
+      dashScale={0.5}
     />
   );
 }
@@ -92,56 +96,72 @@ function Tree3D({ data, onPersonClick }) {
       return { nodes: [], connections: [] };
     }
 
-    const nodeMap = new Map(validNodes.map((node) => [String(node.id), node]));
-    const childrenMap = new Map();
+    // Find all root nodes (no parents)
     const hasParent = new Set();
+    const childrenMap = new Map();
+    const spousesSet = new Set();
+    const spouseMap = new Map();
 
-    // Build parent-child relationships - filter out invalid edges
     data.edges.forEach((edge) => {
-      if (!edge || !edge.source || !edge.target || edge.type !== 'parent') return;
-      hasParent.add(String(edge.target));
-      if (!childrenMap.has(String(edge.source))) {
-        childrenMap.set(String(edge.source), []);
+      if (!edge || !edge.source || !edge.target) return;
+      const src = String(edge.source);
+      const tgt = String(edge.target);
+      
+      if (edge.type === 'parent') {
+        hasParent.add(tgt);
+        if (!childrenMap.has(src)) childrenMap.set(src, []);
+        childrenMap.get(src).push(tgt);
+      } else if (edge.type === 'spouse') {
+        if (!spouseMap.has(src)) spouseMap.set(src, []);
+        spouseMap.get(src).push(tgt);
+        if (!spouseMap.has(tgt)) spouseMap.set(tgt, []);
+        spouseMap.get(tgt).push(src);
       }
-      childrenMap.get(String(edge.source)).push(String(edge.target));
     });
 
-    // Find root nodes
-    const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
-
-    if (rootNodes.length === 0) {
-      return { nodes: [], connections: [] };
-    }
-
-    // Calculate positions using a hierarchical layout
-    const positions = new Map();
+    // Calculate depths following both children AND spouses to ensure everyone is reached
     const nodeDepths = new Map();
-    const nodePositions = [];
+    const visited = new Set();
 
-    // Calculate depth for each node
-    const calculateDepth = (nodeId, depth = 0) => {
-      if (nodeId == null || nodeDepths.has(String(nodeId))) return;
-      nodeDepths.set(String(nodeId), depth);
-      const children = childrenMap.get(String(nodeId)) || [];
-      children.forEach((childId) => calculateDepth(childId, depth + 1));
+    const traverse = (nodeId, currentDepth = 0) => {
+      const id = String(nodeId);
+      if (visited.has(id)) return;
+      visited.add(id);
+      
+      nodeDepths.set(id, currentDepth);
+      
+      // Children go to next level
+      const children = childrenMap.get(id) || [];
+      children.forEach(childId => traverse(childId, currentDepth + 1));
+      
+      // Spouses stay at same level
+      const spouses = spouseMap.get(id) || [];
+      spouses.forEach(spouseId => traverse(spouseId, currentDepth));
     };
 
-    rootNodes.forEach((root) => {
-      if (root && root.id != null) {
-        calculateDepth(root.id, 0);
+    // First pass: start from roots
+    const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
+    rootNodes.forEach(root => traverse(root.id, 0));
+
+    // Second pass: catch any disconnected islands
+    validNodes.forEach(node => {
+      if (!visited.has(String(node.id))) {
+        traverse(node.id, 0);
       }
     });
 
     // Calculate positions level by level
     const levelNodes = new Map();
     nodeDepths.forEach((depth, nodeId) => {
-      if (!levelNodes.has(depth)) {
-        levelNodes.set(depth, []);
-      }
+      if (!levelNodes.has(depth)) levelNodes.set(depth, []);
       levelNodes.get(depth).push(nodeId);
     });
 
-    const maxDepth = Math.max(...Array.from(nodeDepths.values()));
+    const positions = new Map();
+    const nodePositions = [];
+    const nodeMap = new Map(validNodes.map((node) => [String(node.id), node]));
+    const depths = Array.from(levelNodes.keys());
+    const maxDepth = depths.length > 0 ? Math.max(...depths) : 0;
     const spacing = 3; // Horizontal spacing between nodes
     const depthSpacing = 4; // Vertical spacing between levels
 
@@ -169,15 +189,17 @@ function Tree3D({ data, onPersonClick }) {
     // Build connections
     const connections = [];
     data.edges.forEach((edge) => {
-      if (edge.type === 'parent') {
-        const startPos = positions.get(String(edge.source));
-        const endPos = positions.get(String(edge.target));
-        if (startPos && endPos) {
-          connections.push({
-            start: new THREE.Vector3(...startPos),
-            end: new THREE.Vector3(...endPos),
-          });
-        }
+      if (!edge || !edge.source || !edge.target) return;
+      const src = String(edge.source);
+      const tgt = String(edge.target);
+      const startPos = positions.get(src);
+      const endPos = positions.get(tgt);
+      if (startPos && endPos) {
+        connections.push({
+          start: new THREE.Vector3(...startPos),
+          end: new THREE.Vector3(...endPos),
+          type: edge.type
+        });
       }
     });
 
