@@ -28,7 +28,6 @@ import {
   ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import ThemeToggleButton from '../components/ThemeToggleButton';
 
 const steps = ['Account Information', 'Family Details', 'Create Password'];
 
@@ -334,7 +333,6 @@ const SignUp = () => {
         >
           Back to Home
         </Button>
-        <ThemeToggleButton />
       </Box>
 
       <Container

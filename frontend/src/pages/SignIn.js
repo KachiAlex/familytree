@@ -22,7 +22,6 @@ import {
   FamilyRestroom as FamilyIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import ThemeToggleButton from '../components/ThemeToggleButton';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
@@ -77,7 +76,6 @@ const SignIn = () => {
         >
           Back to Home
         </Button>
-        <ThemeToggleButton />
       </Box>
 
       <Container

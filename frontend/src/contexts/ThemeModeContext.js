@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useMemo } from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -7,32 +7,12 @@ export const ThemeModeContext = createContext({
   toggleColorMode: () => {},
 });
 
-const getInitialMode = () => {
-  if (typeof window === 'undefined') return 'light';
-  const stored = localStorage.getItem('themeMode');
-  if (stored === 'light' || stored === 'dark') {
-    return stored;
-  }
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  return prefersDark ? 'dark' : 'light';
-};
-
 export const ThemeModeProvider = ({ children }) => {
-  const [mode, setMode] = useState(getInitialMode);
-
-  useEffect(() => {
-    localStorage.setItem('themeMode', mode);
-  }, [mode]);
-
-  const toggleColorMode = () => {
-    setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
-
   const theme = useMemo(
     () =>
       createTheme({
         palette: {
-          mode,
+          mode: 'light',
           primary: {
             main: '#B8541F',
             light: '#F4E0D2',
@@ -46,12 +26,12 @@ export const ThemeModeProvider = ({ children }) => {
             contrastText: '#FFFDF9',
           },
           background: {
-            default: mode === 'light' ? '#F1E6D2' : '#1C1410',
-            paper: mode === 'light' ? '#FFFDF9' : '#2A2018',
+            default: '#F1E6D2',
+            paper: '#FFFDF9',
           },
           text: {
-            primary: mode === 'light' ? '#1C1410' : '#F1E6D2',
-            secondary: mode === 'light' ? '#5A5042' : '#9C8D77',
+            primary: '#1C1410',
+            secondary: '#5A5042',
           },
           error: { main: '#B8541F' },
           warning: { main: '#C7930A' },
@@ -109,11 +89,11 @@ export const ThemeModeProvider = ({ children }) => {
           },
         },
       }),
-    [mode]
+    []
   );
 
   return (
-    <ThemeModeContext.Provider value={{ mode, toggleColorMode }}>
+    <ThemeModeContext.Provider value={{ mode: 'light', toggleColorMode: () => {} }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         {children}

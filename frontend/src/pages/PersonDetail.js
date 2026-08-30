@@ -610,11 +610,11 @@ const PersonDetail = () => {
             startIcon={<AutoAwesomeIcon />}
             onClick={() => navigate(`/person/${person.person_id}/wisdom-chat`)}
             sx={{
-              borderColor: '#BFA46B',
+              borderColor: '#D8BF92',
               color: '#5A5042',
               textTransform: 'none',
-              background: 'linear-gradient(135deg, #FFF8E7 0%, #F5E6C8 100%)',
-              '&:hover': { background: 'linear-gradient(135deg, #FFF3D6 0%, #F0DDB0 100%)' },
+              background: 'linear-gradient(135deg, #FFFDF9 0%, #F4E0D2 100%)',
+              '&:hover': { background: 'linear-gradient(135deg, #FFFDF9 0%, #F1E6D2 100%)' },
             }}
             variant="outlined"
           >

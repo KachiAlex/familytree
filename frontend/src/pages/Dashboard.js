@@ -25,7 +25,6 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import ThemeToggleButton from '../components/ThemeToggleButton';
 import api from '../services/api';
 
 const Dashboard = () => {
@@ -188,7 +187,6 @@ const Dashboard = () => {
           Family Tree
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <ThemeToggleButton />
           <IconButton onClick={handleMenuOpen} sx={{ p: 0 }}>
             <Box sx={{
               width: 36, height: 36, borderRadius: '50%', bgcolor: '#22345E', color: '#FFFDF9',
@@ -235,6 +233,11 @@ const Dashboard = () => {
               variant="contained"
               startIcon={<AddIcon />}
               onClick={handleCreateFamily}
+              sx={{
+                bgcolor: '#B8541F', color: '#FFFDF9', fontWeight: 600,
+                boxShadow: '0 3px 0 0 #8a3d15',
+                '&:hover': { bgcolor: '#B8541F', boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+              }}
             >
               New family
             </Button>
