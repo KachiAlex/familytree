@@ -2,13 +2,9 @@ const express = require('express');
 const { pool } = require('../db/connection');
 const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
 const { checkResourceLimit } = require('../middleware/tierLimits');
+const multer = require('multer');
+const { uploadToR2 } = require('../utils/s3');
 const router = express.Router();
-
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1'
-});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -295,17 +291,9 @@ router.post('/:personId/profile-photo', authenticateToken, upload.single('photo'
       return res.status(403).json({ error: 'You do not have permission to update this avatar' });
     }
 
-    // Upload to S3
-    const fileKey = `profiles/${familyId}/${Date.now()}-${req.file.originalname}`;
-    const uploadParams = {
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: fileKey,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-      ACL: 'public-read'
-    };
-
-    const s3Result = await s3.upload(uploadParams).promise();
+    // Upload to R2
+    const fileKey = `avatars/${personId}-${Date.now()}-${req.file.originalname}`;
+    const s3Result = await uploadToR2(req.file, fileKey);
 
     // Update person's profile_photo_url
     const result = await pool.query(

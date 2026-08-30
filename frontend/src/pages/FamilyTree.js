@@ -56,7 +56,6 @@ const FamilyTree = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [treeData, setTreeData] = useState(null);
-  const [filteredTreeData, setFilteredTreeData] = useState(null);
   const [viewType, setViewType] = useState('vertical');
   const [loading, setLoading] = useState(true);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
@@ -161,7 +160,6 @@ const FamilyTree = () => {
         rootNodes,
       };
       setTreeData(data);
-      setFilteredTreeData(data);
       
       // Set initial focal person to the first root node if not already set
       if (!focalPersonId && rootNodes.length > 0) {
@@ -225,11 +223,8 @@ const FamilyTree = () => {
   }, [treeData]);
 
   // Filter tree data based on search and filters
-  useEffect(() => {
-    if (!treeData) {
-      setFilteredTreeData(treeData);
-      return;
-    }
+  const filteredTreeDataResult = useMemo(() => {
+    if (!treeData) return null;
 
     const query = searchQuery.toLowerCase().trim();
     const filteredNodes = treeData.nodes.filter((node) => {
@@ -256,29 +251,28 @@ const FamilyTree = () => {
     );
 
     // Find root nodes from filtered nodes
-    const hasParent = new Set(
-      filteredEdges.filter((e) => e.type === 'parent').map((e) => String(e.target))
-    );
-    const filteredRootNodes = filteredNodes
+    const parentEdges = filteredEdges.filter((e) => e.type === 'parent');
+    const hasParent = new Set(parentEdges.map((e) => String(e.target)));
+    const rootNodes = filteredNodes
       .filter((n) => !hasParent.has(String(n.id)))
       .map((n) => n.id);
 
-    setFilteredTreeData({
+    return {
       nodes: filteredNodes,
       edges: filteredEdges,
-      rootNodes: filteredRootNodes,
-    });
-  }, [searchQuery, clanFilter, villageFilter, treeData]);
+      rootNodes,
+    };
+  }, [treeData, searchQuery, clanFilter, villageFilter]);
 
   // Memoize the tree data with current viewType and focal person
   const treeDataWithView = useMemo(() => {
-    if (!filteredTreeData) return null;
+    if (!filteredTreeDataResult) return null;
     return { 
-      ...filteredTreeData, 
+      ...filteredTreeDataResult, 
       viewType, 
       focalPersonId 
     };
-  }, [filteredTreeData, viewType, focalPersonId]);
+  }, [filteredTreeDataResult, viewType, focalPersonId]);
 
   const handleViewChange = useCallback((event, newValue) => {
     setViewType(newValue);
@@ -385,7 +379,7 @@ const FamilyTree = () => {
     }
 
     // Show empty state if search returned no results
-    if (filteredTreeData && filteredTreeData.nodes.length === 0 && searchQuery) {
+    if (filteredTreeDataResult && filteredTreeDataResult.nodes.length === 0 && searchQuery) {
       return (
         <Box sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary">
@@ -414,12 +408,12 @@ const FamilyTree = () => {
       default:
         return <VerticalTreeView data={treeDataWithView} onPersonClick={handlePersonClick} />;
     }
-  }, [viewType, handlePersonClick, familyId, treeDataWithView, focalPersonId, loading, filteredTreeData, searchQuery]);
+  }, [viewType, handlePersonClick, familyId, treeDataWithView, focalPersonId, loading, filteredTreeDataResult, searchQuery]);
 
   const handleExport = useCallback(
     async (format) => {
-      if (!filteredTreeData) return;
-      const data = filteredTreeData.nodes.map((node) => node.data);
+      if (!filteredTreeDataResult) return;
+      const data = filteredTreeDataResult.nodes.map((node) => node.data);
       try {
         if (format === 'json') {
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -450,20 +444,20 @@ const FamilyTree = () => {
         } else if (format === 'pdf-summary') {
           setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
           const treeContainer = treeContainerRef.current || document.querySelector('[data-tree-container]');
-          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'summary', null, treeContainer);
+          await exportFamilyTreeToPDF(filteredTreeDataResult, familyInfo, 'summary', null, treeContainer);
           setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'pdf-book') {
           setSnackbar({ open: true, message: 'Generating PDF with photos... This may take a moment.', severity: 'info' });
-          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'book');
+          await exportFamilyTreeToPDF(filteredTreeDataResult, familyInfo, 'book');
           setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'pdf-tree') {
           setSnackbar({ open: true, message: 'Generating PDF with tree diagram... This may take a moment.', severity: 'info' });
           // Get the tree container element - use the ref or find it in the DOM
           const treeContainer = treeContainerRef.current || document.querySelector('[data-tree-container]');
-          await exportFamilyTreeToPDF(filteredTreeData, familyInfo, 'tree', null, treeContainer);
+          await exportFamilyTreeToPDF(filteredTreeDataResult, familyInfo, 'tree', null, treeContainer);
           setSnackbar({ open: true, message: 'PDF exported successfully!', severity: 'success' });
         } else if (format === 'gedcom') {
-          exportGEDCOM(filteredTreeData, familyInfo);
+          exportGEDCOM(filteredTreeDataResult, familyInfo);
         }
         setExportMenuAnchor(null);
       } catch (error) {
@@ -471,7 +465,7 @@ const FamilyTree = () => {
         setSnackbar({ open: true, message: 'Failed to export family data. Please try again.', severity: 'error' });
       }
     },
-    [filteredTreeData, familyId, familyInfo]
+    [filteredTreeDataResult, familyId, familyInfo]
   );
 
   const handleGedcomFileSelect = async (file) => {
@@ -807,6 +801,8 @@ const FamilyTree = () => {
             anchor="right"
             open={Boolean(selectedPersonForStory)}
             onClose={() => setSelectedPersonForStory(null)}
+            disableEnforceFocus={false}
+            disableRestoreFocus={false}
             PaperProps={{
               sx: {
                 width: { xs: '100%', sm: 350 },
