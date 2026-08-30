@@ -209,6 +209,19 @@ const SignIn = () => {
                   Create one now
                 </Link>
               </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Forgot your password?{' '}
+                <Link
+                  to="/reset-password"
+                  style={{
+                    color: theme.palette.primary.main,
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                  }}
+                >
+                  Reset it
+                </Link>
+              </Typography>
             </Box>
           </Box>
         </Paper>

@@ -16,6 +16,7 @@ import AddPerson from './pages/AddPerson';
 import ProfileCompletion from './pages/ProfileCompletion';
 import ClaimPerson from './pages/ClaimPerson';
 import WisdomChat from './pages/WisdomChat';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/signin" element={<SignIn />} />
             <Route path="/register" element={<SignUp />} />
             <Route path="/signup" element={<SignUp />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             {/* Keep old routes for backward compatibility */}
             <Route path="/old-login" element={<Login />} />
             <Route path="/old-register" element={<Register />} />
