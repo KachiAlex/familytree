@@ -184,12 +184,9 @@ const Dashboard = () => {
     <>
       {/* Topbar */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 5 }, py: 2.25, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: '#E4D3B0' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <Box component="img" src="/family-tree-icon.svg" alt="Family Tree" sx={{ width: 26, height: 26 }} />
-          <Typography variant="h6" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 19 }}>
-            Family Tree
-          </Typography>
-        </Box>
+        <Typography variant="h6" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 19 }}>
+          Family Tree
+        </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <ThemeToggleButton />
           <IconButton onClick={handleMenuOpen} sx={{ p: 0 }}>
