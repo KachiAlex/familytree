@@ -8,10 +8,12 @@ import {
   treeStyles 
 } from '../../config/treeConfig';
 
-const HorizontalTreeView = ({ data, onPersonClick }) => {
+const HorizontalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
   const svgRef = useRef();
   const [showLegend, setShowLegend] = useState(true);
   const containerRef = useRef();
+  
+  const focalPersonId = data?.focalPersonId;
 
   const personsData = useMemo(() => {
     if (!data || !data.nodes || data.nodes.length === 0) return { persons: new Map(), childrenByParent: new Map(), spouses: new Map() };
@@ -65,19 +67,68 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
     const { persons, childrenByParent, spouses } = personsData;
     if (persons.size === 0) return { positions: new Map(), levelMap: new Map() };
 
-    const generations = new Map();
-    persons.forEach((_, id) => generations.set(id, 0));
+    // Build relationship maps for bidirectional traversal
+    const parentsByChild = new Map();
+    childrenByParent.forEach((childIds, parentId) => {
+      childIds.forEach(childId => {
+        if (!parentsByChild.has(childId)) parentsByChild.set(childId, []);
+        parentsByChild.get(childId).push(parentId);
+      });
+    });
 
-    // Iterative rank refinement to satisfy constraints:
-    // 1. Generation(child) >= Generation(parent) + 1
-    // 2. Generation(spouse1) == Generation(spouse2)
+    // Determine relevant nodes based on focal person
+    const relevantNodes = new Set();
+    if (focalPersonId && persons.has(focalPersonId)) {
+      const queue = [focalPersonId];
+      relevantNodes.add(focalPersonId);
+      
+      const focalSpouses = spouses.get(focalPersonId) || [];
+      focalSpouses.forEach(s => relevantNodes.add(s.spouseId));
+
+      let head = 0;
+      while(head < queue.length) {
+        const id = queue[head++];
+        
+        const parents = parentsByChild.get(id) || [];
+        parents.forEach(p => {
+          if (!relevantNodes.has(p)) {
+            relevantNodes.add(p);
+            queue.push(p);
+          }
+        });
+
+        const children = childrenByParent.get(id) || [];
+        children.forEach(c => {
+          if (!relevantNodes.has(c)) {
+            relevantNodes.add(c);
+            queue.push(c);
+          }
+        });
+
+        const sList = spouses.get(id) || [];
+        sList.forEach(s => {
+          if (!relevantNodes.has(s.spouseId)) {
+            relevantNodes.add(s.spouseId);
+            queue.push(s.spouseId);
+          }
+        });
+      }
+    } else {
+      persons.forEach((_, id) => relevantNodes.add(id));
+    }
+
+    const generations = new Map();
+    relevantNodes.forEach(id => generations.set(id, 0));
+
+    // Iterative rank refinement
     for (let i = 0; i < 25; i++) {
       let changed = false;
       
-      // Parent-Child constraint
       childrenByParent.forEach((childIds, parentId) => {
+        if (!relevantNodes.has(parentId)) return;
         const pGen = generations.get(parentId);
         childIds.forEach(childId => {
+          if (!relevantNodes.has(childId)) return;
           const cGen = generations.get(childId);
           if (cGen < pGen + 1) {
             generations.set(childId, pGen + 1);
@@ -86,10 +137,11 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         });
       });
 
-      // Spouse constraint
       spouses.forEach((spouseList, personId) => {
+        if (!relevantNodes.has(personId)) return;
         const gen1 = generations.get(personId);
         spouseList.forEach(spouseInfo => {
+          if (!relevantNodes.has(spouseInfo.spouseId)) return;
           const gen2 = generations.get(spouseInfo.spouseId);
           if (gen1 !== gen2) {
             const maxGen = Math.max(gen1, gen2);
@@ -101,6 +153,11 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       });
 
       if (!changed) break;
+    }
+
+    if (generations.size > 0) {
+      const minGen = Math.min(...Array.from(generations.values()));
+      generations.forEach((gen, id) => generations.set(id, gen - minGen));
     }
 
     const levelMap = new Map();
@@ -208,7 +265,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
     });
 
     return { positions, levelMap };
-  }, [personsData]);
+  }, [personsData, focalPersonId]);
 
   useEffect(() => {
     const { persons, childrenByParent, spouses } = personsData;
@@ -388,25 +445,34 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         const pos = positions.get(id);
         return `translate(${pos.x + xOffset},${pos.y + yOffset})`;
       })
-      .style('cursor', 'pointer')
-      .on('click', (event, id) => onPersonClick && onPersonClick(id));
+      .style('cursor', 'pointer');
+
+    nodeGroups.on('click', (event, id) => {
+      if (event.shiftKey) {
+        if (onSetFocalPerson) onSetFocalPerson(id);
+      } else {
+        if (onPersonClick) onPersonClick(id);
+      }
+    });
 
     nodeGroups.each(function(id) {
       const group = d3.select(this);
       const person = persons.get(id);
       if (!person) return;
 
-      const level = positions.get(id).level;
-      const levelIndex = Math.min(level, generationColors.background.length - 1);
       const spouseList = spouses.get(id) || [];
       const hasSpouse = spouseList.length > 0;
       const isDivorced = hasDivorcedRelationship(id);
 
-      group.append('circle')
-        .attr('r', circleRadius)
-        .attr('fill', generationColors.background[levelIndex])
-        .attr('stroke', generationColors.border[levelIndex])
-        .attr('stroke-width', 2);
+      // Add focus indicator if this is the focal person
+      if (id === focalPersonId) {
+        group.append('circle')
+          .attr('r', circleRadius + 5)
+          .attr('fill', 'none')
+          .attr('stroke', '#D79A1E')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '4,2');
+      }
 
       if (hasSpouse) {
         group.append('line')
@@ -421,12 +487,28 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       }
 
       const nameLines = wrapText(person.name, 100);
+      const title = person.data.traditional_title || person.data.title;
+      
+      let textYOffset = circleRadius + 25;
+
+      if (title) {
+        group.append('text')
+          .attr('y', textYOffset)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '10px')
+          .attr('font-weight', '700')
+          .attr('font-family', "'IBM Plex Mono', monospace")
+          .attr('fill', '#D79A1E')
+          .text(title.toUpperCase());
+        textYOffset += 12;
+      }
+
       nameLines.forEach((line, i) => {
         group.append('text')
-          .attr('y', circleRadius + 25 + (i * 14))
+          .attr('y', textYOffset + (i * 14))
           .attr('text-anchor', 'middle')
           .attr('font-size', '12px')
-          .attr('font-weight', '500')
+          .attr('font-weight', '600')
           .attr('fill', textColor)
           .text(line);
       });
@@ -438,15 +520,26 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
             ? `${birthYear} - ${new Date(person.data.date_of_death).getFullYear()}` 
             : `b. ${birthYear}`;
           group.append('text')
-            .attr('y', circleRadius + 25 + (nameLines.length * 14) + 5)
+            .attr('y', textYOffset + (nameLines.length * 14) + 5)
             .attr('text-anchor', 'middle')
             .attr('font-size', '10px')
             .attr('fill', textSoftColor)
             .text(dateText);
         }
       }
+
+      if (person.data.biography || person.data.legacy_story) {
+        group.append('text')
+          .attr('x', circleRadius - 5)
+          .attr('y', -circleRadius + 5)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '12px')
+          .attr('fill', '#D79A1E')
+          .text('📜')
+          .style('pointer-events', 'none');
+      }
     });
-  }, [personsData, computeLayout, onPersonClick, data]);
+  }, [personsData, computeLayout, onPersonClick, data, focalPersonId, onSetFocalPerson]);
 
   return (
     <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: treeStyles.backgroundColor, position: 'relative' }}>
