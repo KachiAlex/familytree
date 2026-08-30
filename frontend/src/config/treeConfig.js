@@ -8,26 +8,36 @@
  * across the platform.
  */
 
-// Generation-based color scheme (Redesign palette only: indigo, clay, leaf, gold)
+// Generation-based color scheme (Indigo gradient for nodes)
 export const generationColors = {
   background: [
-    '#22345E', // Level 0: Indigo (root/ancestors)
-    '#3A4F82', // Level 1: Indigo-light
-    '#C1622D', // Level 2: Clay
-    '#3F6644', // Level 3: Leaf
-    '#D79A1E', // Level 4: Gold
-    '#22345E', // Level 5: Indigo (cycle)
-    '#3F6644', // Level 6+: Leaf (cycle)
+    '#22345E', // Level 0: Dark Indigo (root)
+    '#3A4F82', // Level 1: Indigo
+    '#5D72A3', // Level 2: Medium Indigo/Blue
+    '#8497C4', // Level 3: Light Indigo/Blue
+    '#ABBDD6', // Level 4: Very Light Blue
+    '#D2DEE8', // Level 5: Extra Light Blue
+    '#E9F0F5', // Level 6+: Ghost Blue
   ],
   border: [
-    '#22345E', // Level 0
-    '#22345E', // Level 1
-    '#8a4a1e', // Level 2: Clay dark
-    '#3F6644', // Level 3
-    '#D79A1E', // Level 4
-    '#22345E', // Level 5
-    '#3F6644', // Level 6+
+    '#1A284A', // Level 0
+    '#2A3D6B', // Level 1
+    '#4A5B8B', // Level 2
+    '#6D81B1', // Level 3
+    '#94A7C9', // Level 4
+    '#B8C8DB', // Level 5
+    '#DDE6F0', // Level 6+
   ]
+};
+
+// Tree background and line colors
+export const treeStyles = {
+  backgroundColor: '#FBF7F0', // Soft beige/white background
+  dotGridColor: '#E2D8C6',    // Light beige dots
+  lineColor: '#E7DCC8',       // Beige connection lines
+  spouseBarColor: '#D79A1E',  // Gold/Orange spouse indicator
+  textColor: '#22345E',       // Indigo text
+  textSoftColor: '#5A5042',   // Muted brown text
 };
 
 // Generation level labels
@@ -67,14 +77,15 @@ export const maritalStatusColors = {
 
 // Layout parameters
 export const layoutConfig = {
-  nodeWidth: 160,
-  nodeHeight: 80,
-  levelSpacing: 200,
-  siblingSpacing: 50,
-  spouseSpacing: 120, // Equal spacing between all spouses
-  familyUnitGap: 100, // Gap between different family units on same level
-  padding: 150,
-  connectionLineOpacity: 0.6, // Transparency for parent-child connection lines
+  nodeWidth: 60,   // Circle diameter
+  nodeHeight: 60,  // Circle diameter
+  circleRadius: 28,
+  levelSpacing: 180,
+  siblingSpacing: 60,
+  spouseSpacing: 100,
+  familyUnitGap: 120,
+  padding: 100,
+  connectionLineOpacity: 1.0, 
 };
 
 // Default view type
