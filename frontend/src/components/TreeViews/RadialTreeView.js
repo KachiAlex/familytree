@@ -5,7 +5,8 @@ import {
   generationColors, 
   generationLabels, 
   maritalStatusColors,
-  layoutConfig 
+  layoutConfig,
+  treeStyles 
 } from '../../config/treeConfig';
 
 const RadialTreeView = ({ data, onPersonClick }) => {
@@ -80,7 +81,21 @@ const RadialTreeView = ({ data, onPersonClick }) => {
 
     const width = containerRef.current?.clientWidth || 1200;
     const height = containerRef.current?.clientHeight || 800;
-    const radius = Math.min(width, height) / 2 - 100; // Leave space for labels
+    const radius = Math.min(width, height) / 2 - 100;
+
+    const {
+      circleRadius,
+      connectionLineOpacity
+    } = layoutConfig;
+
+    const {
+      backgroundColor,
+      dotGridColor,
+      lineColor,
+      spouseBarColor,
+      textColor,
+      textSoftColor
+    } = treeStyles;
 
     d3.select(svgRef.current).selectAll('*').remove();
 
@@ -89,9 +104,39 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .attr('width', width)
       .attr('height', height);
 
+    // Define dot grid pattern
+    const defs = svg.append('defs');
+    defs.append('pattern')
+      .attr('id', 'dotGridRadial')
+      .attr('width', 20)
+      .attr('height', 20)
+      .attr('patternUnits', 'userSpaceOnUse')
+      .append('circle')
+      .attr('cx', 2)
+      .attr('cy', 2)
+      .attr('r', 1)
+      .attr('fill', dotGridColor);
+
+    // Main background and dot grid
+    svg.append('rect')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('fill', backgroundColor);
+
+    svg.append('rect')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('fill', 'url(#dotGridRadial)');
+
     const g = svg
       .append('g')
       .attr('transform', `translate(${width / 2},${height / 2})`);
+
+    // Add zoom behavior
+    const zoom = d3.zoom().on('zoom', (event) => {
+      g.attr('transform', `translate(${width / 2 + event.transform.x},${height / 2 + event.transform.y}) scale(${event.transform.k})`);
+    });
+    svg.call(zoom);
 
     // Find ALL root nodes (no parents)
     const hasParent = new Set();
@@ -197,12 +242,10 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .attr('fill', 'none')
       .attr('stroke', (d) => {
         if (d.source.data.virtual) return 'none'; // Hide links from virtual root
-        const childDepth = d.target.depth;
-        const levelIndex = Math.min(childDepth, generationColors.border.length - 1);
-        return generationColors.border[levelIndex];
+        return lineColor;
       })
-      .attr('stroke-width', 2.5)
-      .attr('opacity', layoutConfig.connectionLineOpacity);
+      .attr('stroke-width', 2)
+      .attr('opacity', connectionLineOpacity);
 
     // Draw spouse connections (curved lines)
     spouses.forEach((spouseInfo, personId) => {
@@ -235,31 +278,9 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       g.append('path')
         .attr('d', path.toString())
         .attr('fill', 'none')
-        .attr('stroke', isDivorced ? '#C1622D' : isWidowed ? '#5C5346' : '#D79A1E')
-        .attr('stroke-width', isDivorced ? 2.5 : 3)
-        .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
-
-      // Add diagonal slash for divorced relationships
-      if (isDivorced) {
-        const slashLength = 30;
-        g.append('line')
-          .attr('x1', midX - slashLength / 2)
-          .attr('y1', midY - slashLength / 2)
-          .attr('x2', midX + slashLength / 2)
-          .attr('y2', midY + slashLength / 2)
-          .attr('stroke', '#C1622D')
-          .attr('stroke-width', 4)
-          .attr('stroke-linecap', 'round');
-
-        g.append('line')
-          .attr('x1', midX - slashLength / 2)
-          .attr('y1', midY + slashLength / 2)
-          .attr('x2', midX + slashLength / 2)
-          .attr('y2', midY - slashLength / 2)
-          .attr('stroke', '#C1622D')
-          .attr('stroke-width', 4)
-          .attr('stroke-linecap', 'round');
-      }
+        .attr('stroke', lineColor)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', isDivorced ? '4,4' : 'none');
     });
 
     // Draw nodes
@@ -317,50 +338,41 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         }
       }
 
-      // Draw node rectangle
+      // Draw node circle
       group
-        .append('rect')
-        .attr('x', -nodeWidth / 2)
-        .attr('y', -nodeHeight / 2)
-        .attr('width', nodeWidth)
-        .attr('height', nodeHeight)
-        .attr('rx', 8)
+        .append('circle')
+        .attr('cx', 0)
+        .attr('cy', 0)
+        .attr('r', circleRadius)
         .attr('fill', backgroundColor)
         .attr('stroke', borderColor)
-        .attr('stroke-width', 3)
-        .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))')
-        .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
+        .attr('stroke-width', 2);
+
+      // Add spouse indicator bar
+      if (hasSpouse && !isDivorced) {
+        group.append('line')
+          .attr('x1', circleRadius + 2)
+          .attr('y1', 0)
+          .attr('x2', circleRadius + 15)
+          .attr('y2', 0)
+          .attr('stroke', spouseBarColor)
+          .attr('stroke-width', 4)
+          .attr('stroke-linecap', 'round')
+          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
+      }
 
       // Add name text
       const name = person.name;
-      const maxCharsPerLine = 15;
-      const words = name.split(' ');
-      const lines = [];
-      let currentLine = '';
-
-      words.forEach((word) => {
-        if ((currentLine + word).length <= maxCharsPerLine) {
-          currentLine += (currentLine ? ' ' : '') + word;
-        } else {
-          if (currentLine) lines.push(currentLine);
-          currentLine = word;
-        }
-      });
-      if (currentLine) lines.push(currentLine);
-      if (lines.length === 0) lines.push(name.substring(0, maxCharsPerLine));
-
-      lines.slice(0, 2).forEach((line, index) => {
-        group
-          .append('text')
-          .attr('x', 0)
-          .attr('y', index === 0 ? -8 : 4)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '10px')
-          .attr('font-weight', 'bold')
-          .attr('fill', '#FFFFFF')
-          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
-          .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
-      });
+      group
+        .append('text')
+        .attr('x', 0)
+        .attr('y', circleRadius + 18)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '11px')
+        .attr('font-weight', '500')
+        .attr('fill', textColor)
+        .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
+        .text(name);
 
       // Add date text
       if (person.data.date_of_birth) {
@@ -373,48 +385,20 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             group
               .append('text')
               .attr('x', 0)
-              .attr('y', 18)
+              .attr('y', circleRadius + 28)
               .attr('text-anchor', 'middle')
               .attr('font-size', '9px')
-              .attr('fill', '#FBF7F0')
+              .attr('fill', textSoftColor)
               .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
               .text(dateText);
           }
         } catch (err) {}
       }
-
-      // Add divorce indicator badge
-      if (isDivorced && hasSpouse) {
-        const badgeX = nodeWidth / 2 - 40;
-        const badgeY = -nodeHeight / 2 + 6;
-        group
-          .append('rect')
-          .attr('x', badgeX - 25)
-          .attr('y', badgeY - 6)
-          .attr('width', 50)
-          .attr('height', 12)
-          .attr('rx', 6)
-          .attr('fill', '#FFFFFF')
-          .attr('stroke', '#C1622D')
-          .attr('stroke-width', 1)
-          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
-        
-        group
-          .append('text')
-          .attr('x', badgeX)
-          .attr('y', badgeY + 1)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '7px')
-          .attr('font-weight', 'bold')
-          .attr('fill', '#C1622D')
-          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
-          .text('DIVORCED');
-      }
     });
   }, [personsData, hasDivorcedRelationship, onPersonClick]);
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#FBF7F0', position: 'relative' }}>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: treeStyles.backgroundColor, position: 'relative' }}>
       <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
       
       {/* Color Legend Panel - Bottom Left Corner */}
@@ -435,8 +419,8 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#1C1410' }}>
-              Color Legend
+            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: treeStyles.textColor }}>
+              Generation Levels
             </Typography>
             <Chip
               label="Hide"
@@ -446,118 +430,68 @@ const RadialTreeView = ({ data, onPersonClick }) => {
                 cursor: 'pointer',
                 height: 24,
                 fontSize: '0.75rem',
-                backgroundColor: '#FBF7F0',
-                '&:hover': { backgroundColor: '#E7DCC8' }
+                backgroundColor: treeStyles.backgroundColor,
+                '&:hover': { backgroundColor: treeStyles.dotGridColor }
               }}
             />
           </Box>
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5C5346', fontSize: '0.8rem' }}>
-            Generation Levels (Center → Outward)
-          </Typography>
-          {generationLabels.slice(0, 5).map((label, index) => (
+          {generationLabels.map((label, index) => (
             <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
               <Box
                 sx={{
-                  width: 32,
+                  width: 20,
                   height: 20,
                   backgroundColor: generationColors.background[index],
-                  border: `2px solid ${generationColors.border[index]}`,
-                  borderRadius: '3px',
-                  mr: 1,
+                  border: `1px solid ${generationColors.border[index]}`,
+                  borderRadius: '50%',
+                  mr: 1.5,
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
                 {label}
               </Typography>
             </Box>
           ))}
-          {generationLabels.length > 5 && (
-            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#8C8171', fontStyle: 'italic', ml: 5 }}>
-              + {generationLabels.length - 5} more levels
-            </Typography>
-          )}
           
           <Divider sx={{ my: 1 }} />
           
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5C5346', fontSize: '0.8rem' }}>
-            Marital Status
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: treeStyles.textSoftColor, fontSize: '0.8rem' }}>
+            Indicators
           </Typography>
           
-          {Object.entries(maritalStatusColors).map(([key, colors]) => (
-            <Box key={key} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 20,
-                  backgroundColor: colors.background,
-                  border: `2px solid ${colors.border}`,
-                  borderRadius: '3px',
-                  mr: 1,
-                  flexShrink: 0,
-                }}
-              />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
-                {colors.label}
-              </Typography>
-            </Box>
-          ))}
-          
-          <Divider sx={{ my: 1 }} />
-          
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#5C5346', fontSize: '0.8rem' }}>
-            Connections
-          </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 32,
-                height: 2,
-                backgroundColor: generationColors.border[2],
-                opacity: 0.6,
+                width: 24,
+                height: 4,
+                backgroundColor: treeStyles.spouseBarColor,
                 borderRadius: '2px',
-                mr: 1,
+                mr: 1.5,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
-              Parent-Child (Radial)
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Spouse
             </Typography>
           </Box>
-          
+
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 32,
+                width: 24,
                 height: 2,
-                backgroundColor: maritalStatusColors.married.border,
-                borderRadius: '2px',
-                mr: 1,
+                backgroundColor: treeStyles.lineColor,
+                borderRadius: '1px',
+                mr: 1.5,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
-              Married (Curved)
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Box
-              sx={{
-                width: 32,
-                height: 2,
-                backgroundColor: maritalStatusColors.divorced.border,
-                backgroundImage: `repeating-linear-gradient(90deg, ${maritalStatusColors.divorced.border} 0, ${maritalStatusColors.divorced.border} 3px, transparent 3px, transparent 6px)`,
-                borderRadius: '2px',
-                mr: 1,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#5C5346' }}>
-              Divorced (Curved)
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Relationship
             </Typography>
           </Box>
         </Paper>

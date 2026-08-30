@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { 
   generationColors, 
   maritalStatusColors,
-  layoutConfig 
+  layoutConfig,
+  treeStyles 
 } from '../../config/treeConfig';
 
 // Person node component
@@ -40,13 +41,13 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
         castShadow
         receiveShadow
       >
-        <boxGeometry args={[1, 1, 1]} />
+        <sphereGeometry args={[0.5, 32, 32]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={hovered ? 0.3 : 0.1} />
       </mesh>
       <Text
         position={[0, -0.8, 0]}
         fontSize={0.15}
-        color="#1C1410"
+        color={treeStyles.textColor}
         anchorX="center"
         anchorY="middle"
         maxWidth={2}
@@ -57,11 +58,11 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
         <Text
           position={[0, -1, 0]}
           fontSize={0.1}
-          color="#5C5346"
+          color={treeStyles.textSoftColor}
           anchorX="center"
           anchorY="middle"
         >
-          {new Date(person.date_of_birth).getFullYear()}
+          {new Date(person.data.date_of_birth).getFullYear()}
         </Text>
       )}
     </group>
@@ -71,8 +72,8 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
 // Connection line component
 function ConnectionLine({ start, end, type }) {
   const points = useMemo(() => [start, end], [start, end]);
-  // Redesign palette: clay for parent-child, gold for spouse
-  const color = type === 'spouse' ? maritalStatusColors.married.border : generationColors.border[2];
+  // Use redesign palette: beige for all connections
+  const color = treeStyles.lineColor;
   return (
     <Line
       points={points}
@@ -275,13 +276,13 @@ function Tree3D({ data, onPersonClick }) {
 // Main component
 const ThreeDTreeView = ({ data, onPersonClick }) => {
   return (
-    <Box sx={{ width: '100%', height: '100%' }}>
-      <Canvas
-        camera={{ position: [0, 0, 15], fov: 50 }}
-        shadows
-        gl={{ antialias: true, alpha: true }}
-      >
+    <Box sx={{ width: '100%', height: '100%', minHeight: '600px', bgcolor: treeStyles.backgroundColor }}>
+      <Canvas shadows camera={{ position: [0, 5, 20], fov: 45 }}>
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} castShadow />
+        <color attach="background" args={[treeStyles.backgroundColor]} />
         <Tree3D data={data} onPersonClick={onPersonClick} />
+        <OrbitControls ref={controlsRef} />
       </Canvas>
     </Box>
   );

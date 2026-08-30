@@ -5,7 +5,8 @@ import {
   generationColors, 
   generationLabels, 
   maritalStatusColors,
-  layoutConfig 
+  layoutConfig,
+  treeStyles 
 } from '../../config/treeConfig';
 
 const VerticalTreeView = ({ data, onPersonClick }) => {
@@ -806,47 +807,89 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
     const containerWidth = containerRef.current?.clientWidth || 1000;
     // Use shared configuration from treeConfig.js
-    const { nodeWidth, nodeHeight, padding, connectionLineOpacity } = layoutConfig;
+    const {
+      nodeWidth,
+      nodeHeight,
+      circleRadius,
+      levelSpacing,
+      siblingSpacing,
+      spouseSpacing,
+      familyUnitGap,
+      padding,
+      connectionLineOpacity
+    } = layoutConfig;
+
+    const {
+      backgroundColor,
+      dotGridColor,
+      lineColor,
+      spouseBarColor,
+      textColor,
+      textSoftColor
+    } = treeStyles;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    const { positions } = computeLayout();
+    // Define dot grid pattern
+    const defs = svg.append('defs');
+    defs.append('pattern')
+      .attr('id', 'dotGrid')
+      .attr('width', 20)
+      .attr('height', 20)
+      .attr('patternUnits', 'userSpaceOnUse')
+      .append('circle')
+      .attr('cx', 2)
+      .attr('cy', 2)
+      .attr('r', 1)
+      .attr('fill', dotGridColor);
 
-    if (positions.size === 0) {
-      svg.attr('width', containerWidth).attr('height', 600);
-      return;
-    }
+    const { positions, levelMap } = computeLayout();
+    if (positions.size === 0) return;
 
-    // Calculate SVG dimensions
-    const allPositions = Array.from(positions.values());
-    if (allPositions.length === 0) {
-      svg.attr('width', containerWidth).attr('height', 600);
-      return;
-    }
-    
-    const minX = Math.min(...allPositions.map(p => p.x));
-    const maxX = Math.max(...allPositions.map(p => p.x));
-    const minY = Math.min(...allPositions.map(p => p.y));
-    const maxY = Math.max(...allPositions.map(p => p.y));
-    
-    const contentWidth = maxX - minX + padding * 2 + nodeWidth;
-    const contentHeight = maxY - minY + padding * 2 + nodeHeight;
+    // Calculate tree bounds
+    const xValues = Array.from(positions.values()).map((p) => p.x);
+    const yValues = Array.from(positions.values()).map((p) => p.y);
+    const minX = Math.min(...xValues);
+    const maxX = Math.max(...xValues);
+    const minY = Math.min(...yValues);
+    const maxY = Math.max(...yValues);
 
-    const svgWidth = Math.max(containerWidth, contentWidth);
-    const svgHeight = Math.max(600, contentHeight);
+    const treeWidth = maxX - minX + nodeWidth + padding * 2;
+    const treeHeight = maxY - minY + nodeHeight + padding * 2 + 100; // Extra room for names below bottom nodes
+
+    const containerWidth = containerRef.current?.clientWidth || 1200;
+    const containerHeight = Math.max(800, treeHeight);
+    const svgWidth = Math.max(containerWidth, treeWidth);
+    const svgHeight = treeHeight;
 
     svg.attr('width', svgWidth).attr('height', svgHeight);
 
-    const g = svg.append('g');
-    const xOffset = padding - minX;
-    const yOffset = padding - minY;
+    // Main background and dot grid
+    svg.append('rect')
+      .attr('width', svgWidth)
+      .attr('height', svgHeight)
+      .attr('fill', backgroundColor);
 
-    // Draw family unit containers (background grouping for spouses)
-    const { persons: personsDataMap, spouses: spousesDataMap } = personsData;
-    const familyUnitsMap = new Map();
-    const personToUnitMap = new Map();
-    
+    svg.append('rect')
+      .attr('width', svgWidth)
+      .attr('height', svgHeight)
+      .attr('fill', 'url(#dotGrid)');
+
+    const xOffset = (svgWidth - (maxX - minX + nodeWidth)) / 2 - minX;
+    const yOffset = padding;
+
+    const g = svg.append('g');
+
+    // Add zoom behavior
+    const zoom = d3.zoom().on('zoom', (event) => {
+      g.attr('transform', event.transform);
+    });
+    svg.call(zoom);
+
+    // Initial positioning to center the tree
+    svg.call(zoom.transform, d3.zoomIdentity.translate(0, 0));
+
     // Rebuild family units for rendering
     personsDataMap.forEach((person, id) => {
       const spouseInfo = spousesDataMap.get(id);
@@ -976,16 +1019,10 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
       const minChildX = Math.min(...childPositions.map(p => p.pos.x));
       const maxChildX = Math.max(...childPositions.map(p => p.pos.x));
-      const childTopY = childPositions[0].pos.y + yOffset - nodeHeight / 2;
-      const motherCenterX = motherPos.x + xOffset + nodeWidth / 2;
-      const motherBottomY = motherPos.y + yOffset + nodeHeight / 2;
+      const childTopY = childPositions[0].pos.y + yOffset - circleRadius;
+      const motherCenterX = motherPos.x + xOffset;
+      const motherBottomY = motherPos.y + yOffset + circleRadius;
       const midY = motherBottomY + (childTopY - motherBottomY) / 2;
-
-      // Get generation color for connection lines (based on child level)
-      const childLevel = childPositions[0]?.pos?.level ?? motherPos.level + 1;
-      const levelIndex = Math.min(childLevel, generationColors.border.length - 1);
-      const connectionColor = generationColors.border[levelIndex];
-      const connectionOpacity = connectionLineOpacity; // From config
 
       // Vertical line from mother down to mid point
       g.append('line')
@@ -993,9 +1030,9 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', motherBottomY)
         .attr('x2', motherCenterX)
         .attr('y2', midY)
-        .attr('stroke', connectionColor)
-        .attr('stroke-width', 2.5)
-        .attr('opacity', connectionOpacity);
+        .attr('stroke', lineColor)
+        .attr('stroke-width', 2)
+        .attr('opacity', connectionLineOpacity);
 
       // Horizontal line connecting siblings
       g.append('line')
@@ -1003,21 +1040,21 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', midY)
         .attr('x2', maxChildX + xOffset)
         .attr('y2', midY)
-        .attr('stroke', connectionColor)
-        .attr('stroke-width', 2.5)
-        .attr('opacity', connectionOpacity);
+        .attr('stroke', lineColor)
+        .attr('stroke-width', 2)
+        .attr('opacity', connectionLineOpacity);
 
       // Vertical lines from horizontal line to each child
       childPositions.forEach(({ pos: childPos }) => {
-        const childCenterX = childPos.x + xOffset + nodeWidth / 2;
+        const childCenterX = childPos.x + xOffset;
         g.append('line')
           .attr('x1', childCenterX)
           .attr('y1', midY)
           .attr('x2', childCenterX)
           .attr('y2', childTopY)
-          .attr('stroke', connectionColor)
-          .attr('stroke-width', 2.5)
-          .attr('opacity', connectionOpacity);
+          .attr('stroke', lineColor)
+          .attr('stroke-width', 2)
+          .attr('opacity', connectionLineOpacity);
       });
       
       // Connect mother to father if they're not already close together
@@ -1214,50 +1251,41 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         borderColor = generationColors.border[levelIndex];
       }
 
-      // Draw node rectangle
+      // Draw node circle
       group
-        .append('rect')
-        .attr('x', -nodeWidth / 2)
-        .attr('y', -nodeHeight / 2)
-        .attr('width', nodeWidth)
-        .attr('height', nodeHeight)
-        .attr('rx', 10)
+        .append('circle')
+        .attr('cx', 0)
+        .attr('cy', 0)
+        .attr('r', circleRadius)
         .attr('fill', backgroundColor)
         .attr('stroke', borderColor)
-        .attr('stroke-width', 3)
-        .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.12))');
+        .attr('stroke-width', 2);
 
-      // Add name text
+      // Add spouse indicator bar if married
+      if (hasSpouse && !isDivorced) {
+        group.append('line')
+          .attr('x1', circleRadius + 2)
+          .attr('y1', 0)
+          .attr('x2', circleRadius + 15)
+          .attr('y2', 0)
+          .attr('stroke', spouseBarColor)
+          .attr('stroke-width', 4)
+          .attr('stroke-linecap', 'round');
+      }
+
+      // Add name text below the circle
       const name = person.name;
-      const maxCharsPerLine = 20;
-      const words = name.split(' ');
-      const lines = [];
-      let currentLine = '';
+      group
+        .append('text')
+        .attr('x', 0)
+        .attr('y', circleRadius + 20)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '13px')
+        .attr('font-weight', '500')
+        .attr('fill', textColor)
+        .text(name);
 
-      words.forEach((word) => {
-        if ((currentLine + word).length <= maxCharsPerLine) {
-          currentLine += (currentLine ? ' ' : '') + word;
-        } else {
-          if (currentLine) lines.push(currentLine);
-          currentLine = word;
-        }
-      });
-      if (currentLine) lines.push(currentLine);
-      if (lines.length === 0) lines.push(name.substring(0, maxCharsPerLine));
-
-      lines.slice(0, 2).forEach((line, index) => {
-        group
-          .append('text')
-          .attr('x', 0)
-          .attr('y', index === 0 ? -10 : 2)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '11px')
-          .attr('font-weight', 'bold')
-          .attr('fill', '#FFFDF9')
-          .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
-      });
-
-      // Add date text
+      // Add date text below name
       if (person.data.date_of_birth) {
         try {
           const birthYear = new Date(person.data.date_of_birth).getFullYear();
@@ -1268,54 +1296,21 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             group
               .append('text')
               .attr('x', 0)
-              .attr('y', 20)
+              .attr('y', circleRadius + 35)
               .attr('text-anchor', 'middle')
-              .attr('font-size', '10px')
-              .attr('fill', '#FBF7F0')
+              .attr('font-size', '11px')
+              .attr('fill', textSoftColor)
               .text(dateText);
           }
-        } catch (err) {
-          // ignore invalid dates
-        }
+        } catch (err) {}
       }
 
-      // Add divorce indicator badge on the card
-      if (isDivorced && hasSpouse) {
-        // Draw a small badge in the top-right corner
-        const badgeX = nodeWidth / 2 - 45;
-        const badgeY = -nodeHeight / 2 + 8;
-        
-        // Background rectangle for badge
-        group
-          .append('rect')
-          .attr('x', badgeX - 30)
-          .attr('y', badgeY - 8)
-          .attr('width', 60)
-          .attr('height', 16)
-          .attr('rx', 8)
-          .attr('fill', '#FFFFFF')
-          .attr('stroke', '#C1622D')
-          .attr('stroke-width', 1);
-        
-        // "DIVORCED" text
-        group
-          .append('text')
-          .attr('x', badgeX)
-          .attr('y', badgeY + 2)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '8px')
-          .attr('font-weight', 'bold')
-          .attr('fill', '#C1622D')
-          .text('DIVORCED');
-      }
     });
   }, [personsData, computeLayout, getMotherId, onPersonClick, data]);
-
-  // Generation color labels
   // Using shared configuration from treeConfig.js (generationColors, generationLabels, maritalStatusColors imported at top)
 
   return (
-    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: '#f5f5f5', position: 'relative' }}>
+    <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: treeStyles.backgroundColor, position: 'relative' }}>
       <svg ref={svgRef} style={{ display: 'block', minWidth: '100%', minHeight: '600px' }}></svg>
       
       {/* Color Legend Panel - Bottom Left Corner */}
@@ -1328,7 +1323,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             left: 16,
             padding: 1.5,
             width: 260,
-            backgroundColor: 'white',
+            backgroundColor: treeStyles.backgroundColor,
             zIndex: 1000,
             maxHeight: 'calc(100vh - 120px)',
             overflowY: 'auto',
@@ -1336,8 +1331,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#333' }}>
-              Color Legend
+            <Typography variant="h6" sx={{ fontSize: '0.95rem', fontWeight: 'bold', color: treeStyles.textColor }}>
+              Generation Levels
             </Typography>
             <Chip
               label="Hide"
@@ -1347,121 +1342,68 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
                 cursor: 'pointer',
                 height: 24,
                 fontSize: '0.75rem',
-                backgroundColor: '#f5f5f5',
-                '&:hover': { backgroundColor: '#e0e0e0' }
+                backgroundColor: treeStyles.backgroundColor,
+                '&:hover': { backgroundColor: treeStyles.dotGridColor }
               }}
             />
           </Box>
           
-          <Divider sx={{ my: 1.5 }} />
+          <Divider sx={{ my: 1 }} />
           
-          {/* Generation Levels */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
-            Generation Levels
-          </Typography>
-          {generationLabels.slice(0, 5).map((label, index) => (
+          {generationLabels.map((label, index) => (
             <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
               <Box
                 sx={{
-                  width: 32,
+                  width: 20,
                   height: 20,
                   backgroundColor: generationColors.background[index],
-                  border: `2px solid ${generationColors.border[index]}`,
-                  borderRadius: '3px',
-                  mr: 1,
+                  border: `1px solid ${generationColors.border[index]}`,
+                  borderRadius: '50%',
+                  mr: 1.5,
                   flexShrink: 0,
                 }}
               />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
                 {label}
               </Typography>
             </Box>
           ))}
-          {generationLabels.length > 5 && (
-            <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#999', fontStyle: 'italic', ml: 5 }}>
-              + {generationLabels.length - 5} more levels
-            </Typography>
-          )}
           
           <Divider sx={{ my: 1 }} />
           
-          {/* Marital Status */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
-            Marital Status
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: treeStyles.textSoftColor, fontSize: '0.8rem' }}>
+            Indicators
           </Typography>
           
-          {Object.entries(maritalStatusColors).map(([key, colors]) => (
-            <Box key={key} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 20,
-                  backgroundColor: colors.background,
-                  border: `2px solid ${colors.border}`,
-                  borderRadius: '3px',
-                  mr: 1,
-                  flexShrink: 0,
-                }}
-              />
-              <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-                {colors.label}
-              </Typography>
-            </Box>
-          ))}
-          
-          <Divider sx={{ my: 1 }} />
-          
-          {/* Connection Lines */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.75, color: '#555', fontSize: '0.8rem' }}>
-            Connections
-          </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 32,
-                height: 2,
-                backgroundColor: generationColors.border[2],
-                opacity: 0.6,
+                width: 24,
+                height: 4,
+                backgroundColor: treeStyles.spouseBarColor,
                 borderRadius: '2px',
-                mr: 1,
+                mr: 1.5,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Parent-Child
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Spouse
             </Typography>
           </Box>
-          
+
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
             <Box
               sx={{
-                width: 32,
+                width: 24,
                 height: 2,
-                backgroundColor: maritalStatusColors.married.border,
-                borderRadius: '2px',
-                mr: 1,
+                backgroundColor: treeStyles.lineColor,
+                borderRadius: '1px',
+                mr: 1.5,
                 flexShrink: 0,
               }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Married
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Box
-              sx={{
-                width: 32,
-                height: 2,
-                backgroundColor: maritalStatusColors.divorced.border,
-                backgroundImage: `repeating-linear-gradient(90deg, ${maritalStatusColors.divorced.border} 0, ${maritalStatusColors.divorced.border} 3px, transparent 3px, transparent 6px)`,
-                borderRadius: '2px',
-                mr: 1,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#666' }}>
-              Divorced
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Relationship
             </Typography>
           </Box>
         </Paper>
