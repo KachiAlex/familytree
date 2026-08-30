@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Text, Line } from '@react-three/drei';
 import { Box } from '@mui/material';
@@ -22,9 +22,12 @@ function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
   
   // Load texture if avatar exists
   const profilePhotoUrl = person.profile_photo_url;
+  // Use a 1x1 transparent PNG Data URI as fallback to avoid CORS/404 issues with remote fallbacks
+  const fallbackTexture = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  
   const texture = useLoader(
     THREE.TextureLoader, 
-    profilePhotoUrl || 'https://familytree-assets.s3.amazonaws.com/transparent.png'
+    profilePhotoUrl || fallbackTexture
   );
 
   const hasTexture = !!profilePhotoUrl;
@@ -382,7 +385,9 @@ const ThreeDTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
     <Box sx={{ width: '100%', height: '100%', minHeight: '600px', bgcolor: treeStyles.backgroundColor }}>
       <Canvas shadows camera={{ position: [0, 5, 20], fov: 45 }}>
         <color attach="background" args={[treeStyles.backgroundColor]} />
-        <Tree3D data={data} onPersonClick={onPersonClick} onSetFocalPerson={onSetFocalPerson} />
+        <Suspense fallback={null}>
+          <Tree3D data={data} onPersonClick={onPersonClick} onSetFocalPerson={onSetFocalPerson} />
+        </Suspense>
       </Canvas>
     </Box>
   );
