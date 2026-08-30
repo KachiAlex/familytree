@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Text, Line } from '@react-three/drei';
 import { Box } from '@mui/material';
 import * as THREE from 'three';
@@ -11,15 +11,47 @@ import {
 // Person node component
 function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
   const meshRef = useRef();
+  const textGroupRef = useRef();
   const [hovered, setHovered] = useState(false);
+  const [scale, setScale] = useState(0);
 
-  // Animate on hover
+  // Entrance animation
+  useEffect(() => {
+    setScale(1);
+  }, []);
+  
+  // Load texture if avatar exists
+  const profilePhotoUrl = person.profile_photo_url;
+  const texture = useLoader(
+    THREE.TextureLoader, 
+    profilePhotoUrl || 'https://familytree-assets.s3.amazonaws.com/transparent.png'
+  );
+
+  const hasTexture = !!profilePhotoUrl;
+
+  // Animate on hover and entrance
   useFrame((state) => {
+    const time = state.clock.getElapsedTime();
+    
     if (meshRef.current) {
+      const targetScale = isFocal ? 1.4 : (hovered ? 1.2 : 1);
+      
+      // Add subtle swaying/breathing animation
+      const breathing = Math.sin(time * 2 + position[0]) * 0.03;
+      const finalScale = scale * targetScale + breathing;
+      
       meshRef.current.scale.lerp(
-        new THREE.Vector3(hovered ? 1.2 : 1, hovered ? 1.2 : 1, hovered ? 1.2 : 1),
+        new THREE.Vector3(finalScale, finalScale, finalScale),
         0.1
       );
+      
+      // Subtle swaying position
+      meshRef.current.position.y = Math.sin(time + position[0]) * 0.05;
+    }
+    
+    // Billboarding
+    if (textGroupRef.current) {
+      textGroupRef.current.quaternion.copy(state.camera.quaternion);
     }
   });
 
@@ -40,11 +72,19 @@ function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
         receiveShadow
       >
         <sphereGeometry args={[isFocal ? 0.7 : 0.5, 32, 32]} />
-        <meshStandardMaterial 
-          color={color} 
-          emissive={isFocal ? '#D79A1E' : color} 
-          emissiveIntensity={isFocal || hovered ? 0.5 : 0.1} 
-        />
+        {hasTexture ? (
+          <meshStandardMaterial 
+            map={texture}
+            emissive={isFocal ? '#D79A1E' : '#000'} 
+            emissiveIntensity={isFocal ? 0.4 : 0}
+          />
+        ) : (
+          <meshStandardMaterial 
+            color={color} 
+            emissive={isFocal ? '#D79A1E' : color} 
+            emissiveIntensity={isFocal || hovered ? 0.5 : 0.1} 
+          />
+        )}
       </mesh>
       {isFocal && (
         <mesh position={[0, 0, 0]}>
@@ -52,52 +92,73 @@ function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
           <meshBasicMaterial color="#D79A1E" transparent opacity={0.5} side={THREE.DoubleSide} />
         </mesh>
       )}
-      <Text
-        position={[0, -0.8, 0]}
-        fontSize={0.15}
-        color={treeStyles.textColor}
-        anchorX="center"
-        anchorY="top"
-        maxWidth={1.5}
-        textAlign="center"
-        fontWeight="bold"
-      >
-        {(person.traditional_title ? person.traditional_title.toUpperCase() + "\n" : "") + (person.full_name || person.label || 'Unknown')}
-      </Text>
-      {person.date_of_birth && (
+      <group ref={textGroupRef}>
         <Text
-          position={[0, -1.3, 0]}
-          fontSize={0.1}
-          color={treeStyles.textSoftColor}
+          position={[0, -0.8, 0]}
+          fontSize={0.15}
+          color={treeStyles.textColor}
           anchorX="center"
           anchorY="top"
+          maxWidth={1.5}
+          textAlign="center"
+          fontWeight="bold"
         >
-          {new Date(person.data?.date_of_birth || person.date_of_birth).getFullYear()}
+          {(person.traditional_title ? person.traditional_title.toUpperCase() + "\n" : "") + (person.full_name || person.label || 'Unknown')}
         </Text>
-      )}
+        {person.date_of_birth && (
+          <Text
+            position={[0, -1.3, 0]}
+            fontSize={0.1}
+            color={treeStyles.textSoftColor}
+            anchorX="center"
+            anchorY="top"
+          >
+            {new Date(person.data?.date_of_birth || person.date_of_birth).getFullYear()}
+          </Text>
+        )}
+      </group>
     </group>
   );
 }
 
 // Connection line component
 function ConnectionLine({ start, end, type }) {
-  const points = useMemo(() => [start, end], [start, end]);
+  const points = useMemo(() => {
+    if (type === 'spouse') return [start, end];
+    
+    // Create a curve for parent-child for more organic look
+    const midY = (start.y + end.y) / 2;
+    const midPoint = new THREE.Vector3(start.x, midY, start.z);
+    const curve = new THREE.QuadraticBezierCurve3(start, midPoint, end);
+    return curve.getPoints(20);
+  }, [start, end, type]);
+
   const color = treeStyles.lineColor;
   return (
     <Line
       points={points}
       color={color}
-      lineWidth={type === 'spouse' ? 3 : 2}
+      lineWidth={type === 'spouse' ? 3 : 1.5}
       dashed={type === 'spouse'}
       dashScale={0.5}
+      transparent
+      opacity={0.6}
     />
   );
 }
 
 // Main 3D tree component logic
 function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
+  const groupRef = useRef();
   const controlsRef = useRef();
   const focalPersonId = data?.focalPersonId;
+
+  // Slow rotation for dynamic feel
+  useFrame((state, delta) => {
+    if (groupRef.current && !focalPersonId) {
+      groupRef.current.rotation.y += delta * 0.05;
+    }
+  });
 
   const { nodes, connections } = useMemo(() => {
     if (!data || !data.nodes || !data.edges) {
@@ -207,7 +268,13 @@ function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
       nodeIds.forEach((nodeId, index) => {
         const x = startX + index * spacing;
         const y = (maxDepth - depth) * depthSpacing;
-        const z = (Math.random() - 0.5) * 0.5;
+        
+        // Improve Z-depth: ancestors pushed back, descendants pulled forward
+        // If depth < maxDepth/2, it's older generations (ancestors)
+        // If depth > maxDepth/2, it's younger generations (descendants)
+        const midDepth = maxDepth / 2;
+        const z = (depth - midDepth) * 2 + (Math.random() - 0.5) * 1.5;
+        
         positions.set(nodeId, [x, y, z]);
         const node = persons.get(nodeId);
         if (node) {
@@ -248,22 +315,42 @@ function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
     return { nodes: nodePositions, connections };
   }, [data, focalPersonId]);
 
+  // Smooth camera flight and target tracking
   useFrame(({ camera }) => {
     if (nodes.length === 0) return;
-    const posArr = nodes.map(n => n.position);
-    const minX = Math.min(...posArr.map(p => p[0]));
-    const maxX = Math.max(...posArr.map(p => p[0]));
-    const minY = Math.min(...posArr.map(p => p[1]));
-    const maxY = Math.max(...posArr.map(p => p[1]));
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const dist = Math.max(maxX - minX, maxY - minY) * 1.5 || 10;
-    camera.position.lerp(new THREE.Vector3(centerX, centerY, dist), 0.05);
-    if (controlsRef.current) controlsRef.current.target.lerp(new THREE.Vector3(centerX, centerY, 0), 0.05);
+    
+    let targetPos = new THREE.Vector3(0, 0, 20);
+    let lookAtPos = new THREE.Vector3(0, 0, 0);
+
+    if (focalPersonId) {
+      const focalNode = nodes.find(n => String(n.node.id) === focalPersonId);
+      if (focalNode) {
+        const [fx, fy, fz] = focalNode.position;
+        targetPos.set(fx, fy, fz + 10);
+        lookAtPos.set(fx, fy, fz);
+      }
+    } else {
+      const posArr = nodes.map(n => n.position);
+      const minX = Math.min(...posArr.map(p => p[0]));
+      const maxX = Math.max(...posArr.map(p => p[0]));
+      const minY = Math.min(...posArr.map(p => p[1]));
+      const maxY = Math.max(...posArr.map(p => p[1]));
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const dist = Math.max(maxX - minX, maxY - minY) * 1.2 || 15;
+      targetPos.set(centerX, centerY, dist);
+      lookAtPos.set(centerX, centerY, 0);
+    }
+
+    camera.position.lerp(targetPos, 0.05);
+    if (controlsRef.current) {
+      controlsRef.current.target.lerp(lookAtPos, 0.05);
+      controlsRef.current.update();
+    }
   });
 
   return (
-    <>
+    <group ref={groupRef}>
       <ambientLight intensity={0.5} />
       <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
       {connections.map((conn, idx) => (
@@ -286,7 +373,7 @@ function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
         />
       ))}
       <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.05} />
-    </>
+    </group>
   );
 }
 

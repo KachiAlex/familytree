@@ -1,27 +1,29 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Typography,
-  Button,
-  IconButton,
-  Tabs,
-  Tab,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  DialogContentText,
-  TextField,
-  InputAdornment,
-  Autocomplete,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Alert,
-  Skeleton,
-  Collapse,
-  Paper,
+import { 
+  Box, 
+  Typography, 
+  Button, 
+  IconButton, 
+  Tabs, 
+  Tab, 
+  Dialog, 
+  DialogTitle, 
+  DialogContent, 
+  DialogActions, 
+  DialogContentText, 
+  TextField, 
+  InputAdornment, 
+  Autocomplete, 
+  Menu, 
+  MenuItem, 
+  Snackbar, 
+  Alert, 
+  Skeleton, 
+  Collapse, 
+  Paper, 
+  Drawer, 
+  Chip
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -404,7 +406,7 @@ const FamilyTree = () => {
       case 'radial':
         return <RadialTreeView data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
       case '3d':
-        return <ThreeDTreeView data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
+        return <ThreeDTreeView key={`3d-${familyId}-${focalPersonId}`} data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
       case 'timeline':
         return <TimelineView familyId={familyId} />;
       case 'map':
@@ -412,7 +414,7 @@ const FamilyTree = () => {
       default:
         return <VerticalTreeView data={treeDataWithView} onPersonClick={handlePersonClick} />;
     }
-  }, [loading, treeDataWithView, viewType, handlePersonClick, familyId, filteredTreeData, searchQuery]);
+  }, [viewType, handlePersonClick, familyId, treeDataWithView, focalPersonId, loading, filteredTreeData, searchQuery]);
 
   const handleExport = useCallback(
     async (format) => {
@@ -800,58 +802,95 @@ const FamilyTree = () => {
         }} data-tree-container>
           {renderTreeView}
 
-          {/* Heritage Panel - Bottom Right */}
-          {selectedPersonForStory && (
-            <Paper
-              elevation={8}
-              sx={{
-                position: 'absolute', bottom: 20, right: 20, width: 300,
-                maxHeight: '40vh', overflowY: 'auto', borderRadius: '16px',
-                p: 2.5, border: '1px solid #E7DCC8', bgcolor: '#FFFFFF',
-                boxShadow: '0 12px 32px rgba(34,52,94,.15)', zIndex: 100,
-              }}
-            >
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                <Box>
+          {/* Heritage Panel - Side Drawer for better discovery */}
+          <Drawer
+            anchor="right"
+            open={Boolean(selectedPersonForStory)}
+            onClose={() => setSelectedPersonForStory(null)}
+            PaperProps={{
+              sx: {
+                width: { xs: '100%', sm: 350 },
+                bgcolor: '#FBF7F0',
+                borderLeft: '1px solid #E7DCC8',
+                boxShadow: '-10px 0 20px rgba(34,52,94,.05)',
+                p: 0,
+              }
+            }}
+          >
+            {selectedPersonForStory && (
+              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {/* Profile Image Header */}
+                <Box sx={{ 
+                  width: '100%', aspectRatio: '1/1', bgcolor: '#22345E', 
+                  position: 'relative', overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {selectedPersonForStory.profile_photo_url ? (
+                    <Box component="img" src={selectedPersonForStory.profile_photo_url} 
+                      sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 64, fontWeight: 600, color: '#fff' }}>
+                      {selectedPersonForStory.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </Typography>
+                  )}
+                  <IconButton 
+                    onClick={() => setSelectedPersonForStory(null)}
+                    sx={{ position: 'absolute', top: 12, right: 12, bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' } }}
+                  >
+                    <ClearIcon />
+                  </IconButton>
+                </Box>
+
+                <Box sx={{ p: 3, flex: 1, overflowY: 'auto' }}>
                   {selectedPersonForStory.traditional_title && (
                     <Typography sx={{ 
-                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, 
-                      fontWeight: 700, color: '#D79A1E', mb: 0.5 
+                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, 
+                      fontWeight: 700, color: '#D79A1E', mb: 0.5, letterSpacing: '0.1em'
                     }}>
                       {selectedPersonForStory.traditional_title.toUpperCase()}
                     </Typography>
                   )}
-                  <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: '#22345E' }}>
+                  <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 24, color: '#22345E', mb: 1 }}>
                     {selectedPersonForStory.full_name}
                   </Typography>
+                  
+                  <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
+                    {selectedPersonForStory.clan_name && (
+                      <Chip label={selectedPersonForStory.clan_name} size="small" variant="outlined" sx={{ borderColor: '#E7DCC8', color: '#5C5346' }} />
+                    )}
+                    {selectedPersonForStory.village_origin && (
+                      <Chip label={selectedPersonForStory.village_origin} size="small" variant="outlined" sx={{ borderColor: '#E7DCC8', color: '#5C5346' }} />
+                    )}
+                  </Box>
+
+                  <Typography variant="overline" sx={{ color: '#8C8171', fontWeight: 700 }}>Legacy Story</Typography>
+                  <Typography variant="body1" sx={{ color: '#5C5346', mb: 4, lineHeight: 1.7, fontStyle: 'italic' }}>
+                    "{selectedPersonForStory.biography || selectedPersonForStory.legacy_story || "Every life is a chapter in our family's great story. This ancestor's details are being preserved for future generations."}"
+                  </Typography>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Button 
+                      fullWidth variant="contained" 
+                      onClick={() => navigate(`/person/${selectedPersonForStory.person_id}`)}
+                      sx={{ bgcolor: '#22345E', py: 1.25, borderRadius: '10px', textTransform: 'none' }}
+                    >
+                      View Full Ancestor Profile
+                    </Button>
+                    <Button 
+                      fullWidth variant="outlined" 
+                      onClick={() => {
+                        setFocalPersonId(String(selectedPersonForStory.person_id));
+                        setSelectedPersonForStory(null);
+                      }}
+                      sx={{ borderColor: '#22345E', color: '#22345E', py: 1.25, borderRadius: '10px', textTransform: 'none' }}
+                    >
+                      Re-center Tree Around This Person
+                    </Button>
+                  </Box>
                 </Box>
-                <IconButton size="small" onClick={() => setSelectedPersonForStory(null)}>
-                  <ClearIcon sx={{ fontSize: 18 }} />
-                </IconButton>
               </Box>
-
-              <Typography variant="body2" sx={{ color: '#5C5346', mb: 2, fontSize: '13px', lineHeight: 1.6 }}>
-                {selectedPersonForStory.biography || selectedPersonForStory.legacy_story || "This ancestor's story is yet to be fully told. Preserving our heritage, one generation at a time."}
-              </Typography>
-
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                <Button 
-                  size="small" variant="contained" 
-                  onClick={() => navigate(`/person/${selectedPersonForStory.person_id}`)}
-                  sx={{ bgcolor: '#22345E', textTransform: 'none', borderRadius: '8px', fontSize: '12px' }}
-                >
-                  Full Profile
-                </Button>
-                <Button 
-                  size="small" variant="outlined" 
-                  onClick={() => setFocalPersonId(String(selectedPersonForStory.person_id))}
-                  sx={{ borderColor: '#22345E', color: '#22345E', textTransform: 'none', borderRadius: '8px', fontSize: '12px' }}
-                >
-                  Set as Focus
-                </Button>
-              </Box>
-            </Paper>
-          )}
+            )}
+          </Drawer>
 
           {/* Insights panel */}
           {stats && (
