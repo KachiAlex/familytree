@@ -182,7 +182,7 @@ const Home = () => {
       </Box>
 
       {/* Features section */}
-      <Container maxWidth="lg" sx={{ py: { xs: 6, md: 11 } }}>
+      <Box sx={{ py: { xs: 6, md: 11 }, px: { xs: 3, md: 7 } }}>
         <Box sx={{ maxWidth: 600, mb: 6 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
             <Box sx={{ width: 22, height: 2, bgcolor: '#B8541F' }} />
@@ -221,7 +221,7 @@ const Home = () => {
             </Grid>
           ))}
         </Grid>
-      </Container>
+      </Box>
 
       {/* Views section (dark) */}
       <Box sx={{ bgcolor: '#1C1410', color: '#F1E6D2', py: { xs: 6, md: 11 }, px: { xs: 3, md: 7 } }}>
@@ -261,7 +261,7 @@ const Home = () => {
       </Box>
 
       {/* CTA band */}
-      <Box sx={{ py: { xs: 6, md: 10 }, textAlign: 'center', bgcolor: '#E4D3B0', px: 3 }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, textAlign: 'center', bgcolor: '#E4D3B0', px: { xs: 3, md: 7 } }}>
         <Typography variant="h2" sx={{ fontSize: { xs: 26, md: 36 }, maxWidth: 560, mx: 'auto', mb: 1.75 }}>
           Your family's history is worth more than a group chat.
         </Typography>
