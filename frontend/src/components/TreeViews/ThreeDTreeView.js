@@ -5,8 +5,6 @@ import { Box } from '@mui/material';
 import * as THREE from 'three';
 import { 
   generationColors, 
-  maritalStatusColors,
-  layoutConfig,
   treeStyles 
 } from '../../config/treeConfig';
 
@@ -101,10 +99,8 @@ function Tree3D({ data, onPersonClick }) {
       return { nodes: [], connections: [] };
     }
 
-    // Find all root nodes (no parents)
     const hasParent = new Set();
     const childrenMap = new Map();
-    const spousesSet = new Set();
     const spouseMap = new Map();
 
     data.edges.forEach((edge) => {
@@ -117,43 +113,47 @@ function Tree3D({ data, onPersonClick }) {
         if (!childrenMap.has(src)) childrenMap.set(src, []);
         childrenMap.get(src).push(tgt);
       } else if (edge.type === 'spouse') {
-        if (!spouseMap.has(src)) spouseMap.set(src, []);
-        spouseMap.get(src).push(tgt);
-        if (!spouseMap.has(tgt)) spouseMap.set(tgt, []);
-        spouseMap.get(tgt).push(src);
+        if (!spouseMap.has(src)) spouseMap.set(src, new Set());
+        if (!spouseMap.has(tgt)) spouseMap.set(tgt, new Set());
+        spouseMap.get(src).add(tgt);
+        spouseMap.get(tgt).add(src);
       }
     });
 
-    // Calculate depths following both children AND spouses to ensure everyone is reached
+    // Calculate generations using iterative rank refinement
     const nodeDepths = new Map();
-    const visited = new Set();
+    validNodes.forEach(node => nodeDepths.set(String(node.id), 0));
 
-    const traverse = (nodeId, currentDepth = 0) => {
-      const id = String(nodeId);
-      if (visited.has(id)) return;
-      visited.add(id);
+    for (let i = 0; i < 25; i++) {
+      let changed = false;
       
-      nodeDepths.set(id, currentDepth);
-      
-      // Children go to next level
-      const children = childrenMap.get(id) || [];
-      children.forEach(childId => traverse(childId, currentDepth + 1));
-      
-      // Spouses stay at same level
-      const spouses = spouseMap.get(id) || [];
-      spouses.forEach(spouseId => traverse(spouseId, currentDepth));
-    };
+      // Parent-Child constraint
+      childrenMap.forEach((childIds, parentId) => {
+        const pGen = nodeDepths.get(parentId) || 0;
+        childIds.forEach(childId => {
+          if ((nodeDepths.get(childId) || 0) < pGen + 1) {
+            nodeDepths.set(childId, pGen + 1);
+            changed = true;
+          }
+        });
+      });
 
-    // First pass: start from roots
-    const rootNodes = validNodes.filter((node) => !hasParent.has(String(node.id)));
-    rootNodes.forEach(root => traverse(root.id, 0));
+      // Spouse constraint
+      spouseMap.forEach((spouses, personId) => {
+        const gen1 = nodeDepths.get(personId) || 0;
+        spouses.forEach(spouseId => {
+          const gen2 = nodeDepths.get(spouseId) || 0;
+          if (gen1 !== gen2) {
+            const maxGen = Math.max(gen1, gen2);
+            nodeDepths.set(personId, maxGen);
+            nodeDepths.set(spouseId, maxGen);
+            changed = true;
+          }
+        });
+      });
 
-    // Second pass: catch any disconnected islands
-    validNodes.forEach(node => {
-      if (!visited.has(String(node.id))) {
-        traverse(node.id, 0);
-      }
-    });
+      if (!changed) break;
+    }
 
     // Calculate positions level by level
     const levelNodes = new Map();
@@ -245,7 +245,7 @@ function Tree3D({ data, onPersonClick }) {
 
       {/* Render connections */}
       {connections.map((conn, idx) => (
-        <ConnectionLine key={`conn-${idx}`} start={conn.start} end={conn.end} />
+        <ConnectionLine key={`conn-${idx}`} start={conn.start} end={conn.end} type={conn.type} />
       ))}
 
       {/* Render nodes */}

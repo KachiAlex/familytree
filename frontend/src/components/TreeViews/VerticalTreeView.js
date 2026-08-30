@@ -4,7 +4,6 @@ import { Box, Paper, Typography, Divider, Chip } from '@mui/material';
 import { 
   generationColors, 
   generationLabels, 
-  maritalStatusColors,
   layoutConfig,
   treeStyles 
 } from '../../config/treeConfig';
@@ -23,9 +22,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
     const persons = new Map();
     const childrenByParent = new Map(); // parentId -> [childIds]
-    const spouses = new Map(); // personId -> { spouseId, marital_status }
+    const spouses = new Map(); // personId -> Set of { spouseId, marital_status }
 
-    // Build persons map
     validNodes.forEach((node) => {
       const id = String(node.id);
       persons.set(id, {
@@ -35,7 +33,6 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       });
     });
 
-    // Build relationships
     (data.edges || []).forEach((edge) => {
       if (!edge || !edge.source || !edge.target) return;
       
@@ -49,149 +46,116 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         childrenByParent.get(sourceId).push(targetId);
       } else if (edge.type === 'spouse') {
         const maritalStatus = edge.marital_status || 'married';
-        spouses.set(sourceId, { spouseId: targetId, marital_status: maritalStatus });
-        spouses.set(targetId, { spouseId: sourceId, marital_status: maritalStatus });
+        if (!spouses.has(sourceId)) spouses.set(sourceId, new Set());
+        if (!spouses.has(targetId)) spouses.set(targetId, new Set());
+        spouses.get(sourceId).add(JSON.stringify({ spouseId: targetId, marital_status: maritalStatus }));
+        spouses.get(targetId).add(JSON.stringify({ spouseId: sourceId, marital_status: maritalStatus }));
       }
     });
 
-    return { persons, childrenByParent, spouses };
-  }, [data]);
+    // Parse the JSON sets back into arrays of objects
+    const finalSpouses = new Map();
+    spouses.forEach((spouseSet, id) => {
+      finalSpouses.set(id, Array.from(spouseSet).map(s => JSON.parse(s)));
+    });
 
-  // Helper function to determine which parent is the mother
-  const getMotherId = useCallback((parentIds, persons, spouses) => {
-    if (parentIds.length === 0) return null;
-    if (parentIds.length === 1) return parentIds[0]; // Single parent
-    
-    // Check gender to find mother
-    for (const parentId of parentIds) {
-      const parent = persons.get(parentId);
-      if (parent && parent.data?.gender === 'female') {
-        return parentId;
-      }
-    }
-    
-    // If no female found, check if any parent has a spouse that's female
-    for (const parentId of parentIds) {
-      const spouseInfo = spouses.get(parentId);
-      if (spouseInfo) {
-        const spouse = persons.get(spouseInfo.spouseId);
-        if (spouse && spouse.data?.gender === 'female') {
-          return spouseInfo.spouseId;
-        }
-      }
-    }
-    
-    // Fallback: return first parent
-    return parentIds[0];
-  }, []);
+    return { persons, childrenByParent, spouses: finalSpouses };
+  }, [data]);
 
   // Compute layout positions for VERTICAL view
   const computeLayout = useCallback(() => {
     const { persons, childrenByParent, spouses } = personsData;
     if (persons.size === 0) return { positions: new Map(), levelMap: new Map() };
 
-    const positions = new Map();
-    const levelMap = new Map();
-    
-    const roots = [];
-    persons.forEach((person, id) => {
-      let hasParent = false;
+    const generations = new Map();
+    persons.forEach((_, id) => generations.set(id, 0));
+
+    // Iterative rank refinement to satisfy constraints:
+    // 1. Generation(child) >= Generation(parent) + 1
+    // 2. Generation(spouse1) == Generation(spouse2)
+    for (let i = 0; i < 25; i++) {
+      let changed = false;
+      
+      // Parent-Child constraint
       childrenByParent.forEach((childIds, parentId) => {
-        if (childIds.includes(id)) {
-          hasParent = true;
-        }
-      });
-      
-      if (!hasParent) {
-        const spouseInfo = spouses.get(id);
-        if (spouseInfo) {
-          const spouseId = spouseInfo.spouseId;
-          let spouseHasParent = false;
-          childrenByParent.forEach((childIds, parentId) => {
-            if (childIds.includes(spouseId)) {
-              spouseHasParent = true;
-            }
-          });
-          
-          if (!spouseHasParent) {
-            roots.push(id);
+        const pGen = generations.get(parentId);
+        childIds.forEach(childId => {
+          const cGen = generations.get(childId);
+          if (cGen < pGen + 1) {
+            generations.set(childId, pGen + 1);
+            changed = true;
           }
-        } else {
-          roots.push(id);
-        }
-      }
-    });
-
-    if (roots.length === 0) return { positions, levelMap };
-
-    const levels = new Map();
-    const queue = roots.map(id => ({ id, level: 0 }));
-    const visited = new Set();
-
-    while (queue.length > 0) {
-      const { id, level } = queue.shift();
-      if (visited.has(id)) continue;
-      visited.add(id);
-      
-      levels.set(id, level);
-      if (!levelMap.has(level)) {
-        levelMap.set(level, []);
-      }
-      levelMap.get(level).push(id);
-
-      const children = childrenByParent.get(id) || [];
-      children.forEach(childId => {
-        if (!visited.has(childId)) {
-          queue.push({ id: childId, level: level + 1 });
-        }
+        });
       });
-      
-      const spouseInfo = spouses.get(id);
-      if (spouseInfo && !visited.has(spouseInfo.spouseId)) {
-        queue.push({ id: spouseInfo.spouseId, level: level });
-      }
+
+      // Spouse constraint
+      spouses.forEach((spouseList, personId) => {
+        const gen1 = generations.get(personId);
+        spouseList.forEach(spouseInfo => {
+          const gen2 = generations.get(spouseInfo.spouseId);
+          if (gen1 !== gen2) {
+            const maxGen = Math.max(gen1, gen2);
+            generations.set(personId, maxGen);
+            generations.set(spouseInfo.spouseId, maxGen);
+            changed = true;
+          }
+        });
+      });
+
+      if (!changed) break;
     }
 
-    persons.forEach((person, id) => {
-      if (!visited.has(id)) {
-        queue.push({ id, level: 0 });
-        while (queue.length > 0) {
-          const { id: islandId, level: islandLevel } = queue.shift();
-          if (visited.has(islandId)) continue;
-          visited.add(islandId);
-          
-          levels.set(islandId, islandLevel);
-          if (!levelMap.has(islandLevel)) levelMap.set(islandLevel, []);
-          levelMap.get(islandLevel).push(islandId);
-          
-          const islandChildren = childrenByParent.get(islandId) || [];
-          islandChildren.forEach(childId => {
-            if (!visited.has(childId)) queue.push({ id: childId, level: islandLevel + 1 });
-          });
-          const islandSpouseInfo = spouses.get(islandId);
-          if (islandSpouseInfo && !visited.has(islandSpouseInfo.spouseId)) {
-            queue.push({ id: islandSpouseInfo.spouseId, level: islandLevel });
-          }
-        }
-      }
+    const levelMap = new Map();
+    generations.forEach((gen, id) => {
+      if (!levelMap.has(gen)) levelMap.set(gen, []);
+      levelMap.get(gen).push(id);
     });
 
-    const { nodeWidth, nodeHeight, levelSpacing, siblingSpacing, familyUnitGap, padding } = layoutConfig;
+    const { nodeWidth, levelSpacing, siblingSpacing, familyUnitGap, padding } = layoutConfig;
+    const positions = new Map();
     
-    let currentX = padding;
+    // Sort generations to process top-to-bottom
     const sortedLevels = Array.from(levelMap.keys()).sort((a, b) => a - b);
     
+    // Horizontal distribution within each level
     sortedLevels.forEach(level => {
       const personIds = levelMap.get(level);
       const y = padding + level * levelSpacing;
       
+      // Group spouses together for horizontal layout
+      const processed = new Set();
+      let currentX = padding;
+
       personIds.forEach(id => {
-        if (!positions.has(id)) {
-          positions.set(id, { x: currentX, y, level });
-          currentX += nodeWidth + siblingSpacing;
-        }
+        if (processed.has(id)) return;
+        
+        // Find all connected spouses at this level
+        const spouseGroup = [id];
+        processed.add(id);
+        
+        const findSpouses = (pid) => {
+          const sList = spouses.get(pid) || [];
+          sList.forEach(sInfo => {
+            if (!processed.has(sInfo.spouseId) && generations.get(sInfo.spouseId) === level) {
+              processed.add(sInfo.spouseId);
+              spouseGroup.push(sInfo.spouseId);
+              findSpouses(sInfo.spouseId);
+            }
+          });
+        };
+        findSpouses(id);
+
+        // Position the spouse group
+        spouseGroup.forEach((memberId, idx) => {
+          positions.set(memberId, { 
+            x: currentX + idx * (nodeWidth + siblingSpacing), 
+            y, 
+            level 
+          });
+        });
+        
+        currentX += spouseGroup.length * (nodeWidth + siblingSpacing) + familyUnitGap;
       });
-      currentX += familyUnitGap;
     });
 
     return { positions, levelMap };
@@ -330,23 +294,27 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
       });
     });
 
-    spouses.forEach((spouseInfo, personId) => {
+    spouses.forEach((spouseList, personId) => {
       const personPos = positions.get(personId);
-      const spousePos = positions.get(spouseInfo.spouseId);
-      if (!personPos || !spousePos || personId >= spouseInfo.spouseId) return;
+      if (!personPos) return;
 
-      const personCenterY = personPos.y + yOffset;
-      const x1 = Math.min(personPos.x + xOffset, spousePos.x + xOffset);
-      const x2 = Math.max(personPos.x + xOffset, spousePos.x + xOffset);
+      spouseList.forEach(spouseInfo => {
+        const spousePos = positions.get(spouseInfo.spouseId);
+        if (!spousePos || personId >= spouseInfo.spouseId) return;
 
-      g.append('line')
-        .attr('x1', x1 + circleRadius)
-        .attr('y1', personCenterY)
-        .attr('x2', x2 - circleRadius)
-        .attr('y2', personCenterY)
-        .attr('stroke', lineColor)
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', spouseInfo.marital_status === 'divorced' ? '4,4' : 'none');
+        const personCenterY = personPos.y + yOffset;
+        const x1 = Math.min(personPos.x + xOffset, spousePos.x + xOffset);
+        const x2 = Math.max(personPos.x + xOffset, spousePos.x + xOffset);
+
+        g.append('line')
+          .attr('x1', x1 + circleRadius)
+          .attr('y1', personCenterY)
+          .attr('x2', x2 - circleRadius)
+          .attr('y2', personCenterY)
+          .attr('stroke', lineColor)
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', spouseInfo.marital_status === 'divorced' ? '4,4' : 'none');
+      });
     });
 
     // Nodes
@@ -369,7 +337,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
 
       const level = positions.get(id).level;
       const levelIndex = Math.min(level, generationColors.background.length - 1);
-      const spouseInfo = spouses.get(id);
+      const spouseList = spouses.get(id) || [];
+      const hasSpouse = spouseList.length > 0;
       const isDivorced = hasDivorcedRelationship(id);
 
       group.append('circle')
@@ -378,7 +347,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('stroke', generationColors.border[levelIndex])
         .attr('stroke-width', 2);
 
-      if (spouseInfo && !isDivorced) {
+      if (hasSpouse && !isDivorced) {
         group.append('line')
           .attr('x1', 0)
           .attr('y1', circleRadius + 2)
