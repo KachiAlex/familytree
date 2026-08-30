@@ -982,8 +982,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('height', containerHeight)
         .attr('rx', 12)
         .attr('ry', 12)
-        .attr('fill', 'rgba(255, 152, 0, 0.08)') // Light orange tint
-        .attr('stroke', 'rgba(255, 152, 0, 0.3)') // Light orange border
+        .attr('fill', 'rgba(184, 84, 31, 0.08)')
+        .attr('stroke', 'rgba(184, 84, 31, 0.3)')
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '5,5')
         .lower(); // Send to back
@@ -1125,17 +1125,17 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
                 .attr('y1', fatherBottomY)
                 .attr('x2', fatherCenterX)
                 .attr('y2', motherTopY)
-                .attr('stroke', '#424242')
+                .attr('stroke', '#5A5042')
                 .attr('stroke-width', 2.5)
                 .attr('stroke-dasharray', '5,5');
-              
+
               // Horizontal connector from father to mother
               g.append('line')
                 .attr('x1', Math.min(fatherCenterX, motherCenterX))
                 .attr('y1', motherTopY)
                 .attr('x2', Math.max(fatherCenterX, motherCenterX))
                 .attr('y2', motherTopY)
-                .attr('stroke', '#424242')
+                .attr('stroke', '#5A5042')
                 .attr('stroke-width', 2.5)
                 .attr('stroke-dasharray', '5,5');
             }
@@ -1169,7 +1169,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', y - 2)
         .attr('x2', x2)
         .attr('y2', y - 2)
-        .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
+        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -1178,7 +1178,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', y + 2)
         .attr('x2', x2)
         .attr('y2', y + 2)
-        .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
+        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -1335,7 +1335,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '11px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#333')
+          .attr('fill', '#FFFDF9')
           .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
       });
 
@@ -1353,7 +1353,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
               .attr('y', 20)
               .attr('text-anchor', 'middle')
               .attr('font-size', '10px')
-              .attr('fill', '#666')
+              .attr('fill', '#F1E6D2')
               .text(dateText);
           }
         } catch (err) {
@@ -1375,8 +1375,8 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('width', 60)
           .attr('height', 16)
           .attr('rx', 8)
-          .attr('fill', '#d32f2f')
-          .attr('stroke', '#ffffff')
+          .attr('fill', '#B8541F')
+          .attr('stroke', '#FFFDF9')
           .attr('stroke-width', 1);
         
         // "DIVORCED" text
@@ -1387,7 +1387,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '8px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#ffffff')
+          .attr('fill', '#FFFDF9')
           .text('DIVORCED');
       }
     });

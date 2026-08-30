@@ -848,7 +848,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         .attr('y1', y1)
         .attr('x2', personCenterX)
         .attr('y2', y2)
-        .attr('stroke', isDivorced ? '#d32f2f' : isWidowed ? '#757575' : '#ff9800')
+        .attr('stroke', isDivorced ? '#B8541F' : isWidowed ? '#7A6D5C' : '#C7930A')
         .attr('stroke-width', isDivorced ? 2.5 : 3)
         .attr('stroke-dasharray', isDivorced ? '8,4' : isWidowed ? '4,4' : 'none');
 
@@ -861,25 +861,25 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           .attr('cx', personCenterX)
           .attr('cy', midY)
           .attr('r', circleRadius)
-          .attr('fill', '#ffffff')
-          .attr('stroke', '#d32f2f')
+          .attr('fill', '#FFFDF9')
+          .attr('stroke', '#B8541F')
           .attr('stroke-width', 2);
-        
+
         g.append('line')
           .attr('x1', personCenterX - slashLength / 2)
           .attr('y1', midY - slashLength / 2)
           .attr('x2', personCenterX + slashLength / 2)
           .attr('y2', midY + slashLength / 2)
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#B8541F')
           .attr('stroke-width', 5)
           .attr('stroke-linecap', 'round');
-        
+
         g.append('line')
           .attr('x1', personCenterX - slashLength / 2)
           .attr('y1', midY + slashLength / 2)
           .attr('x2', personCenterX + slashLength / 2)
           .attr('y2', midY - slashLength / 2)
-          .attr('stroke', '#d32f2f')
+          .attr('stroke', '#B8541F')
           .attr('stroke-width', 5)
           .attr('stroke-linecap', 'round');
       }
@@ -979,7 +979,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '11px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#333')
+          .attr('fill', '#FFFDF9')
           .text(line.length > maxCharsPerLine ? `${line.substring(0, maxCharsPerLine - 3)}...` : line);
       });
 
@@ -997,7 +997,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
               .attr('y', 20)
               .attr('text-anchor', 'middle')
               .attr('font-size', '10px')
-              .attr('fill', '#666')
+              .attr('fill', '#F1E6D2')
               .text(dateText);
           }
         } catch (err) {
@@ -1017,8 +1017,8 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           .attr('width', 60)
           .attr('height', 16)
           .attr('rx', 8)
-          .attr('fill', '#d32f2f')
-          .attr('stroke', '#ffffff')
+          .attr('fill', '#B8541F')
+          .attr('stroke', '#FFFDF9')
           .attr('stroke-width', 1);
         
         group
@@ -1028,7 +1028,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
           .attr('text-anchor', 'middle')
           .attr('font-size', '8px')
           .attr('font-weight', 'bold')
-          .attr('fill', '#ffffff')
+          .attr('fill', '#FFFDF9')
           .text('DIVORCED');
       }
     });
