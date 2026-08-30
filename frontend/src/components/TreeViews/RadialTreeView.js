@@ -370,7 +370,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         .attr('stroke-width', 2);
 
       // Add spouse indicator bar
-      if (hasSpouse && !isDivorced) {
+      if (hasSpouse) {
         group.append('line')
           .attr('x1', circleRadius + 2)
           .attr('y1', 0)
@@ -379,21 +379,38 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('stroke', spouseBarColor)
           .attr('stroke-width', 4)
           .attr('stroke-linecap', 'round')
+          .attr('stroke-dasharray', isDivorced ? '2,2' : 'none')
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`);
       }
 
-      // Add name text
+      // Add name text with wrapping
       const name = person.name;
-      group
-        .append('text')
-        .attr('x', 0)
-        .attr('y', circleRadius + 18)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '11px')
-        .attr('font-weight', '500')
-        .attr('fill', textColor)
-        .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
-        .text(name);
+      const wrapWidth = 80;
+      const words = name.split(/\s+/);
+      const lines = [];
+      let currentLine = words[0];
+      for (let i = 1; i < words.length; i++) {
+        if ((currentLine + " " + words[i]).length < wrapWidth / 6) {
+          currentLine += " " + words[i];
+        } else {
+          lines.push(currentLine);
+          currentLine = words[i];
+        }
+      }
+      lines.push(currentLine);
+
+      lines.forEach((line, i) => {
+        group
+          .append('text')
+          .attr('x', 0)
+          .attr('y', circleRadius + 18 + (i * 12))
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '11px')
+          .attr('font-weight', '500')
+          .attr('fill', textColor)
+          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
+          .text(line);
+      });
 
       // Add date text
       if (person.data.date_of_birth) {
@@ -406,7 +423,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             group
               .append('text')
               .attr('x', 0)
-              .attr('y', circleRadius + 28)
+              .attr('y', circleRadius + 18 + (lines.length * 12) + 2)
               .attr('text-anchor', 'middle')
               .attr('font-size', '9px')
               .attr('fill', textSoftColor)

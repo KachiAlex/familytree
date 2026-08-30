@@ -47,18 +47,19 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
         fontSize={0.15}
         color={treeStyles.textColor}
         anchorX="center"
-        anchorY="middle"
-        maxWidth={2}
+        anchorY="top"
+        maxWidth={1.5}
+        textAlign="center"
       >
         {person.full_name || person.label || 'Unknown'}
       </Text>
       {person.date_of_birth && (
         <Text
-          position={[0, -1, 0]}
+          position={[0, -1.3, 0]}
           fontSize={0.1}
           color={treeStyles.textSoftColor}
           anchorX="center"
-          anchorY="middle"
+          anchorY="top"
         >
           {new Date(person.data.date_of_birth).getFullYear()}
         </Text>
@@ -177,7 +178,7 @@ function Tree3D({ data, onPersonClick }) {
       nodeIds.forEach((nodeId, index) => {
         const x = startX + index * spacing;
         const y = (maxDepth - depth) * depthSpacing;
-        const z = (Math.random() - 0.5) * 0.5; // Slight random Z for depth
+        const z = (Math.random() - 0.5) * 0.5;
         positions.set(nodeId, [x, y, z]);
         
         const node = nodeMap.get(nodeId);
@@ -190,6 +191,27 @@ function Tree3D({ data, onPersonClick }) {
         }
       });
     });
+
+    // Finalize positions with a second pass for centering
+    for (let d = maxDepth - 1; d >= 0; d--) {
+      const nodesAtLevel = levelNodes.get(d) || [];
+      nodesAtLevel.forEach(nodeId => {
+        const children = childrenMap.get(nodeId) || [];
+        if (children.length > 0) {
+          const childXs = children.map(cid => positions.get(cid)?.[0]).filter(x => x !== undefined);
+          if (childXs.length > 0) {
+            const avgX = childXs.reduce((a, b) => a + b, 0) / childXs.length;
+            const currentPos = positions.get(nodeId);
+            if (currentPos) {
+              currentPos[0] = avgX;
+              // Update nodePositions too
+              const np = nodePositions.find(p => String(p.node.id) === nodeId);
+              if (np) np.position[0] = avgX;
+            }
+          }
+        }
+      });
+    }
 
     // Build connections
     const connections = [];
