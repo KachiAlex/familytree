@@ -282,7 +282,6 @@ const ThreeDTreeView = ({ data, onPersonClick }) => {
         <pointLight position={[10, 10, 10]} castShadow />
         <color attach="background" args={[treeStyles.backgroundColor]} />
         <Tree3D data={data} onPersonClick={onPersonClick} />
-        <OrbitControls ref={controlsRef} />
       </Canvas>
     </Box>
   );
