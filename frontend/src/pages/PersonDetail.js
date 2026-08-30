@@ -833,7 +833,7 @@ const PersonDetail = () => {
                     bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
                     border: '1px solid', borderColor: '#E4D3B0', mb: 2.5,
                   }}>
-                    <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16, mb: 1 }}>
+                    <Typography variant="h4" sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
                       Biography
                     </Typography>
                     <Typography sx={{ fontSize: '14px', lineHeight: 1.65, color: '#463D34' }}>
@@ -871,10 +871,10 @@ const PersonDetail = () => {
                           if (p.gender === 'male') roleLabel = 'Father';
                           if (p.gender === 'female') roleLabel = 'Mother';
                           return (
-                            <Box key={p.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#E4D3B0' } }}
+                            <Box key={p.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
                               onClick={() => navigate(`/person/${p.person_id}`)}
                             >
-                              <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#22345E', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                                 {getInitials(p.full_name)}
                               </Box>
                               <Box>
@@ -906,10 +906,10 @@ const PersonDetail = () => {
                           const statusLabels = { married: 'Married', divorced: 'Divorced', widowed: 'Widowed', separated: 'Separated' };
                           const marital = s.marital_status || 'married';
                           return (
-                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#E8ECF4', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#D5DDE8' } }}
+                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', borderLeft: '3px solid #B8541F', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
                               onClick={() => navigate(`/person/${s.person_id}`)}
                             >
-                              <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#22345E', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                                 {getInitials(s.full_name)}
                               </Box>
                               <Box>
@@ -943,10 +943,10 @@ const PersonDetail = () => {
                     ) : (
                       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {children.filter(c => c && c.person_id).map((c) => (
-                          <Box key={c.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#E4D3B0' } }}
+                          <Box key={c.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
                             onClick={() => navigate(`/person/${c.person_id}`)}
                           >
-                            <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#3F6644', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                            <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                               {getInitials(c.full_name)}
                             </Box>
                             <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{c.full_name}</Typography>
@@ -975,10 +975,10 @@ const PersonDetail = () => {
                           if (s.gender === 'male') roleLabel = 'Brother';
                           if (s.gender === 'female') roleLabel = 'Sister';
                           return (
-                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '10px', px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#E4D3B0' } }}
+                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
                               onClick={() => navigate(`/person/${s.person_id}`)}
                             >
-                              <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#C7930A', color: '#FFFDF9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                                 {getInitials(s.full_name)}
                               </Box>
                               <Box>

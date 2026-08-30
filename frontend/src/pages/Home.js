@@ -10,7 +10,6 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import ThemeToggleButton from '../components/ThemeToggleButton';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -75,7 +74,6 @@ const Home = () => {
           </Box>
         )}
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <ThemeToggleButton />
           {isAuthenticated ? (
             <Button
               variant="contained"
