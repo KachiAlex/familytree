@@ -310,8 +310,9 @@ const PersonDetail = () => {
   const canEdit =
     user &&
     person &&
-    ((person.owner_user_id && person.owner_user_id === user.user_id) ||
-      (family && family.created_by_user_id === user.user_id));
+    ((person.owner_user_id && String(person.owner_user_id) === String(user.user_id)) ||
+      (person.created_by_user_id && String(person.created_by_user_id) === String(user.user_id)) ||
+      (family && String(family.created_by_user_id) === String(user.user_id)));
 
   const openEdit = () => {
     if (!person) return;

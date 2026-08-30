@@ -2,10 +2,6 @@ const express = require('express');
 const { pool } = require('../db/connection');
 const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
 const { checkResourceLimit } = require('../middleware/tierLimits');
-const { body, validationResult } = require('express-validator');
-const multer = require('multer');
-const AWS = require('aws-sdk');
-
 const router = express.Router();
 
 const s3 = new AWS.S3({
@@ -261,21 +257,43 @@ router.post('/:personId/claim', async (req, res) => {
 });
 
 // Upload profile photo
-router.post('/:personId/profile-photo', upload.single('photo'), async (req, res) => {
+router.post('/:personId/profile-photo', authenticateToken, upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const { personId } = req.params;
+    const userId = req.user.user_id;
 
-    // Get person's family_id
-    const personResult = await pool.query('SELECT family_id FROM persons WHERE person_id = $1', [personId]);
+    // Get person's info and family admin info
+    const personResult = await pool.query(
+      `SELECT p.family_id, p.owner_user_id, p.created_by_user_id, f.created_by_user_id as family_creator_id
+       FROM persons p
+       JOIN families f ON p.family_id = f.family_id
+       WHERE p.person_id = $1`, 
+      [personId]
+    );
+    
     if (personResult.rows.length === 0) {
       return res.status(404).json({ error: 'Person not found' });
     }
 
-    const familyId = personResult.rows[0].family_id;
+    const person = personResult.rows[0];
+    const familyId = person.family_id;
+
+    // Check permissions:
+    // 1. Is the owner of the profile?
+    // 2. Is the one who created the profile?
+    // 3. Is the family creator?
+    // 4. (Optional) Is an elder in the family?
+    const isOwner = person.owner_user_id === userId;
+    const isCreator = person.created_by_user_id === userId;
+    const isFamilyAdmin = person.family_creator_id === userId;
+
+    if (!isOwner && !isCreator && !isFamilyAdmin) {
+      return res.status(403).json({ error: 'You do not have permission to update this avatar' });
+    }
 
     // Upload to S3
     const fileKey = `profiles/${familyId}/${Date.now()}-${req.file.originalname}`;

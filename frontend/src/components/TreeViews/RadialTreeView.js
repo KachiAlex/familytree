@@ -115,6 +115,22 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
 
     // Define dot grid pattern
     const defs = svg.append('defs');
+    
+    // Create patterns for person avatars
+    persons.forEach((person, id) => {
+      if (person.data?.profile_photo_url) {
+        defs.append('pattern')
+          .attr('id', `avatar-r-${id}`)
+          .attr('width', 1)
+          .attr('height', 1)
+          .attr('patternContentUnits', 'objectBoundingBox')
+          .append('image')
+          .attr('xlink:href', person.data.profile_photo_url)
+          .attr('width', 1)
+          .attr('height', 1)
+          .attr('preserveAspectRatio', 'xMidYMid slice');
+      }
+    });
     defs.append('pattern')
       .attr('id', 'dotGridRadial')
       .attr('width', 20)
@@ -281,7 +297,7 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
         id: 'virtual-root',
         name: '',
         virtual: true,
-        children: rootIds.map(id => buildHierarchy(id, 1)).filter(Boolean)
+        children: rootIds.map(id => buildHierarchy(id, new Set())).filter(Boolean)
       };
     }
     
@@ -448,7 +464,7 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
         .attr('cx', 0)
         .attr('cy', 0)
         .attr('r', circleRadius)
-        .attr('fill', backgroundColor)
+        .attr('fill', person.data?.profile_photo_url ? `url(#avatar-r-${id})` : backgroundColor)
         .attr('stroke', borderColor)
         .attr('stroke-width', 2);
 

@@ -227,7 +227,9 @@ const VerticalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
       return !hasParent;
     });
 
-    roots.forEach(rootId => positionNode(rootId, 0, padding));
+    roots.forEach(rootId => {
+      positionNode(rootId, 0, padding);
+    });
 
     // Handle any missed nodes
     persons.forEach((_, id) => {
@@ -338,6 +340,8 @@ const VerticalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
     svg.selectAll('*').remove();
 
     const defs = svg.append('defs');
+    
+    // Grid pattern
     defs.append('pattern')
       .attr('id', 'dotGridVertical')
       .attr('width', 20)
@@ -348,6 +352,22 @@ const VerticalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
       .attr('cy', 2)
       .attr('r', 1)
       .attr('fill', dotGridColor);
+
+    // Create patterns for person avatars
+    persons.forEach((person, id) => {
+      if (person.data?.profile_photo_url) {
+        defs.append('pattern')
+          .attr('id', `avatar-v-${id}`)
+          .attr('width', 1)
+          .attr('height', 1)
+          .attr('patternContentUnits', 'objectBoundingBox')
+          .append('image')
+          .attr('xlink:href', person.data.profile_photo_url)
+          .attr('width', 1)
+          .attr('height', 1)
+          .attr('preserveAspectRatio', 'xMidYMid slice');
+      }
+    });
 
     const { positions } = computeLayout();
     if (positions.size === 0) return;
@@ -467,7 +487,21 @@ const VerticalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
         const pos = positions.get(id);
         return `translate(${pos.x + xOffset},${pos.y + yOffset})`;
       })
-      .style('cursor', 'pointer');
+      .style('cursor', 'pointer')
+      .on('mouseover', function() {
+        d3.select(this).select('circle')
+          .transition()
+          .duration(200)
+          .attr('r', circleRadius + 3)
+          .attr('stroke-width', 3);
+      })
+      .on('mouseout', function() {
+        d3.select(this).select('circle')
+          .transition()
+          .duration(200)
+          .attr('r', circleRadius)
+          .attr('stroke-width', 2);
+      });
 
     // Handle clicks
     nodeGroups.on('click', (event, id) => {
@@ -486,6 +520,7 @@ const VerticalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
       const person = persons.get(id);
       if (!person) return;
 
+      const levelIndex = Math.min(positions.get(id).level, generationColors.background.length - 1);
       const spouseList = spouses.get(id) || [];
       const hasSpouse = spouseList.length > 0;
       const isDivorced = hasDivorcedRelationship(id);
@@ -499,6 +534,13 @@ const VerticalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
           .attr('stroke-width', 2)
           .attr('stroke-dasharray', '4,2');
       }
+
+      // Draw node circle
+      group.append('circle')
+        .attr('r', circleRadius)
+        .attr('fill', person.data?.profile_photo_url ? `url(#avatar-v-${id})` : generationColors.background[levelIndex])
+        .attr('stroke', generationColors.border[levelIndex])
+        .attr('stroke-width', 2);
 
       if (hasSpouse) {
         group.append('line')
