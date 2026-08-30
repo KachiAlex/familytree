@@ -114,47 +114,102 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
     const { nodeWidth, levelSpacing, siblingSpacing, familyUnitGap, padding } = layoutConfig;
     const positions = new Map();
     
-    // Sort generations to process top-to-bottom
+    // Pass 1: Initial X positioning based on hierarchy
     const sortedLevels = Array.from(levelMap.keys()).sort((a, b) => a - b);
-    
-    // Horizontal distribution within each level
-    sortedLevels.forEach(level => {
-      const personIds = levelMap.get(level);
-      const y = padding + level * levelSpacing;
+    const levelWidths = new Map(); // level -> nextAvailableX
+    sortedLevels.forEach(l => levelWidths.set(l, padding));
+
+    // Helper to position a node and its descendants recursively
+    const visited = new Set();
+    const positionNode = (id, level, xHint) => {
+      if (visited.has(id)) return;
+      visited.add(id);
+
+      const currentX = Math.max(xHint, levelWidths.get(level) || padding);
+      positions.set(id, { x: currentX, y: padding + level * levelSpacing, level });
       
-      // Group spouses together for horizontal layout
-      const processed = new Set();
-      let currentX = padding;
+      // Position spouses immediately next to each other
+      const spouseList = spouses.get(id) || [];
+      let spouseX = currentX;
+      spouseList.forEach(sInfo => {
+        if (!visited.has(sInfo.spouseId) && generations.get(sInfo.spouseId) === level) {
+          visited.add(sInfo.spouseId);
+          spouseX += nodeWidth + siblingSpacing;
+          positions.set(sInfo.spouseId, { x: spouseX, y: padding + level * levelSpacing, level });
+        }
+      });
+      
+      levelWidths.set(level, spouseX + nodeWidth + familyUnitGap);
 
-      personIds.forEach(id => {
-        if (processed.has(id)) return;
-        
-        // Find all connected spouses at this level
-        const spouseGroup = [id];
-        processed.add(id);
-        
-        const findSpouses = (pid) => {
-          const sList = spouses.get(pid) || [];
-          sList.forEach(sInfo => {
-            if (!processed.has(sInfo.spouseId) && generations.get(sInfo.spouseId) === level) {
-              processed.add(sInfo.spouseId);
-              spouseGroup.push(sInfo.spouseId);
-              findSpouses(sInfo.spouseId);
-            }
-          });
-        };
-        findSpouses(id);
-
-        // Position the spouse group
-        spouseGroup.forEach((memberId, idx) => {
-          positions.set(memberId, { 
-            x: currentX + idx * (nodeWidth + siblingSpacing), 
-            y, 
-            level 
-          });
+      // Position children below
+      const children = childrenByParent.get(id) || [];
+      if (children.length > 0) {
+        let childX = currentX;
+        children.forEach(childId => {
+          positionNode(childId, level + 1, childX);
+          childX = (positions.get(childId)?.x || childX) + nodeWidth + siblingSpacing;
         });
-        
-        currentX += spouseGroup.length * (nodeWidth + siblingSpacing) + familyUnitGap;
+      }
+    };
+
+    // Start positioning from roots
+    const roots = Array.from(persons.keys()).filter(id => {
+      let hasParent = false;
+      childrenByParent.forEach(cIds => {
+        if (cIds.includes(id)) hasParent = true;
+      });
+      return !hasParent;
+    });
+
+    roots.forEach(rootId => positionNode(rootId, 0, padding));
+
+    // Handle any missed nodes
+    persons.forEach((_, id) => {
+      if (!visited.has(id)) positionNode(id, generations.get(id), padding);
+    });
+
+    // Pass 2: Center parents over children
+    // Go from bottom up
+    for (let i = sortedLevels.length - 1; i >= 0; i--) {
+      const level = sortedLevels[i];
+      const ids = levelMap.get(level);
+      
+      ids.forEach(id => {
+        const children = childrenByParent.get(id) || [];
+        if (children.length > 0) {
+          const childXs = children
+            .map(cid => positions.get(cid)?.x)
+            .filter(x => x !== undefined);
+          
+          if (childXs.length > 0) {
+            const avgChildX = childXs.reduce((a, b) => a + b, 0) / childXs.length;
+            const pos = positions.get(id);
+            if (pos) pos.x = avgChildX;
+
+            // Shift spouses too
+            const spouseList = spouses.get(id) || [];
+            spouseList.forEach((sInfo, idx) => {
+              const sPos = positions.get(sInfo.spouseId);
+              if (sPos && sPos.level === level) {
+                sPos.x = avgChildX + (idx + 1) * (nodeWidth + siblingSpacing);
+              }
+            });
+          }
+        }
+      });
+    }
+
+    // Pass 3: Resolve overlaps and finalize
+    // (Simple shift to the right if overlap occurs)
+    sortedLevels.forEach(level => {
+      const levelNodes = Array.from(positions.entries())
+        .filter(([_, p]) => p.level === level)
+        .sort((a, b) => a[1].x - b[1].x);
+      
+      let minX = padding;
+      levelNodes.forEach(([_, pos]) => {
+        if (pos.x < minX) pos.x = minX;
+        minX = pos.x + nodeWidth + siblingSpacing;
       });
     });
 
@@ -192,6 +247,25 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         const maritalStatus = edge.marital_status || 'married';
         return (sourceId === personIdStr || targetId === personIdStr) && maritalStatus === 'divorced';
       });
+    };
+
+    const wrapText = (text, width) => {
+      if (!text) return [];
+      const words = text.split(/\s+/);
+      const lines = [];
+      let currentLine = words[0];
+
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        if ((currentLine + " " + word).length < width / 5) { // Rough character limit based on width
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      lines.push(currentLine);
+      return lines;
     };
 
     const svg = d3.select(svgRef.current);
@@ -347,7 +421,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
         .attr('stroke', generationColors.border[levelIndex])
         .attr('stroke-width', 2);
 
-      if (hasSpouse && !isDivorced) {
+      if (hasSpouse) {
         group.append('line')
           .attr('x1', 0)
           .attr('y1', circleRadius + 2)
@@ -355,16 +429,20 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
           .attr('y2', circleRadius + 15)
           .attr('stroke', spouseBarColor)
           .attr('stroke-width', 4)
-          .attr('stroke-linecap', 'round');
+          .attr('stroke-linecap', 'round')
+          .attr('stroke-dasharray', isDivorced ? '2,2' : 'none');
       }
 
-      group.append('text')
-        .attr('y', circleRadius + 20)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '12px')
-        .attr('font-weight', '500')
-        .attr('fill', textColor)
-        .text(person.name);
+      const nameLines = wrapText(person.name, 100);
+      nameLines.forEach((line, i) => {
+        group.append('text')
+          .attr('y', circleRadius + 25 + (i * 14))
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '12px')
+          .attr('font-weight', '500')
+          .attr('fill', textColor)
+          .text(line);
+      });
 
       if (person.data.date_of_birth) {
         const birthYear = new Date(person.data.date_of_birth).getFullYear();
@@ -373,7 +451,7 @@ const VerticalTreeView = ({ data, onPersonClick }) => {
             ? `${birthYear} - ${new Date(person.data.date_of_death).getFullYear()}` 
             : `b. ${birthYear}`;
           group.append('text')
-            .attr('y', circleRadius + 35)
+            .attr('y', circleRadius + 25 + (nameLines.length * 14) + 5)
             .attr('text-anchor', 'middle')
             .attr('font-size', '10px')
             .attr('fill', textSoftColor)

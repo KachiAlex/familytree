@@ -81,10 +81,10 @@ export const layoutConfig = {
   nodeHeight: 60,  // Circle diameter
   circleRadius: 28,
   levelSpacing: 180,
-  siblingSpacing: 60,
-  spouseSpacing: 100,
-  familyUnitGap: 120,
-  padding: 100,
+  siblingSpacing: 100,
+  spouseSpacing: 120,
+  familyUnitGap: 180,
+  padding: 120,
   connectionLineOpacity: 1.0, 
 };
 
