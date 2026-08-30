@@ -21,6 +21,7 @@ import {
   Alert,
   Skeleton,
   Collapse,
+  Paper,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -62,6 +63,7 @@ const FamilyTree = () => {
   const [villageFilter, setVillageFilter] = useState('');
   const [stats, setStats] = useState(null);
   const [familyInfo, setFamilyInfo] = useState(null);
+  const [focalPersonId, setFocalPersonId] = useState(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [gedcomImportOpen, setGedcomImportOpen] = useState(false);
   const [gedcomPreviewOpen, setGedcomPreviewOpen] = useState(false);
@@ -70,6 +72,11 @@ const FamilyTree = () => {
   const [existingPersons, setExistingPersons] = useState([]);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [searchFiltersExpanded, setSearchFiltersExpanded] = useState(false); // Default to collapsed
+  const [relationshipAnchor, setRelationshipAnchor] = useState(null);
+  const [relationshipPerson1, setRelationshipPerson1] = useState(null);
+  const [relationshipPerson2, setRelationshipPerson2] = useState(null);
+  const [calculatedRelationship, setRelationship] = useState(null);
+  const [selectedPersonForStory, setSelectedPersonForStory] = useState(null);
   const treeContainerRef = useRef(null); // Ref for tree container to capture visualization
 
   // Only fetch when familyId changes, not when viewType changes
@@ -153,6 +160,11 @@ const FamilyTree = () => {
       };
       setTreeData(data);
       setFilteredTreeData(data);
+      
+      // Set initial focal person to the first root node if not already set
+      if (!focalPersonId && rootNodes.length > 0) {
+        setFocalPersonId(String(rootNodes[0]));
+      }
 
       // Compute statistics
       const total = persons.length;
@@ -256,20 +268,88 @@ const FamilyTree = () => {
     });
   }, [searchQuery, clanFilter, villageFilter, treeData]);
 
-  // Memoize the tree data with current viewType
+  // Memoize the tree data with current viewType and focal person
   const treeDataWithView = useMemo(() => {
     if (!filteredTreeData) return null;
-    return { ...filteredTreeData, viewType };
-  }, [filteredTreeData, viewType]);
+    return { 
+      ...filteredTreeData, 
+      viewType, 
+      focalPersonId 
+    };
+  }, [filteredTreeData, viewType, focalPersonId]);
 
   const handleViewChange = useCallback((event, newValue) => {
     setViewType(newValue);
   }, []);
 
+  const calculateRelationship = useCallback((p1, p2) => {
+    if (!p1 || !p2 || !treeData) return null;
+    if (p1.id === p2.id) return "Same person";
+
+    // Build adjacency list for traversal
+    const adj = new Map();
+    treeData.edges.forEach(e => {
+      const src = String(e.source);
+      const tgt = String(e.target);
+      if (!adj.has(src)) adj.set(src, []);
+      if (!adj.has(tgt)) adj.set(tgt, []);
+      adj.get(src).push({ id: tgt, type: e.type, direction: 'down' });
+      adj.get(tgt).push({ id: src, type: e.type, direction: 'up' });
+    });
+
+    // BFS to find path
+    const queue = [[String(p1.id), []]];
+    const visited = new Set([String(p1.id)]);
+    
+    while (queue.length > 0) {
+      const [currId, path] = queue.shift();
+      if (currId === String(p2.id)) {
+        // Analyze path to determine relationship name
+        // This is a simplified version; real genealogy logic is complex
+        const upCount = path.filter(step => step.direction === 'up' && step.type === 'parent').length;
+        const downCount = path.filter(step => step.direction === 'down' && step.type === 'parent').length;
+        const spouseCount = path.filter(step => step.type === 'spouse').length;
+
+        if (spouseCount > 0 && path.length === 1) return "Spouse";
+        if (upCount === 1 && downCount === 0) return "Parent";
+        if (upCount === 0 && downCount === 1) return "Child";
+        if (upCount === 2 && downCount === 0) return "Grandparent";
+        if (upCount === 0 && downCount === 2) return "Grandchild";
+        if (upCount === 1 && downCount === 1) return "Sibling";
+        if (upCount === 2 && downCount === 1) return "Uncle/Aunt";
+        if (upCount === 1 && downCount === 2) return "Nephew/Niece";
+        if (upCount === 2 && downCount === 2) return "First Cousin";
+        
+        return `${upCount} generations up, ${downCount} generations down`;
+      }
+
+      const neighbors = adj.get(currId) || [];
+      neighbors.forEach(n => {
+        if (!visited.has(n.id)) {
+          visited.add(n.id);
+          queue.push([n.id, [...path, n]]);
+        }
+      });
+    }
+
+    return "No direct path found";
+  }, [treeData]);
+
+  useEffect(() => {
+    if (relationshipPerson1 && relationshipPerson2) {
+      setRelationship(calculateRelationship(relationshipPerson1, relationshipPerson2));
+    } else {
+      setRelationship(null);
+    }
+  }, [relationshipPerson1, relationshipPerson2, calculateRelationship]);
+
   const handlePersonClick = useCallback((personId) => {
     if (!personId) return;
-    navigate(`/person/${personId}`);
-  }, [navigate]);
+    const node = treeData?.nodes.find(n => String(n.id) === String(personId));
+    if (node) {
+      setSelectedPersonForStory(node.data);
+    }
+  }, [treeData]);
 
   const handleAddPersonClick = useCallback(() => {
     if (!user) {
@@ -318,13 +398,13 @@ const FamilyTree = () => {
 
     switch (viewType) {
       case 'vertical':
-        return <VerticalTreeView data={treeDataWithView} onPersonClick={handlePersonClick} />;
+        return <VerticalTreeView data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
       case 'horizontal':
-        return <HorizontalTreeView data={treeDataWithView} onPersonClick={handlePersonClick} />;
+        return <HorizontalTreeView data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
       case 'radial':
-        return <RadialTreeView data={treeDataWithView} onPersonClick={handlePersonClick} />;
+        return <RadialTreeView data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
       case '3d':
-        return <ThreeDTreeView data={treeDataWithView} onPersonClick={handlePersonClick} />;
+        return <ThreeDTreeView data={treeDataWithView} onPersonClick={handlePersonClick} onSetFocalPerson={setFocalPersonId} />;
       case 'timeline':
         return <TimelineView familyId={familyId} />;
       case 'map':
@@ -643,6 +723,12 @@ const FamilyTree = () => {
 
           {/* Action buttons */}
           <Box sx={{ display: 'flex', gap: 1.25 }}>
+            <IconButton onClick={(e) => setRelationshipAnchor(e.currentTarget)} sx={{
+              width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
+              bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
+            }}>
+              <SearchIcon sx={{ fontSize: 16 }} />
+            </IconButton>
             <IconButton onClick={(e) => setExportMenuAnchor(e.currentTarget)} sx={{
               width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
               bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
@@ -714,6 +800,59 @@ const FamilyTree = () => {
         }} data-tree-container>
           {renderTreeView}
 
+          {/* Heritage Panel - Bottom Right */}
+          {selectedPersonForStory && (
+            <Paper
+              elevation={8}
+              sx={{
+                position: 'absolute', bottom: 20, right: 20, width: 300,
+                maxHeight: '40vh', overflowY: 'auto', borderRadius: '16px',
+                p: 2.5, border: '1px solid #E7DCC8', bgcolor: '#FFFFFF',
+                boxShadow: '0 12px 32px rgba(34,52,94,.15)', zIndex: 100,
+              }}
+            >
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                <Box>
+                  {selectedPersonForStory.traditional_title && (
+                    <Typography sx={{ 
+                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, 
+                      fontWeight: 700, color: '#D79A1E', mb: 0.5 
+                    }}>
+                      {selectedPersonForStory.traditional_title.toUpperCase()}
+                    </Typography>
+                  )}
+                  <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: '#22345E' }}>
+                    {selectedPersonForStory.full_name}
+                  </Typography>
+                </Box>
+                <IconButton size="small" onClick={() => setSelectedPersonForStory(null)}>
+                  <ClearIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Box>
+
+              <Typography variant="body2" sx={{ color: '#5C5346', mb: 2, fontSize: '13px', lineHeight: 1.6 }}>
+                {selectedPersonForStory.biography || selectedPersonForStory.legacy_story || "This ancestor's story is yet to be fully told. Preserving our heritage, one generation at a time."}
+              </Typography>
+
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button 
+                  size="small" variant="contained" 
+                  onClick={() => navigate(`/person/${selectedPersonForStory.person_id}`)}
+                  sx={{ bgcolor: '#22345E', textTransform: 'none', borderRadius: '8px', fontSize: '12px' }}
+                >
+                  Full Profile
+                </Button>
+                <Button 
+                  size="small" variant="outlined" 
+                  onClick={() => setFocalPersonId(String(selectedPersonForStory.person_id))}
+                  sx={{ borderColor: '#22345E', color: '#22345E', textTransform: 'none', borderRadius: '8px', fontSize: '12px' }}
+                >
+                  Set as Focus
+                </Button>
+              </Box>
+            </Paper>
+          )}
+
           {/* Insights panel */}
           {stats && (
             <Box sx={{
@@ -778,7 +917,38 @@ const FamilyTree = () => {
         <MenuItem onClick={() => handleExport('pdf-tree')}><PdfIcon sx={{ mr: 1 }} /> Export PDF (Tree)</MenuItem>
       </Menu>
 
-      {/* GEDCOM Import Dialog */}
+        {/* Relationship Calculator Dialog */}
+        <Dialog open={Boolean(relationshipAnchor)} onClose={() => setRelationshipAnchor(null)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontFamily: "'Fraunces', serif" }}>Relationship Finder</DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Autocomplete
+                options={treeData?.nodes || []}
+                getOptionLabel={(option) => option.data.full_name}
+                value={relationshipPerson1}
+                onChange={(e, val) => setRelationshipPerson1(val)}
+                renderInput={(params) => <TextField {...params} label="First Person" size="small" />}
+              />
+              <Autocomplete
+                options={treeData?.nodes || []}
+                getOptionLabel={(option) => option.data.full_name}
+                value={relationshipPerson2}
+                onChange={(e, val) => setRelationshipPerson2(val)}
+                renderInput={(params) => <TextField {...params} label="Second Person" size="small" />}
+              />
+              {calculatedRelationship && (
+                <Paper sx={{ p: 2, bgcolor: '#FBF7F0', border: '1px solid #E7DCC8', borderRadius: 2 }}>
+                  <Typography variant="body2" sx={{ color: '#8C8171', mb: 0.5 }}>Relationship:</Typography>
+                  <Typography variant="h6" sx={{ color: '#22345E', fontWeight: 600 }}>{calculatedRelationship}</Typography>
+                </Paper>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setRelationshipPerson1(null); setRelationshipPerson2(null); setRelationship(null); }} size="small">Clear</Button>
+            <Button onClick={() => setRelationshipAnchor(null)} variant="contained" sx={{ bgcolor: '#22345E' }}>Close</Button>
+          </DialogActions>
+        </Dialog>
       <Dialog open={gedcomImportOpen} onClose={() => setGedcomImportOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Import GEDCOM File</DialogTitle>
         <DialogContent>

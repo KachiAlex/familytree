@@ -8,10 +8,12 @@ import {
   treeStyles 
 } from '../../config/treeConfig';
 
-const RadialTreeView = ({ data, onPersonClick }) => {
+const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
   const svgRef = useRef();
   const containerRef = useRef();
   const [showLegend, setShowLegend] = useState(true);
+  
+  const focalPersonId = data?.focalPersonId;
 
   // Build data structure with relationships (similar to VerticalTreeView)
   const personsData = useMemo(() => {
@@ -147,22 +149,67 @@ const RadialTreeView = ({ data, onPersonClick }) => {
 
     // Find ALL root nodes (no parents)
     const hasParent = new Set();
+    const parentsByChild = new Map();
+
     childrenByParent.forEach((childIds, parentId) => {
-      childIds.forEach(childId => hasParent.add(childId));
+      childIds.forEach(childId => {
+        hasParent.add(childId);
+        if (!parentsByChild.has(childId)) parentsByChild.set(childId, []);
+        parentsByChild.get(childId).push(parentId);
+      });
     });
 
-    const rootIds = Array.from(persons.keys()).filter(id => !hasParent.has(id));
-    if (rootIds.length === 0) return;
+    const relevantNodes = new Set();
+    if (focalPersonId && persons.has(focalPersonId)) {
+      const queue = [focalPersonId];
+      relevantNodes.add(focalPersonId);
+      
+      const focalSpouses = spouses.get(focalPersonId) || [];
+      focalSpouses.forEach(s => relevantNodes.add(s.spouseId));
 
-    // Calculate generations using iterative rank refinement
+      let head = 0;
+      while(head < queue.length) {
+        const id = queue[head++];
+        
+        const parents = parentsByChild.get(id) || [];
+        parents.forEach(p => {
+          if (!relevantNodes.has(p)) {
+            relevantNodes.add(p);
+            queue.push(p);
+          }
+        });
+
+        const children = childrenByParent.get(id) || [];
+        children.forEach(c => {
+          if (!relevantNodes.has(c)) {
+            relevantNodes.add(c);
+            queue.push(c);
+          }
+        });
+
+        const sList = spouses.get(id) || [];
+        sList.forEach(s => {
+          if (!relevantNodes.has(s.spouseId)) {
+            relevantNodes.add(s.spouseId);
+            queue.push(s.spouseId);
+          }
+        });
+      }
+    } else {
+      persons.forEach((_, id) => relevantNodes.add(id));
+    }
+
     const generations = new Map();
-    persons.forEach((_, id) => generations.set(id, 0));
+    relevantNodes.forEach(id => generations.set(id, 0));
 
+    // Iterative rank refinement
     for (let i = 0; i < 25; i++) {
       let changed = false;
       childrenByParent.forEach((childIds, parentId) => {
+        if (!relevantNodes.has(parentId)) return;
         const pGen = generations.get(parentId);
         childIds.forEach(childId => {
+          if (!relevantNodes.has(childId)) return;
           if (generations.get(childId) < pGen + 1) {
             generations.set(childId, pGen + 1);
             changed = true;
@@ -170,8 +217,10 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         });
       });
       spouses.forEach((spouseList, personId) => {
+        if (!relevantNodes.has(personId)) return;
         const gen1 = generations.get(personId);
         spouseList.forEach(spouseInfo => {
+          if (!relevantNodes.has(spouseInfo.spouseId)) return;
           const gen2 = generations.get(spouseInfo.spouseId);
           if (gen1 !== gen2) {
             const maxGen = Math.max(gen1, gen2);
@@ -184,14 +233,34 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       if (!changed) break;
     }
 
+    if (generations.size > 0) {
+      const minGen = Math.min(...Array.from(generations.values()));
+      generations.forEach((gen, id) => generations.set(id, gen - minGen));
+    }
+
+    const rootIds = Array.from(relevantNodes).filter(id => {
+      const parents = parentsByChild.get(id) || [];
+      return !parents.some(p => relevantNodes.has(p));
+    });
+
+    if (rootIds.length === 0 && relevantNodes.size > 0) {
+      rootIds.push(Array.from(relevantNodes)[0]);
+    }
+    
+    if (rootIds.length === 0) return;
+
     // Build hierarchy for radial layout
-    const buildHierarchy = (nodeId) => {
+    const buildHierarchy = (nodeId, visited = new Set()) => {
+      if (visited.has(nodeId)) return null;
+      visited.add(nodeId);
+
       const person = persons.get(nodeId);
       if (!person) return null;
 
       const children = childrenByParent.get(nodeId) || [];
       const childNodes = children
-        .map(childId => buildHierarchy(childId))
+        .filter(cid => relevantNodes.has(cid))
+        .map(childId => buildHierarchy(childId, visited))
         .filter(Boolean);
 
       return {
@@ -338,8 +407,10 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .style('display', (id) => id === 'virtual-root' ? 'none' : 'block')
       .style('cursor', onPersonClick ? 'pointer' : 'default')
       .on('click', (event, id) => {
-        if (onPersonClick) {
-          onPersonClick(id);
+        if (event.shiftKey) {
+          if (onSetFocalPerson) onSetFocalPerson(id);
+        } else {
+          if (onPersonClick) onPersonClick(id);
         }
       });
 
@@ -358,6 +429,18 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       const levelIndex = Math.min(depth, generationColors.background.length - 1);
       const backgroundColor = generationColors.background[levelIndex];
       const borderColor = generationColors.border[levelIndex];
+
+      // Add focus indicator if this is the focal person
+      if (id === focalPersonId) {
+        group.append('circle')
+          .attr('cx', 0)
+          .attr('cy', 0)
+          .attr('r', circleRadius + 5)
+          .attr('fill', 'none')
+          .attr('stroke', '#D79A1E')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '4,2');
+      }
 
       // Draw node circle
       group
@@ -406,11 +489,23 @@ const RadialTreeView = ({ data, onPersonClick }) => {
           .attr('y', circleRadius + 18 + (i * 12))
           .attr('text-anchor', 'middle')
           .attr('font-size', '11px')
-          .attr('font-weight', '500')
+          .attr('font-weight', '600')
           .attr('fill', textColor)
           .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
           .text(line);
       });
+
+      // Add "Story Snippet" indicator if biography exists
+      if (person.data.biography || person.data.legacy_story) {
+        group.append('text')
+          .attr('x', 0)
+          .attr('y', -circleRadius - 5)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '10px')
+          .attr('fill', '#D79A1E')
+          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
+          .text('📜');
+      }
 
       // Add date text
       if (person.data.date_of_birth) {
@@ -433,7 +528,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         } catch (err) {}
       }
     });
-  }, [personsData, hasDivorcedRelationship, onPersonClick]);
+  }, [personsData, hasDivorcedRelationship, onPersonClick, focalPersonId, onSetFocalPerson]);
 
   return (
     <Box ref={containerRef} sx={{ width: '100%', height: '100%', minHeight: '600px', overflow: 'auto', bgcolor: treeStyles.backgroundColor, position: 'relative' }}>

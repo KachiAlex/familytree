@@ -9,7 +9,7 @@ import {
 } from '../../config/treeConfig';
 
 // Person node component
-function PersonNode({ position, person, onClick, depth = 0 }) {
+function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
 
@@ -39,9 +39,19 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
         castShadow
         receiveShadow
       >
-        <sphereGeometry args={[0.5, 32, 32]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={hovered ? 0.3 : 0.1} />
+        <sphereGeometry args={[isFocal ? 0.7 : 0.5, 32, 32]} />
+        <meshStandardMaterial 
+          color={color} 
+          emissive={isFocal ? '#D79A1E' : color} 
+          emissiveIntensity={isFocal || hovered ? 0.5 : 0.1} 
+        />
       </mesh>
+      {isFocal && (
+        <mesh position={[0, 0, 0]}>
+          <ringGeometry args={[0.8, 0.9, 32]} />
+          <meshBasicMaterial color="#D79A1E" transparent opacity={0.5} side={THREE.DoubleSide} />
+        </mesh>
+      )}
       <Text
         position={[0, -0.8, 0]}
         fontSize={0.15}
@@ -50,8 +60,9 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
         anchorY="top"
         maxWidth={1.5}
         textAlign="center"
+        fontWeight="bold"
       >
-        {person.full_name || person.label || 'Unknown'}
+        {(person.traditional_title ? person.traditional_title.toUpperCase() + "\n" : "") + (person.full_name || person.label || 'Unknown')}
       </Text>
       {person.date_of_birth && (
         <Text
@@ -61,7 +72,7 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
           anchorX="center"
           anchorY="top"
         >
-          {new Date(person.data.date_of_birth).getFullYear()}
+          {new Date(person.data?.date_of_birth || person.date_of_birth).getFullYear()}
         </Text>
       )}
     </group>
@@ -71,7 +82,6 @@ function PersonNode({ position, person, onClick, depth = 0 }) {
 // Connection line component
 function ConnectionLine({ start, end, type }) {
   const points = useMemo(() => [start, end], [start, end]);
-  // Use redesign palette: beige for all connections
   const color = treeStyles.lineColor;
   return (
     <Line
@@ -84,35 +94,32 @@ function ConnectionLine({ start, end, type }) {
   );
 }
 
-// Main 3D tree component
-function Tree3D({ data, onPersonClick }) {
+// Main 3D tree component logic
+function Tree3D({ data, onPersonClick, onSetFocalPerson }) {
   const controlsRef = useRef();
+  const focalPersonId = data?.focalPersonId;
 
-  // Build tree structure and calculate positions
   const { nodes, connections } = useMemo(() => {
     if (!data || !data.nodes || !data.edges) {
       return { nodes: [], connections: [] };
     }
 
-    // Filter out invalid nodes first
     const validNodes = data.nodes.filter((node) => node && node.id != null);
-    if (validNodes.length === 0) {
-      return { nodes: [], connections: [] };
-    }
+    if (validNodes.length === 0) return { nodes: [], connections: [] };
 
-    const hasParent = new Set();
+    const persons = new Map(validNodes.map(n => [String(n.id), n]));
     const childrenMap = new Map();
+    const parentsByChild = new Map();
     const spouseMap = new Map();
 
     data.edges.forEach((edge) => {
-      if (!edge || !edge.source || !edge.target) return;
       const src = String(edge.source);
       const tgt = String(edge.target);
-      
       if (edge.type === 'parent') {
-        hasParent.add(tgt);
         if (!childrenMap.has(src)) childrenMap.set(src, []);
         childrenMap.get(src).push(tgt);
+        if (!parentsByChild.has(tgt)) parentsByChild.set(tgt, []);
+        parentsByChild.get(tgt).push(src);
       } else if (edge.type === 'spouse') {
         if (!spouseMap.has(src)) spouseMap.set(src, new Set());
         if (!spouseMap.has(tgt)) spouseMap.set(tgt, new Set());
@@ -121,28 +128,50 @@ function Tree3D({ data, onPersonClick }) {
       }
     });
 
-    // Calculate generations using iterative rank refinement
+    const relevantNodes = new Set();
+    if (focalPersonId && persons.has(focalPersonId)) {
+      const queue = [focalPersonId];
+      relevantNodes.add(focalPersonId);
+      let head = 0;
+      while(head < queue.length) {
+        const id = queue[head++];
+        const neighbors = [
+          ...(parentsByChild.get(id) || []),
+          ...(childrenMap.get(id) || []),
+          ...Array.from(spouseMap.get(id) || [])
+        ];
+        neighbors.forEach(nid => {
+          if (!relevantNodes.has(nid)) {
+            relevantNodes.add(nid);
+            queue.push(nid);
+          }
+        });
+      }
+    } else {
+      persons.forEach((_, id) => relevantNodes.add(id));
+    }
+
     const nodeDepths = new Map();
-    validNodes.forEach(node => nodeDepths.set(String(node.id), 0));
+    relevantNodes.forEach(id => nodeDepths.set(id, 0));
 
     for (let i = 0; i < 25; i++) {
       let changed = false;
-      
-      // Parent-Child constraint
       childrenMap.forEach((childIds, parentId) => {
+        if (!relevantNodes.has(parentId)) return;
         const pGen = nodeDepths.get(parentId) || 0;
         childIds.forEach(childId => {
+          if (!relevantNodes.has(childId)) return;
           if ((nodeDepths.get(childId) || 0) < pGen + 1) {
             nodeDepths.set(childId, pGen + 1);
             changed = true;
           }
         });
       });
-
-      // Spouse constraint
       spouseMap.forEach((spouses, personId) => {
+        if (!relevantNodes.has(personId)) return;
         const gen1 = nodeDepths.get(personId) || 0;
         spouses.forEach(spouseId => {
+          if (!relevantNodes.has(spouseId)) return;
           const gen2 = nodeDepths.get(spouseId) || 0;
           if (gen1 !== gen2) {
             const maxGen = Math.max(gen1, gen2);
@@ -152,11 +181,14 @@ function Tree3D({ data, onPersonClick }) {
           }
         });
       });
-
       if (!changed) break;
     }
 
-    // Calculate positions level by level
+    if (nodeDepths.size > 0) {
+      const minGen = Math.min(...Array.from(nodeDepths.values()));
+      nodeDepths.forEach((gen, id) => nodeDepths.set(id, gen - minGen));
+    }
+
     const levelNodes = new Map();
     nodeDepths.forEach((depth, nodeId) => {
       if (!levelNodes.has(depth)) levelNodes.set(depth, []);
@@ -165,62 +197,45 @@ function Tree3D({ data, onPersonClick }) {
 
     const positions = new Map();
     const nodePositions = [];
-    const nodeMap = new Map(validNodes.map((node) => [String(node.id), node]));
-    const depths = Array.from(levelNodes.keys());
-    const maxDepth = depths.length > 0 ? Math.max(...depths) : 0;
-    const spacing = 3; // Horizontal spacing between nodes
-    const depthSpacing = 4; // Vertical spacing between levels
+    const maxDepth = levelNodes.size > 0 ? Math.max(...Array.from(levelNodes.keys())) : 0;
+    const spacing = 3;
+    const depthSpacing = 4;
 
     levelNodes.forEach((nodeIds, depth) => {
       const count = nodeIds.length;
       const startX = -(count - 1) * spacing * 0.5;
-      
       nodeIds.forEach((nodeId, index) => {
         const x = startX + index * spacing;
         const y = (maxDepth - depth) * depthSpacing;
         const z = (Math.random() - 0.5) * 0.5;
         positions.set(nodeId, [x, y, z]);
-        
-        const node = nodeMap.get(nodeId);
+        const node = persons.get(nodeId);
         if (node) {
-          nodePositions.push({
-            node,
-            position: [x, y, z],
-            depth,
-          });
+          nodePositions.push({ node, position: [x, y, z], depth });
         }
       });
     });
 
-    // Finalize positions with a second pass for centering
+    // Centering pass
     for (let d = maxDepth - 1; d >= 0; d--) {
-      const nodesAtLevel = levelNodes.get(d) || [];
-      nodesAtLevel.forEach(nodeId => {
-        const children = childrenMap.get(nodeId) || [];
-        if (children.length > 0) {
-          const childXs = children.map(cid => positions.get(cid)?.[0]).filter(x => x !== undefined);
-          if (childXs.length > 0) {
-            const avgX = childXs.reduce((a, b) => a + b, 0) / childXs.length;
-            const currentPos = positions.get(nodeId);
-            if (currentPos) {
-              currentPos[0] = avgX;
-              // Update nodePositions too
-              const np = nodePositions.find(p => String(p.node.id) === nodeId);
-              if (np) np.position[0] = avgX;
-            }
-          }
+      const ids = levelNodes.get(d) || [];
+      ids.forEach(id => {
+        const children = childrenMap.get(id) || [];
+        const childXs = children.map(cid => positions.get(cid)?.[0]).filter(x => x !== undefined);
+        if (childXs.length > 0) {
+          const avgX = childXs.reduce((a, b) => a + b, 0) / childXs.length;
+          const pos = positions.get(id);
+          if (pos) pos[0] = avgX;
+          const np = nodePositions.find(p => String(p.node.id) === id);
+          if (np) np.position[0] = avgX;
         }
       });
     }
 
-    // Build connections
     const connections = [];
     data.edges.forEach((edge) => {
-      if (!edge || !edge.source || !edge.target) return;
-      const src = String(edge.source);
-      const tgt = String(edge.target);
-      const startPos = positions.get(src);
-      const endPos = positions.get(tgt);
+      const startPos = positions.get(String(edge.source));
+      const endPos = positions.get(String(edge.target));
       if (startPos && endPos) {
         connections.push({
           start: new THREE.Vector3(...startPos),
@@ -231,79 +246,56 @@ function Tree3D({ data, onPersonClick }) {
     });
 
     return { nodes: nodePositions, connections };
-  }, [data]);
+  }, [data, focalPersonId]);
 
-  // Auto-fit camera to view
   useFrame(({ camera }) => {
     if (nodes.length === 0) return;
-    
-    // Calculate bounding box
-    const positions = nodes.map((n) => n.position);
-    if (positions.length === 0) return;
-
-    const minX = Math.min(...positions.map((p) => p[0]));
-    const maxX = Math.max(...positions.map((p) => p[0]));
-    const minY = Math.min(...positions.map((p) => p[1]));
-    const maxY = Math.max(...positions.map((p) => p[1]));
-
+    const posArr = nodes.map(n => n.position);
+    const minX = Math.min(...posArr.map(p => p[0]));
+    const maxX = Math.max(...posArr.map(p => p[0]));
+    const minY = Math.min(...posArr.map(p => p[1]));
+    const maxY = Math.max(...posArr.map(p => p[1]));
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-    const width = maxX - minX || 10;
-    const height = maxY - minY || 10;
-    const distance = Math.max(width, height) * 1.5;
-
-    // Smoothly move camera to fit view
-    camera.position.lerp(new THREE.Vector3(centerX, centerY, distance), 0.05);
-    if (controlsRef.current) {
-      controlsRef.current.target.lerp(new THREE.Vector3(centerX, centerY, 0), 0.05);
-    }
+    const dist = Math.max(maxX - minX, maxY - minY) * 1.5 || 10;
+    camera.position.lerp(new THREE.Vector3(centerX, centerY, dist), 0.05);
+    if (controlsRef.current) controlsRef.current.target.lerp(new THREE.Vector3(centerX, centerY, 0), 0.05);
   });
 
   return (
     <>
       <ambientLight intensity={0.5} />
       <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
-      <pointLight position={[-10, -10, -5]} intensity={0.5} />
-
-      {/* Render connections */}
       {connections.map((conn, idx) => (
         <ConnectionLine key={`conn-${idx}`} start={conn.start} end={conn.end} type={conn.type} />
       ))}
-
-      {/* Render nodes */}
       {nodes.map(({ node, position, depth }) => (
         <PersonNode
           key={node.id}
           position={position}
           person={node.data}
           depth={depth}
-          onClick={() => onPersonClick && onPersonClick(node.id)}
+          isFocal={String(node.id) === focalPersonId}
+          onClick={(e) => {
+            if (e.shiftKey) {
+              if (onSetFocalPerson) onSetFocalPerson(String(node.id));
+            } else {
+              if (onPersonClick) onPersonClick(node.id);
+            }
+          }}
         />
       ))}
-
-      <OrbitControls
-        ref={controlsRef}
-        enableDamping
-        dampingFactor={0.05}
-        minDistance={5}
-        maxDistance={50}
-        enablePan={true}
-        enableZoom={true}
-        enableRotate={true}
-      />
+      <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.05} />
     </>
   );
 }
 
-// Main component
-const ThreeDTreeView = ({ data, onPersonClick }) => {
+const ThreeDTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
   return (
     <Box sx={{ width: '100%', height: '100%', minHeight: '600px', bgcolor: treeStyles.backgroundColor }}>
       <Canvas shadows camera={{ position: [0, 5, 20], fov: 45 }}>
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} castShadow />
         <color attach="background" args={[treeStyles.backgroundColor]} />
-        <Tree3D data={data} onPersonClick={onPersonClick} />
+        <Tree3D data={data} onPersonClick={onPersonClick} onSetFocalPerson={onSetFocalPerson} />
       </Canvas>
     </Box>
   );
