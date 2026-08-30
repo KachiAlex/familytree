@@ -27,6 +27,24 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
+const Logo = () => (
+  <svg viewBox="0 0 200 200" width="28" height="28">
+    <rect width="200" height="200" rx="44" fill="#22345E" />
+    <line x1="100" y1="150" x2="70" y2="176" stroke="#3A4F82" strokeWidth="4" strokeLinecap="round" />
+    <line x1="100" y1="150" x2="100" y2="180" stroke="#3A4F82" strokeWidth="4" strokeLinecap="round" />
+    <line x1="100" y1="150" x2="130" y2="176" stroke="#3A4F82" strokeWidth="4" strokeLinecap="round" />
+    <line x1="100" y1="150" x2="100" y2="108" stroke="#F1E6D2" strokeWidth="5" strokeLinecap="round" />
+    <line x1="100" y1="120" x2="62" y2="90" stroke="#F1E6D2" strokeWidth="4" strokeLinecap="round" />
+    <line x1="100" y1="120" x2="100" y2="72" stroke="#F1E6D2" strokeWidth="4" strokeLinecap="round" />
+    <line x1="100" y1="120" x2="138" y2="90" stroke="#F1E6D2" strokeWidth="4" strokeLinecap="round" />
+    <circle cx="100" cy="66" r="11" fill="#D79A1E" />
+    <circle cx="62" cy="90" r="8" fill="#3F6644" />
+    <circle cx="138" cy="90" r="8" fill="#3F6644" />
+  </svg>
+);
+
+const cardTopColors = ['#22345E', '#C1622D', '#3F6644', '#D79A1E', '#3A4F82'];
+
 const Dashboard = () => {
   const [families, setFamilies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,20 +61,17 @@ const Dashboard = () => {
   const fetchFamilies = useCallback(async (showRetry = false) => {
     try {
       if (authLoading) return;
-
       if (!user) {
         setFamilies([]);
         setLoading(false);
         return;
       }
-
       if (showRetry) {
         setRetrying(true);
       } else {
         setLoading(true);
       }
       setError(null);
-
       const res = await api.get('/families/my-families');
       setFamilies(res.data.families || []);
       setError(null);
@@ -70,7 +85,6 @@ const Dashboard = () => {
   }, [user, authLoading]);
 
   useEffect(() => {
-    // Only fetch when auth is done loading and user is available
     if (!authLoading) {
       if (user) {
         fetchFamilies();
@@ -81,25 +95,19 @@ const Dashboard = () => {
     }
   }, [user, authLoading, fetchFamilies]);
 
-  // Refresh data when page becomes visible again (user navigates back)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && user && !authLoading) {
-        // Page became visible, refresh data
         fetchFamilies(true);
       }
     };
-
     const handleFocus = () => {
       if (user && !authLoading) {
-        // Window regained focus, refresh data
         fetchFamilies(true);
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
@@ -109,17 +117,14 @@ const Dashboard = () => {
   const handleCreateFamily = async () => {
     const familyName = prompt('Enter family name:');
     if (!familyName) return;
-
     const clanName = prompt('Enter clan name (optional):');
     const villageOrigin = prompt('Enter village/town of origin (optional):');
-
     try {
       const res = await api.post('/families', {
         family_name: familyName,
         clan_name: clanName || undefined,
         village_origin: villageOrigin || undefined,
       });
-
       await fetchFamilies();
       navigate(`/family/${res.data.family.family_id}/tree`);
     } catch (error) {
@@ -128,72 +133,53 @@ const Dashboard = () => {
     }
   };
 
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
+  const handleLogout = () => { logout(); navigate('/login'); };
 
   const handleDeleteClick = (e, family) => {
-    e.stopPropagation(); // Prevent card click navigation
+    e.stopPropagation();
     setFamilyToDelete(family);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!familyToDelete) return;
-
     setDeleting(true);
     try {
       await api.delete(`/families/${familyToDelete.family_id}`);
-
-      setSnackbar({ 
-        open: true, 
-        message: `Family "${familyToDelete.family_name}" deleted successfully`, 
-        severity: 'success' 
-      });
+      setSnackbar({ open: true, message: `Family "${familyToDelete.family_name}" deleted successfully`, severity: 'success' });
       setDeleteDialogOpen(false);
       setFamilyToDelete(null);
       await fetchFamilies();
     } catch (error) {
       console.error('Failed to delete family:', error);
-      setSnackbar({ 
-        open: true, 
-        message: `Failed to delete family: ${error.response?.data?.error || error.message || 'Unknown error'}`, 
-        severity: 'error' 
-      });
+      setSnackbar({ open: true, message: `Failed to delete family: ${error.response?.data?.error || error.message || 'Unknown error'}`, severity: 'error' });
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setFamilyToDelete(null);
-  };
+  const handleDeleteCancel = () => { setDeleteDialogOpen(false); setFamilyToDelete(null); };
+
+  const userInitials = user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U';
 
   return (
     <>
       {/* Topbar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 5 }, py: 2.25, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: '#E4D3B0' }}>
-        <Typography variant="h6" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 19 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 4.5 }, py: 2, bgcolor: '#FFFFFF', borderBottom: '1px solid #E7DCC8' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 17 }}>
+          <Logo />
           Family Tree
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75 }}>
           <IconButton onClick={handleMenuOpen} sx={{ p: 0 }}>
             <Box sx={{
-              width: 36, height: 36, borderRadius: '50%', bgcolor: '#22345E', color: '#FFFDF9',
+              width: 36, height: 36, borderRadius: '50%', bgcolor: '#22345E', color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 13, fontWeight: 600, fontFamily: "'Fraunces', serif",
+              fontSize: '12.5px', fontWeight: 600, fontFamily: "'Fraunces', serif",
             }}>
-              {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+              {userInitials}
             </Box>
           </IconButton>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
@@ -205,27 +191,24 @@ const Dashboard = () => {
         </Box>
       </Box>
 
-      {/* Thread band */}
-      <div className="thread-band thin" />
-
       {/* Main content */}
-      <Box sx={{ px: { xs: 3, md: 5 }, py: 5 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 3.5, flexWrap: 'wrap', gap: 2 }}>
+      <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 4, md: 5.5 }, maxWidth: 1180, mx: 'auto' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 4, flexWrap: 'wrap', gap: 2 }}>
           <Box>
-            <Typography variant="h1" sx={{ fontSize: 30 }}>
+            <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 32 }}>
               Your families
             </Typography>
-            <Typography sx={{ color: '#5A5042', fontSize: 14, mt: 0.75 }}>
+            <Typography sx={{ color: '#5C5346', fontSize: 14, mt: 0.75 }}>
               Every tree you belong to, in one place.
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1.25 }}>
             <Button
               variant="outlined"
               startIcon={retrying ? <CircularProgress size={16} /> : <RefreshIcon />}
               onClick={() => fetchFamilies(true)}
               disabled={retrying || loading}
-              sx={{ borderColor: '#D8BF92', color: '#5A5042' }}
+              sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', '&:hover': { borderColor: '#3A4F82' } }}
             >
               Refresh
             </Button>
@@ -234,38 +217,29 @@ const Dashboard = () => {
               startIcon={<AddIcon />}
               onClick={handleCreateFamily}
               sx={{
-                bgcolor: '#B8541F', color: '#FFFDF9', fontWeight: 600,
-                boxShadow: '0 3px 0 0 #8a3d15',
-                '&:hover': { bgcolor: '#B8541F', boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+                bgcolor: '#22345E', color: '#fff', fontWeight: 600, textTransform: 'none', fontSize: '13.5px',
+                '&:hover': { bgcolor: '#22345E', transform: 'translateY(-2px)' },
               }}
             >
-              New family
+              + New family
             </Button>
           </Box>
         </Box>
 
         {error && (
-          <Alert
-            severity="error"
-            sx={{ mb: 3, borderRadius: 2 }}
-            onClose={() => setError(null)}
-            action={
-              <Button color="inherit" size="small" onClick={() => fetchFamilies(true)}>
-                Retry
-              </Button>
-            }
-          >
+          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError(null)}
+            action={<Button color="inherit" size="small" onClick={() => fetchFamilies(true)}>Retry</Button>}>
             {error}
           </Alert>
         )}
 
         {loading ? (
-          <Grid container spacing={2.5}>
+          <Grid container spacing={2.75}>
             {[1, 2, 3].map((item) => (
               <Grid item xs={12} sm={6} md={4} key={item}>
-                <Box sx={{ bgcolor: 'background.paper', borderRadius: '14px', overflow: 'hidden', border: '1px solid', borderColor: '#E4D3B0' }}>
-                  <Skeleton variant="rectangular" height={6} />
-                  <Box sx={{ p: 2.75 }}>
+                <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '16px', overflow: 'hidden', border: '1px solid #E7DCC8' }}>
+                  <Skeleton variant="rectangular" height={64} />
+                  <Box sx={{ p: 2.5 }}>
                     <Skeleton variant="text" width="60%" height={28} />
                     <Skeleton variant="text" width="40%" />
                     <Skeleton variant="rectangular" height={60} sx={{ mt: 2, borderRadius: 2 }} />
@@ -275,63 +249,75 @@ const Dashboard = () => {
             ))}
           </Grid>
         ) : families.length === 0 ? (
-          <Box sx={{ bgcolor: 'background.paper', borderRadius: '14px', border: '1px solid', borderColor: '#E4D3B0', p: 6, textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ fontFamily: "'Fraunces', serif", mb: 1 }}>
+          <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7DCC8', p: 6, textAlign: 'center' }}>
+            <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, mb: 1 }}>
               No family trees yet
             </Typography>
-            <Typography sx={{ color: '#5A5042' }}>
+            <Typography sx={{ color: '#5C5346' }}>
               Create your first family tree to get started
             </Typography>
           </Box>
         ) : (
-          <Grid container spacing={2.5}>
-            {families.map((family) => {
+          <Grid container spacing={2.75}>
+            {families.map((family, idx) => {
               const userId = user?.user_id || user?.userId || user?.uid;
               const isOwner = family.user_role === 'admin' || family.created_by_user_id === userId;
+              const topColor = cardTopColors[idx % cardTopColors.length];
               return (
                 <Grid item xs={12} sm={6} md={4} key={family.family_id}>
                   <Box
                     sx={{
-                      bgcolor: 'background.paper', borderRadius: '14px', overflow: 'hidden',
-                      border: '1px solid', borderColor: '#E4D3B0', cursor: 'pointer',
-                      transition: 'transform 0.12s, box-shadow 0.12s',
-                      '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 10px 24px rgba(28,20,16,0.08)' },
+                      bgcolor: '#FFFFFF', borderRadius: '16px', overflow: 'hidden',
+                      border: '1px solid #E7DCC8', cursor: 'pointer',
+                      transition: 'transform .15s ease, box-shadow .15s ease',
+                      '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 16px 32px rgba(28,20,16,.09)' },
                     }}
                     onClick={() => navigate(`/family/${family.family_id}/tree`)}
                   >
-                    <div className="thread-band thin" />
-                    <Box sx={{ p: 2.75 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.75 }}>
-                        <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18 }}>
+                    {/* Colored top bar with mini tree SVG */}
+                    <Box sx={{ height: 64, display: 'flex', alignItems: 'center', px: 2.75, bgcolor: topColor }}>
+                      <svg viewBox="0 0 60 60" width="38" height="38" style={{ opacity: 0.9 }}>
+                        <circle cx="30" cy="14" r="7" fill={topColor === '#22345E' ? '#D79A1E' : topColor === '#C1622D' ? '#F7E5D8' : '#FBEFD6'} />
+                        <line x1="30" y1="21" x2="18" y2="36" stroke="rgba(255,255,255,.5)" strokeWidth="2.5" />
+                        <line x1="30" y1="21" x2="42" y2="36" stroke="rgba(255,255,255,.5)" strokeWidth="2.5" />
+                        <circle cx="18" cy="40" r="5" fill={topColor === '#22345E' ? '#3F6644' : 'rgba(255,255,255,.75)'} />
+                        <circle cx="42" cy="40" r="5" fill={topColor === '#22345E' ? '#3F6644' : 'rgba(255,255,255,.75)'} />
+                      </svg>
+                    </Box>
+                    {/* Card body */}
+                    <Box sx={{ p: '20px 22px 22px' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5, gap: 1.25 }}>
+                        <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18 }}>
                           {family.family_name}
                         </Typography>
                         <Box sx={{
                           fontSize: '10.5px', fontFamily: "'IBM Plex Mono', monospace",
-                          px: 1.125, py: 0.375, borderRadius: '20px',
-                          bgcolor: family.user_role === 'admin' ? '#E4EDE4' : '#E8ECF4',
-                          color: family.user_role === 'admin' ? '#3F6644' : '#22345E',
-                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                          px: 1.25, py: 0.5, borderRadius: '20px',
+                          bgcolor: isOwner ? '#E7EFE6' : '#EAEEF6',
+                          color: isOwner ? '#3F6644' : '#22345E',
+                          textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
                         }}>
                           {family.user_role || 'member'}
                         </Box>
                       </Box>
-                      <Typography sx={{ fontSize: 13, color: '#5A5042', lineHeight: 1.5, mb: 1.5, minHeight: 38 }}>
+                      <Typography sx={{ fontSize: 13, color: '#5C5346', lineHeight: 1.55, mb: 2.25, minHeight: 38 }}>
                         {family.clan_name ? `Clan: ${family.clan_name}` : 'No clan set'}
                         {family.village_origin ? ` · ${family.village_origin}` : ''}
                       </Typography>
-                      <Box sx={{ display: 'flex', gap: 2.25 }}>
+                      <Box sx={{
+                        display: 'flex', gap: 2.5, fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '11.5px', color: '#8C8171', borderTop: '1px dashed #E7DCC8', pt: 1.75,
+                      }}>
                         {[
-                          { label: 'Members', value: family.person_count || 0 },
-                          { label: 'Generations', value: family.generation_count || 0 },
-                          { label: 'Stories', value: family.story_count || 0 },
+                          { label: 'members', value: family.person_count || 0 },
+                          { label: 'generations', value: family.generation_count || 0 },
+                          { label: 'stories', value: family.story_count || 0 },
                         ].map((stat, i) => (
-                          <Box key={i} sx={{ flex: 1, textAlign: 'center' }}>
-                            <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 700, color: '#1C1410', lineHeight: 1.1, display: 'block' }}>
+                          <Box key={i}>
+                            <Typography sx={{ color: '#1C1410', fontFamily: "'Work Sans', sans-serif", fontWeight: 700, fontSize: 16, display: 'block' }}>
                               {stat.value}
                             </Typography>
-                            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#7A6D5C', textTransform: 'lowercase', letterSpacing: '0.04em' }}>
-                              {stat.label}
-                            </Typography>
+                            {stat.label}
                           </Box>
                         ))}
                       </Box>
@@ -343,7 +329,7 @@ const Dashboard = () => {
                             startIcon={<DeleteIcon />}
                             onClick={(e) => handleDeleteClick(e, family)}
                             disabled={deleting}
-                            sx={{ fontSize: 12, textTransform: 'none' }}
+                            sx={{ fontSize: 12, textTransform: 'none', color: '#C1622D' }}
                           >
                             Delete
                           </Button>
@@ -359,18 +345,18 @@ const Dashboard = () => {
               <Box
                 onClick={handleCreateFamily}
                 sx={{
-                  minHeight: 172, borderRadius: '14px',
-                  border: '1.5px dashed', borderColor: '#D8BF92',
+                  minHeight: 220, borderRadius: '16px',
+                  border: '1.5px dashed #E7DCC8',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  gap: 1.25, color: '#7A6D5C', cursor: 'pointer', bgcolor: 'transparent',
-                  transition: 'border-color 0.15s, color 0.15s',
-                  '&:hover': { borderColor: '#B8541F', color: '#B8541F' },
+                  gap: 1.5, color: '#8C8171', cursor: 'pointer', bgcolor: 'transparent',
+                  transition: 'border-color .15s, color .15s',
+                  '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
                 }}
               >
                 <Box sx={{
-                  width: 38, height: 38, borderRadius: '50%', bgcolor: '#F1E6D2',
+                  width: 42, height: 42, borderRadius: '50%', bgcolor: '#FBEFD6',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 20, color: '#B8541F',
+                  fontSize: 22, color: '#D79A1E',
                 }}>
                   +
                 </Box>
@@ -389,35 +375,30 @@ const Dashboard = () => {
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: '100%', borderRadius: 2 }}
-        >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 2 }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
         onClose={handleDeleteCancel}
         aria-labelledby="delete-dialog-title"
         aria-describedby="delete-dialog-description"
-        PaperProps={{ sx: { borderRadius: '14px' } }}
+        PaperProps={{ sx: { borderRadius: '16px' } }}
       >
         <DialogTitle id="delete-dialog-title" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
           Delete Family Tree?
         </DialogTitle>
         <DialogContent>
-          <DialogContentText id="delete-dialog-description">
+          <DialogContentText>
             Are you sure you want to permanently delete <strong>{familyToDelete?.family_name}</strong>?
             This will delete all persons, relationships, documents, stories, and other data associated with this family tree.
             This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={handleDeleteCancel} disabled={deleting} variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042' }}>
+          <Button onClick={handleDeleteCancel} disabled={deleting} variant="outlined" sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>
             Cancel
           </Button>
           <Button
@@ -426,6 +407,7 @@ const Dashboard = () => {
             variant="contained"
             disabled={deleting}
             startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+            sx={{ bgcolor: '#C1622D', textTransform: 'none' }}
           >
             {deleting ? 'Deleting...' : 'Delete'}
           </Button>
@@ -436,4 +418,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

@@ -509,7 +509,7 @@ const FamilyTree = () => {
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {/* Sidebar Rail */}
       <Box sx={{
-        width: 220, bgcolor: 'background.paper', borderRight: '1px solid', borderColor: '#E4D3B0',
+        width: 224, bgcolor: '#FFFFFF', borderRight: '1px solid #E7DCC8',
         p: '20px 14px', flexShrink: 0,
         display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
       }}>
@@ -519,7 +519,7 @@ const FamilyTree = () => {
           {familyInfo?.family_name || 'Family'}
         </Typography>
 
-        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8C8171', m: '14px 8px 8px' }}>
           Structure
         </Typography>
         {[
@@ -530,11 +530,12 @@ const FamilyTree = () => {
         ].map((tab) => (
           <Button key={tab.value} onClick={() => setViewType(tab.value)}
             sx={{
-              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px',
+              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px',
               fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%',
-              color: viewType === tab.value ? '#FFFDF9' : '#4E4436',
+              color: viewType === tab.value ? '#fff' : '#5C5346',
               bgcolor: viewType === tab.value ? '#22345E' : 'transparent',
-              '&:hover': { bgcolor: viewType === tab.value ? '#22345E' : '#F1E6D2' },
+              boxShadow: viewType === tab.value ? '0 4px 12px rgba(34,52,94,.25)' : 'none',
+              '&:hover': { bgcolor: viewType === tab.value ? '#22345E' : '#F3ECE0' },
               textTransform: 'none', minWidth: 0,
             }}
           >
@@ -543,7 +544,7 @@ const FamilyTree = () => {
           </Button>
         ))}
 
-        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8C8171', m: '14px 8px 8px' }}>
           Chronology
         </Typography>
         {[
@@ -552,11 +553,12 @@ const FamilyTree = () => {
         ].map((tab) => (
           <Button key={tab.value} onClick={() => setViewType(tab.value)}
             sx={{
-              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px',
+              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px',
               fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%',
-              color: viewType === tab.value ? '#FFFDF9' : '#4E4436',
+              color: viewType === tab.value ? '#fff' : '#5C5346',
               bgcolor: viewType === tab.value ? '#22345E' : 'transparent',
-              '&:hover': { bgcolor: viewType === tab.value ? '#22345E' : '#F1E6D2' },
+              boxShadow: viewType === tab.value ? '0 4px 12px rgba(34,52,94,.25)' : 'none',
+              '&:hover': { bgcolor: viewType === tab.value ? '#22345E' : '#F3ECE0' },
               textTransform: 'none', minWidth: 0,
             }}
           >
@@ -565,21 +567,21 @@ const FamilyTree = () => {
           </Button>
         ))}
 
-        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9C8D77', m: '14px 8px 8px' }}>
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8C8171', m: '14px 8px 8px' }}>
           Manage
         </Typography>
         <Button onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#4E4436', '&:hover': { bgcolor: '#F1E6D2' }, textTransform: 'none', minWidth: 0 }}>
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#5C5346', '&:hover': { bgcolor: '#F3ECE0' }, textTransform: 'none', minWidth: 0 }}>
           <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⇩</Box>
           Export tree
         </Button>
         <Button onClick={() => setGedcomImportOpen(true)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#4E4436', '&:hover': { bgcolor: '#F1E6D2' }, textTransform: 'none', minWidth: 0 }}>
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#5C5346', '&:hover': { bgcolor: '#F3ECE0' }, textTransform: 'none', minWidth: 0 }}>
           <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⇧</Box>
           Import GEDCOM
         </Button>
         <Button onClick={() => navigate(`/family/${familyId}/settings`)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '9px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#4E4436', '&:hover': { bgcolor: '#F1E6D2' }, textTransform: 'none', minWidth: 0 }}>
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#5C5346', '&:hover': { bgcolor: '#F3ECE0' }, textTransform: 'none', minWidth: 0 }}>
           <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⚙</Box>
           Settings
         </Button>
@@ -589,7 +591,7 @@ const FamilyTree = () => {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Tree header */}
         <Box sx={{
-          px: 3.5, py: 2.25, borderBottom: '1px solid', borderColor: '#E4D3B0', bgcolor: 'background.paper',
+          px: 3.5, py: 2, borderBottom: '1px solid #E7DCC8', bgcolor: '#FFFFFF',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2.5, flexWrap: 'wrap',
         }}>
           {/* Mobile back + view tabs */}
@@ -610,12 +612,12 @@ const FamilyTree = () => {
           {/* Search box */}
           <Box onClick={() => setSearchFiltersExpanded(!searchFiltersExpanded)}
             sx={{
-              display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#F1E6D2', borderRadius: '9px',
-              px: 1.75, py: 1.125, fontSize: '13.5px', color: '#7A6D5C', minWidth: 220, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#FBF7F0', border: '1px solid #E7DCC8', borderRadius: '10px',
+              px: 1.75, py: 1.125, fontSize: '13.5px', color: '#8C8171', minWidth: 220, cursor: 'pointer',
             }}
           >
             <SearchIcon sx={{ fontSize: 18 }} />
-            <Typography sx={{ fontSize: '13.5px', color: '#7A6D5C', flex: 1 }}>
+            <Typography sx={{ fontSize: '13.5px', color: '#8C8171', flex: 1 }}>
               {searchQuery || clanFilter || villageFilter
                 ? `${searchQuery || ''} ${clanFilter ? `| Clan: ${clanFilter}` : ''} ${villageFilter ? `| Village: ${villageFilter}` : ''}`
                 : 'Search people…'}
@@ -626,14 +628,14 @@ const FamilyTree = () => {
           {/* Filter chips */}
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Box onClick={() => setSearchFiltersExpanded(true)} sx={{
-              fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.5, py: 0.75, borderRadius: '20px',
-              bgcolor: 'background.paper', border: '1px solid', borderColor: '#D8BF92', color: '#5A5042', cursor: 'pointer',
+              fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.625, py: 0.75, borderRadius: '20px',
+              bgcolor: '#fff', border: '1px solid #E7DCC8', color: '#5C5346', cursor: 'pointer',
             }}>
               Clan: {clanFilter || 'any'} ▾
             </Box>
             <Box onClick={() => setSearchFiltersExpanded(true)} sx={{
-              fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.5, py: 0.75, borderRadius: '20px',
-              bgcolor: 'background.paper', border: '1px solid', borderColor: '#D8BF92', color: '#5A5042', cursor: 'pointer',
+              fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.625, py: 0.75, borderRadius: '20px',
+              bgcolor: '#fff', border: '1px solid #E7DCC8', color: '#5C5346', cursor: 'pointer',
             }}>
               Village: {villageFilter || 'any'} ▾
             </Box>
@@ -642,14 +644,14 @@ const FamilyTree = () => {
           {/* Action buttons */}
           <Box sx={{ display: 'flex', gap: 1.25 }}>
             <IconButton onClick={(e) => setExportMenuAnchor(e.currentTarget)} sx={{
-              width: 36, height: 36, borderRadius: '9px', border: '1px solid', borderColor: '#D8BF92',
-              bgcolor: 'background.paper', color: '#5A5042',
+              width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
+              bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
             }}>
               <FileDownloadIcon sx={{ fontSize: 16 }} />
             </IconButton>
             <IconButton onClick={() => navigate(`/family/${familyId}/settings`)} sx={{
-              width: 36, height: 36, borderRadius: '9px', border: '1px solid', borderColor: '#D8BF92',
-              bgcolor: 'background.paper', color: '#5A5042',
+              width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
+              bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
             }}>
               <SettingsIcon sx={{ fontSize: 16 }} />
             </IconButton>
@@ -658,7 +660,7 @@ const FamilyTree = () => {
 
         {/* Collapsible search filters */}
         <Collapse in={searchFiltersExpanded}>
-          <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: '#E4D3B0' }}>
+          <Box sx={{ p: 2, bgcolor: '#FFFFFF', borderBottom: '1px solid #E7DCC8' }}>
             <TextField
               fullWidth
               variant="outlined"
@@ -697,7 +699,7 @@ const FamilyTree = () => {
                 freeSolo={false}
               />
               {(clanFilter || villageFilter || searchQuery) && (
-                <Button startIcon={<ClearIcon />} onClick={() => { setSearchQuery(''); setClanFilter(''); setVillageFilter(''); }} size="small" variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>
+                <Button startIcon={<ClearIcon />} onClick={() => { setSearchQuery(''); setClanFilter(''); setVillageFilter(''); }} size="small" variant="outlined" sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>
                   Clear Filters
                 </Button>
               )}
@@ -706,42 +708,45 @@ const FamilyTree = () => {
         </Collapse>
 
         {/* Tree canvas */}
-        <Box ref={treeContainerRef} className="tree-canvas-bg" sx={{ flex: 1, position: 'relative', overflow: 'hidden' }} data-tree-container>
+        <Box ref={treeContainerRef} className="tree-canvas-bg" sx={{
+          flex: 1, position: 'relative', overflow: 'hidden',
+          background: 'radial-gradient(circle at 1px 1px, #E7DCC8 1px, transparent 0) 0 0/24px 24px, #FBF7F0',
+        }} data-tree-container>
           {renderTreeView}
 
           {/* Insights panel */}
           {stats && (
             <Box sx={{
-              position: 'absolute', top: 20, right: 20, bgcolor: 'background.paper', borderRadius: '12px',
-              p: '16px 18px', border: '1px solid', borderColor: '#E4D3B0', fontSize: '12.5px', width: 180,
-              boxShadow: '0 6px 18px rgba(28,20,16,0.06)', zIndex: 10,
+              position: 'absolute', top: 20, right: 20, bgcolor: '#FFFFFF', borderRadius: '14px',
+              p: '16px 18px', border: '1px solid #E7DCC8', fontSize: '12.5px', width: 180,
+              boxShadow: '0 10px 24px rgba(28,20,16,.08)', zIndex: 10,
             }}>
-              <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+              <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.25 }}>
                 Tree insights
               </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed', borderColor: '#E4D3B0', '&:last-child': { borderBottom: 'none' } }}>
-                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Total people</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed #E7DCC8', '&:last-child': { borderBottom: 'none' } }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5C5346' }}>Total people</Typography>
                 <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{stats.total}</Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed', borderColor: '#E4D3B0' }}>
-                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Male</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed #E7DCC8' }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5C5346' }}>Male</Typography>
                 <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{stats.maleCount}</Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed', borderColor: '#E4D3B0' }}>
-                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Female</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625, borderBottom: '1px dashed #E7DCC8' }}>
+                <Typography sx={{ fontSize: '12.5px', color: '#5C5346' }}>Female</Typography>
                 <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{stats.femaleCount}</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.625 }}>
-                <Typography sx={{ fontSize: '12.5px', color: '#5A5042' }}>Clans</Typography>
+                <Typography sx={{ fontSize: '12.5px', color: '#5C5346' }}>Clans</Typography>
                 <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: '12.5px' }}>{Object.keys(stats.clanCounts).length}</Typography>
               </Box>
-              <Box sx={{ mt: 1.25, pt: 1.25, borderTop: '1px dashed', borderColor: '#E4D3B0' }}>
-                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#9C8D77', mb: 0.5 }}>Top clans</Typography>
+              <Box sx={{ mt: 1.25, pt: 1.25, borderTop: '1px dashed #E7DCC8' }}>
+                <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#8C8171', mb: 0.5 }}>Top clans</Typography>
                 {Object.entries(stats.clanCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([clan, count]) => (
-                  <Typography key={clan} sx={{ fontSize: '11.5px', color: '#5A5042' }}>{clan} ({count})</Typography>
+                  <Typography key={clan} sx={{ fontSize: '11.5px', color: '#5C5346' }}>{clan} ({count})</Typography>
                 ))}
                 {Object.keys(stats.clanCounts).length === 0 && (
-                  <Typography sx={{ fontSize: '11.5px', color: '#9C8D77' }}>No clan data</Typography>
+                  <Typography sx={{ fontSize: '11.5px', color: '#8C8171' }}>No clan data</Typography>
                 )}
               </Box>
             </Box>
@@ -751,11 +756,11 @@ const FamilyTree = () => {
           <Button
             onClick={handleAddPersonClick}
             sx={{
-              position: 'absolute', bottom: 24, right: 24, bgcolor: '#B8541F', color: '#FFFDF9',
+              position: 'absolute', bottom: 24, right: 24, bgcolor: '#22345E', color: '#fff',
               px: 2.75, py: 1.625, borderRadius: '30px', fontSize: 14, fontWeight: 600,
-              textTransform: 'none', boxShadow: '0 6px 18px rgba(184,84,31,0.35)',
+              textTransform: 'none', boxShadow: '0 8px 22px rgba(34,52,94,.32)',
               display: 'flex', alignItems: 'center', gap: 1, zIndex: 10,
-              '&:hover': { bgcolor: '#B8541F', transform: 'translateY(-1px)' },
+              '&:hover': { bgcolor: '#22345E', transform: 'translateY(-2px)' },
             }}
           >
             <AddIcon sx={{ fontSize: 18 }} /> Add person
@@ -774,7 +779,7 @@ const FamilyTree = () => {
       </Menu>
 
       {/* GEDCOM Import Dialog */}
-      <Dialog open={gedcomImportOpen} onClose={() => setGedcomImportOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: '14px' } }}>
+      <Dialog open={gedcomImportOpen} onClose={() => setGedcomImportOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Import GEDCOM File</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
@@ -785,13 +790,13 @@ const FamilyTree = () => {
             disabled={importingGedcom}
           />
           <label htmlFor="gedcom-upload">
-            <Button variant="outlined" component="span" fullWidth startIcon={<UploadIcon />} disabled={importingGedcom} sx={{ py: 2, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>
+            <Button variant="outlined" component="span" fullWidth startIcon={<UploadIcon />} disabled={importingGedcom} sx={{ py: 2, borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>
               Choose GEDCOM File
             </Button>
           </label>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setGedcomImportOpen(false)} disabled={importingGedcom} variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => setGedcomImportOpen(false)} disabled={importingGedcom} variant="outlined" sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>Cancel</Button>
         </DialogActions>
       </Dialog>
 
@@ -806,7 +811,7 @@ const FamilyTree = () => {
       />
 
       {/* Profile Completion Dialog */}
-      <Dialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)} PaperProps={{ sx: { borderRadius: '14px' } }}>
+      <Dialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)} PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Complete Your Profile First</DialogTitle>
         <DialogContent>
           <DialogContentText>
@@ -815,7 +820,7 @@ const FamilyTree = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setProfileDialogOpen(false)} variant="outlined" sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => setProfileDialogOpen(false)} variant="outlined" sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>Cancel</Button>
           <Button onClick={() => { sessionStorage.setItem('returnAfterProfileCompletion', `/family/${familyId}/tree`); navigate('/profile-completion'); }} variant="contained">
             Complete Profile
           </Button>

@@ -14,27 +14,27 @@ export const ThemeModeProvider = ({ children }) => {
         palette: {
           mode: 'light',
           primary: {
-            main: '#B8541F',
-            light: '#F4E0D2',
-            dark: '#8a3d15',
-            contrastText: '#FFFDF9',
-          },
-          secondary: {
             main: '#22345E',
             light: '#3A4F82',
-            pale: '#E8ECF4',
-            contrastText: '#FFFDF9',
+            pale: '#EAEEF6',
+            contrastText: '#FFFFFF',
+          },
+          secondary: {
+            main: '#C1622D',
+            light: '#F7E5D8',
+            dark: '#8a4a1e',
+            contrastText: '#FFFFFF',
           },
           background: {
-            default: '#F1E6D2',
-            paper: '#FFFDF9',
+            default: '#FBF7F0',
+            paper: '#FFFFFF',
           },
           text: {
             primary: '#1C1410',
-            secondary: '#5A5042',
+            secondary: '#5C5346',
           },
-          error: { main: '#B8541F' },
-          warning: { main: '#C7930A' },
+          error: { main: '#C1622D' },
+          warning: { main: '#D79A1E' },
           success: { main: '#3F6644' },
           info: { main: '#22345E' },
         },
@@ -50,26 +50,26 @@ export const ThemeModeProvider = ({ children }) => {
           overline: { fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', letterSpacing: '0.08em' },
         },
         shape: {
-          borderRadius: 14,
+          borderRadius: 16,
         },
         components: {
           MuiPaper: {
             styleOverrides: {
               root: {
-                borderRadius: 14,
+                borderRadius: 16,
               },
             },
           },
           MuiButton: {
             styleOverrides: {
               root: {
-                borderRadius: 9,
+                borderRadius: 10,
                 textTransform: 'none',
                 fontWeight: 600,
               },
               contained: {
-                boxShadow: '0 3px 0 0 #8a3d15',
-                '&:hover': { boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+                boxShadow: '0 1px 2px rgba(34,52,94,.15), 0 8px 18px rgba(34,52,94,.18)',
+                '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 4px 8px rgba(34,52,94,.2), 0 14px 26px rgba(34,52,94,.24)' },
               },
             },
           },
