@@ -4,7 +4,6 @@ import { Box, Paper, Typography, Divider, Chip } from '@mui/material';
 import { 
   generationColors, 
   generationLabels, 
-  maritalStatusColors,
   layoutConfig,
   treeStyles 
 } from '../../config/treeConfig';
@@ -22,7 +21,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
     const persons = new Map();
     const childrenByParent = new Map();
-    const spouses = new Map();
+    const spouses = new Map(); // personId -> Set of { spouseId, marital_status }
 
     validNodes.forEach((node) => {
       const id = String(node.id);
@@ -46,105 +45,115 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         childrenByParent.get(sourceId).push(targetId);
       } else if (edge.type === 'spouse') {
         const maritalStatus = edge.marital_status || 'married';
-        spouses.set(sourceId, { spouseId: targetId, marital_status: maritalStatus });
-        spouses.set(targetId, { spouseId: sourceId, marital_status: maritalStatus });
+        if (!spouses.has(sourceId)) spouses.set(sourceId, new Set());
+        if (!spouses.has(targetId)) spouses.set(targetId, new Set());
+        spouses.get(sourceId).add(JSON.stringify({ spouseId: targetId, marital_status: maritalStatus }));
+        spouses.get(targetId).add(JSON.stringify({ spouseId: sourceId, marital_status: maritalStatus }));
       }
     });
 
-    return { persons, childrenByParent, spouses };
-  }, [data]);
+    // Parse the JSON sets back into arrays of objects
+    const finalSpouses = new Map();
+    spouses.forEach((spouseSet, id) => {
+      finalSpouses.set(id, Array.from(spouseSet).map(s => JSON.parse(s)));
+    });
 
-  const getMotherId = useCallback((parentIds, persons, spouses) => {
-    if (parentIds.length === 0) return null;
-    if (parentIds.length === 1) return parentIds[0];
-    
-    for (const parentId of parentIds) {
-      const parent = persons.get(parentId);
-      if (parent && parent.data?.gender === 'female') {
-        return parentId;
-      }
-    }
-    
-    for (const parentId of parentIds) {
-      const spouseInfo = spouses.get(parentId);
-      if (spouseInfo) {
-        const spouse = persons.get(spouseInfo.spouseId);
-        if (spouse && spouse.data?.gender === 'female') {
-          return spouseInfo.spouseId;
-        }
-      }
-    }
-    
-    return parentIds[0];
-  }, []);
+    return { persons, childrenByParent, spouses: finalSpouses };
+  }, [data]);
 
   const computeLayout = useCallback(() => {
     const { persons, childrenByParent, spouses } = personsData;
     if (persons.size === 0) return { positions: new Map(), levelMap: new Map() };
 
-    const positions = new Map();
-    const levelMap = new Map();
-    
-    const roots = [];
-    persons.forEach((person, id) => {
-      let hasParent = false;
+    const generations = new Map();
+    persons.forEach((_, id) => generations.set(id, 0));
+
+    // Iterative rank refinement to satisfy constraints:
+    // 1. Generation(child) >= Generation(parent) + 1
+    // 2. Generation(spouse1) == Generation(spouse2)
+    for (let i = 0; i < 25; i++) {
+      let changed = false;
+      
+      // Parent-Child constraint
       childrenByParent.forEach((childIds, parentId) => {
-        if (childIds.includes(id)) {
-          hasParent = true;
-        }
+        const pGen = generations.get(parentId);
+        childIds.forEach(childId => {
+          const cGen = generations.get(childId);
+          if (cGen < pGen + 1) {
+            generations.set(childId, pGen + 1);
+            changed = true;
+          }
+        });
       });
-      
-      if (!hasParent) {
-        roots.push(id);
-      }
-    });
 
-    if (roots.length === 0) return { positions, levelMap };
-
-    const levels = new Map();
-    const queue = roots.map(id => ({ id, level: 0 }));
-    const visited = new Set();
-
-    while (queue.length > 0) {
-      const { id, level } = queue.shift();
-      if (visited.has(id)) continue;
-      visited.add(id);
-
-      levels.set(id, level);
-      if (!levelMap.has(level)) {
-        levelMap.set(level, []);
-      }
-      levelMap.get(level).push(id);
-
-      const children = childrenByParent.get(id) || [];
-      children.forEach(childId => {
-        if (!visited.has(childId)) {
-          queue.push({ id: childId, level: level + 1 });
-        }
+      // Spouse constraint
+      spouses.forEach((spouseList, personId) => {
+        const gen1 = generations.get(personId);
+        spouseList.forEach(spouseInfo => {
+          const gen2 = generations.get(spouseInfo.spouseId);
+          if (gen1 !== gen2) {
+            const maxGen = Math.max(gen1, gen2);
+            generations.set(personId, maxGen);
+            generations.set(spouseInfo.spouseId, maxGen);
+            changed = true;
+          }
+        });
       });
-      
-      const spouseInfo = spouses.get(id);
-      if (spouseInfo && !visited.has(spouseInfo.spouseId)) {
-        queue.push({ id: spouseInfo.spouseId, level: level });
-      }
+
+      if (!changed) break;
     }
 
+    const levelMap = new Map();
+    generations.forEach((gen, id) => {
+      if (!levelMap.has(gen)) levelMap.set(gen, []);
+      levelMap.get(gen).push(id);
+    });
+
     const { nodeHeight, levelSpacing, siblingSpacing, familyUnitGap, padding } = layoutConfig;
+    const positions = new Map();
     
-    let currentY = padding;
+    // Sort generations to process left-to-right
     const sortedLevels = Array.from(levelMap.keys()).sort((a, b) => a - b);
     
+    // Vertical distribution within each level
     sortedLevels.forEach(level => {
       const personIds = levelMap.get(level);
       const x = padding + level * levelSpacing;
       
+      // Group spouses together for vertical layout
+      const processed = new Set();
+      let currentY = padding;
+
       personIds.forEach(id => {
-        if (!positions.has(id)) {
-          positions.set(id, { x, y: currentY, level });
-          currentY += nodeHeight + siblingSpacing;
-        }
+        if (processed.has(id)) return;
+        
+        // Find all connected spouses at this level
+        const spouseGroup = [id];
+        processed.add(id);
+        
+        const findSpouses = (pid) => {
+          const sList = spouses.get(pid) || [];
+          sList.forEach(sInfo => {
+            if (!processed.has(sInfo.spouseId) && generations.get(sInfo.spouseId) === level) {
+              processed.add(sInfo.spouseId);
+              spouseGroup.push(sInfo.spouseId);
+              findSpouses(sInfo.spouseId);
+            }
+          });
+        };
+        findSpouses(id);
+
+        // Position the spouse group
+        spouseGroup.forEach((memberId, idx) => {
+          positions.set(memberId, { 
+            x,
+            y: currentY + idx * (nodeHeight + siblingSpacing), 
+            level 
+          });
+        });
+        
+        currentY += spouseGroup.length * (nodeHeight + siblingSpacing) + familyUnitGap;
       });
-      currentY += familyUnitGap;
     });
 
     return { positions, levelMap };
@@ -277,23 +286,27 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
       });
     });
 
-    spouses.forEach((spouseInfo, personId) => {
+    spouses.forEach((spouseList, personId) => {
       const personPos = positions.get(personId);
-      const spousePos = positions.get(spouseInfo.spouseId);
-      if (!personPos || !spousePos || personId >= spouseInfo.spouseId) return;
+      if (!personPos) return;
 
-      const personCenterX = personPos.x + xOffset;
-      const y1 = Math.min(personPos.y + yOffset, spousePos.y + yOffset);
-      const y2 = Math.max(personPos.y + yOffset, spousePos.y + yOffset);
+      spouseList.forEach(spouseInfo => {
+        const spousePos = positions.get(spouseInfo.spouseId);
+        if (!spousePos || personId >= spouseInfo.spouseId) return;
 
-      g.append('line')
-        .attr('x1', personCenterX)
-        .attr('y1', y1 + circleRadius)
-        .attr('x2', personCenterX)
-        .attr('y2', y2 - circleRadius)
-        .attr('stroke', lineColor)
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', spouseInfo.marital_status === 'divorced' ? '4,4' : 'none');
+        const personCenterX = personPos.x + xOffset;
+        const y1 = Math.min(personPos.y + yOffset, spousePos.y + yOffset);
+        const y2 = Math.max(personPos.y + yOffset, spousePos.y + yOffset);
+
+        g.append('line')
+          .attr('x1', personCenterX)
+          .attr('y1', y1 + circleRadius)
+          .attr('x2', personCenterX)
+          .attr('y2', y2 - circleRadius)
+          .attr('stroke', lineColor)
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', spouseInfo.marital_status === 'divorced' ? '4,4' : 'none');
+      });
     });
 
     const nodeGroups = g.selectAll('.node')
@@ -315,7 +328,8 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
 
       const level = positions.get(id).level;
       const levelIndex = Math.min(level, generationColors.background.length - 1);
-      const spouseInfo = spouses.get(id);
+      const spouseList = spouses.get(id) || [];
+      const hasSpouse = spouseList.length > 0;
       const isDivorced = hasDivorcedRelationship(id);
 
       group.append('circle')
@@ -324,7 +338,7 @@ const HorizontalTreeView = ({ data, onPersonClick }) => {
         .attr('stroke', generationColors.border[levelIndex])
         .attr('stroke-width', 2);
 
-      if (spouseInfo && !isDivorced) {
+      if (hasSpouse && !isDivorced) {
         group.append('line')
           .attr('x1', circleRadius + 2)
           .attr('y1', 0)

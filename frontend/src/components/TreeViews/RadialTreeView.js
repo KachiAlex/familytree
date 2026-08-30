@@ -4,7 +4,6 @@ import { Box, Paper, Typography, Divider, Chip } from '@mui/material';
 import { 
   generationColors, 
   generationLabels, 
-  maritalStatusColors,
   layoutConfig,
   treeStyles 
 } from '../../config/treeConfig';
@@ -23,7 +22,7 @@ const RadialTreeView = ({ data, onPersonClick }) => {
 
     const persons = new Map();
     const childrenByParent = new Map();
-    const spouses = new Map();
+    const spouses = new Map(); // personId -> Set of { spouseId, marital_status }
 
     validNodes.forEach((node) => {
       const id = String(node.id);
@@ -47,12 +46,20 @@ const RadialTreeView = ({ data, onPersonClick }) => {
         childrenByParent.get(sourceId).push(targetId);
       } else if (edge.type === 'spouse') {
         const maritalStatus = edge.marital_status || 'married';
-        spouses.set(sourceId, { spouseId: targetId, marital_status: maritalStatus });
-        spouses.set(targetId, { spouseId: sourceId, marital_status: maritalStatus });
+        if (!spouses.has(sourceId)) spouses.set(sourceId, new Set());
+        if (!spouses.has(targetId)) spouses.set(targetId, new Set());
+        spouses.get(sourceId).add(JSON.stringify({ spouseId: targetId, marital_status: maritalStatus }));
+        spouses.get(targetId).add(JSON.stringify({ spouseId: sourceId, marital_status: maritalStatus }));
       }
     });
 
-    return { persons, childrenByParent, spouses };
+    // Parse the JSON sets back into arrays of objects
+    const finalSpouses = new Map();
+    spouses.forEach((spouseSet, id) => {
+      finalSpouses.set(id, Array.from(spouseSet).map(s => JSON.parse(s)));
+    });
+
+    return { persons, childrenByParent, spouses: finalSpouses };
   }, [data]);
 
   // Helper function to check if a person has ANY divorced relationship
@@ -147,22 +154,51 @@ const RadialTreeView = ({ data, onPersonClick }) => {
     const rootIds = Array.from(persons.keys()).filter(id => !hasParent.has(id));
     if (rootIds.length === 0) return;
 
+    // Calculate generations using iterative rank refinement
+    const generations = new Map();
+    persons.forEach((_, id) => generations.set(id, 0));
+
+    for (let i = 0; i < 25; i++) {
+      let changed = false;
+      childrenByParent.forEach((childIds, parentId) => {
+        const pGen = generations.get(parentId);
+        childIds.forEach(childId => {
+          if (generations.get(childId) < pGen + 1) {
+            generations.set(childId, pGen + 1);
+            changed = true;
+          }
+        });
+      });
+      spouses.forEach((spouseList, personId) => {
+        const gen1 = generations.get(personId);
+        spouseList.forEach(spouseInfo => {
+          const gen2 = generations.get(spouseInfo.spouseId);
+          if (gen1 !== gen2) {
+            const maxGen = Math.max(gen1, gen2);
+            generations.set(personId, maxGen);
+            generations.set(spouseInfo.spouseId, maxGen);
+            changed = true;
+          }
+        });
+      });
+      if (!changed) break;
+    }
+
     // Build hierarchy for radial layout
-    // Support multiple roots by creating a virtual parent if necessary
-    const buildHierarchy = (nodeId, depth = 0) => {
+    const buildHierarchy = (nodeId) => {
       const person = persons.get(nodeId);
       if (!person) return null;
 
       const children = childrenByParent.get(nodeId) || [];
       const childNodes = children
-        .map(childId => buildHierarchy(childId, depth + 1))
+        .map(childId => buildHierarchy(childId))
         .filter(Boolean);
 
       return {
         id: nodeId,
         name: person.name,
         data: person.data,
-        depth,
+        depth: generations.get(nodeId),
         children: childNodes,
       };
     };
@@ -210,8 +246,8 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       });
 
       // Position spouses at the same angle but slightly offset radius
-      const spouseInfo = spouses.get(d.data.id);
-      if (spouseInfo) {
+      const spouseList = spouses.get(d.data.id) || [];
+      spouseList.forEach(spouseInfo => {
         const spouseId = spouseInfo.spouseId;
         if (!nodePositions.has(spouseId)) {
           // Check if spouse is already in the tree
@@ -221,12 +257,12 @@ const RadialTreeView = ({ data, onPersonClick }) => {
             nodePositions.set(spouseId, {
               angle,
               radius: baseRadius + 15, // Slightly further out
-              depth: d.depth,
+              depth: generations.get(spouseId),
               node: null
             });
           }
         }
-      }
+      });
     });
 
     // Draw links (parent-child connections)
@@ -248,43 +284,43 @@ const RadialTreeView = ({ data, onPersonClick }) => {
       .attr('opacity', connectionLineOpacity);
 
     // Draw spouse connections (curved lines)
-    spouses.forEach((spouseInfo, personId) => {
+    spouses.forEach((spouseList, personId) => {
       const personPos = nodePositions.get(personId);
-      const spousePos = nodePositions.get(spouseInfo.spouseId);
-      
-      if (!personPos || !spousePos) return;
-      if (personId >= spouseInfo.spouseId) return; // Draw once per pair
+      if (!personPos) return;
 
-      const maritalStatus = spouseInfo.marital_status || 'married';
-      const isDivorced = maritalStatus === 'divorced';
-      const isWidowed = maritalStatus === 'widowed';
+      spouseList.forEach(spouseInfo => {
+        const spousePos = nodePositions.get(spouseInfo.spouseId);
+        if (!spousePos || personId >= spouseInfo.spouseId) return;
 
-      // Calculate positions
-      const x1 = personPos.radius * Math.cos(personPos.angle - Math.PI / 2);
-      const y1 = personPos.radius * Math.sin(personPos.angle - Math.PI / 2);
-      const x2 = spousePos.radius * Math.cos(spousePos.angle - Math.PI / 2);
-      const y2 = spousePos.radius * Math.sin(spousePos.angle - Math.PI / 2);
+        const maritalStatus = spouseInfo.marital_status || 'married';
+        const isDivorced = maritalStatus === 'divorced';
 
-      // Draw curved line for spouses
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-      const controlX = midX + (Math.abs(x2 - x1) * 0.3);
-      const controlY = midY + (Math.abs(y2 - y1) * 0.3);
+        // Calculate positions
+        const x1 = personPos.radius * Math.cos(personPos.angle - Math.PI / 2);
+        const y1 = personPos.radius * Math.sin(personPos.angle - Math.PI / 2);
+        const x2 = spousePos.radius * Math.cos(spousePos.angle - Math.PI / 2);
+        const y2 = spousePos.radius * Math.sin(spousePos.angle - Math.PI / 2);
 
-      const path = d3.path();
-      path.moveTo(x1, y1);
-      path.quadraticCurveTo(controlX, controlY, x2, y2);
+        // Draw curved line for spouses
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+        const controlX = midX + (Math.abs(x2 - x1) * 0.3);
+        const controlY = midY + (Math.abs(y2 - y1) * 0.3);
 
-      g.append('path')
-        .attr('d', path.toString())
-        .attr('fill', 'none')
-        .attr('stroke', lineColor)
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', isDivorced ? '4,4' : 'none');
+        const path = d3.path();
+        path.moveTo(x1, y1);
+        path.quadraticCurveTo(controlX, controlY, x2, y2);
+
+        g.append('path')
+          .attr('d', path.toString())
+          .attr('fill', 'none')
+          .attr('stroke', lineColor)
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', isDivorced ? '4,4' : 'none');
+      });
     });
 
     // Draw nodes
-    const { nodeWidth, nodeHeight } = layoutConfig;
     const allNodeIds = Array.from(nodePositions.keys());
     
     const nodeGroups = g
@@ -314,29 +350,14 @@ const RadialTreeView = ({ data, onPersonClick }) => {
 
       const pos = nodePositions.get(id);
       const depth = pos.depth;
-      const spouseInfo = spouses.get(id);
-      const hasSpouse = !!spouseInfo;
+      const spouseList = spouses.get(id) || [];
+      const hasSpouse = spouseList.length > 0;
       const isDivorced = hasDivorcedRelationship(id);
-      const maritalStatus = spouseInfo?.marital_status || 'married';
-      const isWidowed = maritalStatus === 'widowed';
 
-      // Determine colors based on generation and marital status
+      // Determine colors based on generation
       const levelIndex = Math.min(depth, generationColors.background.length - 1);
-      let backgroundColor = generationColors.background[levelIndex];
-      let borderColor = generationColors.border[levelIndex];
-      
-      if (hasSpouse) {
-        if (isDivorced) {
-          backgroundColor = maritalStatusColors.divorced.background;
-          borderColor = maritalStatusColors.divorced.border;
-        } else if (isWidowed) {
-          backgroundColor = maritalStatusColors.widowed.background;
-          borderColor = maritalStatusColors.widowed.border;
-        } else {
-          backgroundColor = maritalStatusColors.married.background;
-          borderColor = maritalStatusColors.married.border;
-        }
-      }
+      const backgroundColor = generationColors.background[levelIndex];
+      const borderColor = generationColors.border[levelIndex];
 
       // Draw node circle
       group
