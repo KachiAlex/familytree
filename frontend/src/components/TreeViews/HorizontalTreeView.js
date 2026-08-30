@@ -378,9 +378,15 @@ const HorizontalTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
       .attr('fill', 'url(#dotGridHorizontal)');
 
     const g = svg.append('g');
-    const zoom = d3.zoom().on('zoom', (event) => {
-      g.attr('transform', event.transform);
-    });
+    const zoom = d3.zoom()
+      .scaleExtent([0.2, 3])
+      .wheelDelta((event) => {
+        // Normalize trackpad scroll speed
+        return -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode === 2 ? 1 : 0.002) * (event.ctrlKey ? 10 : 1);
+      })
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform);
+      });
     svg.call(zoom);
 
     const xOffset = padding - minX;
