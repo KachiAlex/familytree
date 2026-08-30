@@ -56,7 +56,13 @@ const Home = () => {
       {/* Navigation */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 7 }, py: 3, bgcolor: 'background.default' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <Box component="img" src="/family-tree-icon.svg" alt="Family Tree" sx={{ width: 28, height: 28 }} />
+          <Box sx={{
+            width: 26, height: 26, borderRadius: '6px', bgcolor: '#22345E', position: 'relative', overflow: 'hidden',
+            '&::after': {
+              content: '""', position: 'absolute', inset: 0,
+              background: 'repeating-linear-gradient(45deg, #C7930A 0 3px, transparent 3px 6px)', opacity: 0.5,
+            },
+          }} />
           <Typography variant="h6" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 20 }}>
             Family Tree
           </Typography>
@@ -71,15 +77,31 @@ const Home = () => {
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           <ThemeToggleButton />
           {isAuthenticated ? (
-            <Button variant="contained" onClick={() => navigate('/dashboard')}>
+            <Button
+              variant="contained"
+              onClick={() => navigate('/dashboard')}
+              sx={{
+                bgcolor: '#B8541F', color: '#FFFDF9', fontWeight: 600,
+                boxShadow: '0 3px 0 0 #8a3d15',
+                '&:hover': { bgcolor: '#B8541F', boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+              }}
+            >
               Go to Dashboard
             </Button>
           ) : (
             <>
-              <Button sx={{ color: '#22345E', fontWeight: 600 }} onClick={() => navigate('/login')}>
+              <Button sx={{ color: '#22345E', fontWeight: 600, textTransform: 'none' }} onClick={() => navigate('/login')}>
                 Sign in
               </Button>
-              <Button variant="contained" onClick={() => navigate('/register')}>
+              <Button
+                variant="contained"
+                onClick={() => navigate('/register')}
+                sx={{
+                  bgcolor: '#B8541F', color: '#FFFDF9', fontWeight: 600,
+                  boxShadow: '0 3px 0 0 #8a3d15',
+                  '&:hover': { bgcolor: '#B8541F', boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+                }}
+              >
                 Start your tree
               </Button>
             </>
@@ -104,10 +126,20 @@ const Home = () => {
               Map your lineage across generations and continents. Record clan names, village origins, and the stories only your elders remember — before they're lost.
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, mt: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" onClick={() => navigate('/register')} sx={{ px: 3, py: 1.4 }}>
+              <Button
+                variant="contained"
+                size="large"
+                onClick={() => navigate('/register')}
+                sx={{
+                  bgcolor: '#B8541F', color: '#FFFDF9', fontWeight: 600,
+                  px: 3, py: 1.4,
+                  boxShadow: '0 3px 0 0 #8a3d15',
+                  '&:hover': { bgcolor: '#B8541F', boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+                }}
+              >
                 Create your family tree
               </Button>
-              <Button sx={{ color: '#22345E', fontWeight: 600 }} onClick={() => navigate('/login')}>
+              <Button sx={{ color: '#22345E', fontWeight: 600, textTransform: 'none' }} onClick={() => navigate('/login')}>
                 See how it works →
               </Button>
             </Box>
@@ -239,7 +271,17 @@ const Home = () => {
           Start with one person. The rest of the tree grows from there.
         </Typography>
         {!isAuthenticated && (
-          <Button variant="contained" size="large" onClick={() => navigate('/register')} sx={{ px: 3.75, py: 1.75, fontSize: 15 }}>
+          <Button
+            variant="contained"
+            size="large"
+            onClick={() => navigate('/register')}
+            sx={{
+              bgcolor: '#B8541F', color: '#FFFDF9', fontWeight: 600,
+              px: 3.75, py: 1.75, fontSize: 15,
+              boxShadow: '0 3px 0 0 #8a3d15',
+              '&:hover': { bgcolor: '#B8541F', boxShadow: '0 4px 0 0 #8a3d15', transform: 'translateY(-1px)' },
+            }}
+          >
             Create your family tree
           </Button>
         )}
