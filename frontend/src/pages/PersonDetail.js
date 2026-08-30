@@ -544,8 +544,7 @@ const PersonDetail = () => {
 
   if (loading) {
     return (
-      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
-        <div className="thread-band thin" />
+      <Box sx={{ bgcolor: '#FBF7F0', minHeight: '100vh' }}>
         <Box sx={{ px: { xs: 3, md: 5 }, py: 5 }}>
           <PersonDetailSkeleton />
         </Box>
@@ -555,7 +554,7 @@ const PersonDetail = () => {
 
   if (!person) {
     return (
-      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box sx={{ bgcolor: '#FBF7F0', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Box sx={{ textAlign: 'center' }}>
           <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", mb: 1 }}>Person not found</Typography>
           <Button onClick={() => navigate(-1)} sx={{ color: '#22345E' }}>← Go back</Button>
@@ -580,13 +579,26 @@ const PersonDetail = () => {
   ].filter(Boolean).join(' · ');
 
   return (
-    <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: '#FBF7F0', minHeight: '100vh' }}>
       {/* Top bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 5 }, py: 2.25, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: '#E4D3B0' }}>
-        <Button onClick={() => navigate(-1)} sx={{ color: '#22345E', fontWeight: 600, textTransform: 'none' }}>
-          ← Back to tree
-        </Button>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 4.5 }, py: 2, bgcolor: '#FFFFFF', borderBottom: '1px solid #E7DCC8' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 17 }}>
+          <svg viewBox="0 0 200 200" width="28" height="28">
+            <rect width="200" height="200" rx="44" fill="#22345E" />
+            <line x1="100" y1="150" x2="70" y2="176" stroke="#3A4F82" strokeWidth="4" strokeLinecap="round" />
+            <line x1="100" y1="150" x2="100" y2="180" stroke="#3A4F82" strokeWidth="4" strokeLinecap="round" />
+            <line x1="100" y1="150" x2="130" y2="176" stroke="#3A4F82" strokeWidth="4" strokeLinecap="round" />
+            <line x1="100" y1="150" x2="100" y2="108" stroke="#F1E6D2" strokeWidth="5" strokeLinecap="round" />
+            <line x1="100" y1="120" x2="62" y2="90" stroke="#F1E6D2" strokeWidth="4" strokeLinecap="round" />
+            <line x1="100" y1="120" x2="100" y2="72" stroke="#F1E6D2" strokeWidth="4" strokeLinecap="round" />
+            <line x1="100" y1="120" x2="138" y2="90" stroke="#F1E6D2" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="100" cy="66" r="11" fill="#D79A1E" />
+            <circle cx="62" cy="90" r="8" fill="#3F6644" />
+            <circle cx="138" cy="90" r="8" fill="#3F6644" />
+          </svg>
+          Family Tree
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <Button size="small" startIcon={<PdfIcon />} onClick={async () => {
             try {
               setSnackbar({ open: true, message: 'Generating PDF with photo...', severity: 'info' });
@@ -596,13 +608,13 @@ const PersonDetail = () => {
               console.error('Failed to export PDF:', error);
               setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
             }
-          }} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
+          }} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             Export PDF
           </Button>
-          <Button size="small" startIcon={<PendingActionsIcon />} onClick={() => setPendingChangesOpen(true)} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
+          <Button size="small" startIcon={<PendingActionsIcon />} onClick={() => setPendingChangesOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             Pending
           </Button>
-          <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }} variant="outlined">
+          <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             History
           </Button>
           <Button
@@ -610,38 +622,41 @@ const PersonDetail = () => {
             startIcon={<AutoAwesomeIcon />}
             onClick={() => navigate(`/person/${person.person_id}/wisdom-chat`)}
             sx={{
-              borderColor: '#D8BF92',
-              color: '#5A5042',
+              borderColor: '#EAEEF6',
+              color: '#22345E',
               textTransform: 'none',
-              background: 'linear-gradient(135deg, #FFFDF9 0%, #F4E0D2 100%)',
-              '&:hover': { background: 'linear-gradient(135deg, #FFFDF9 0%, #F1E6D2 100%)' },
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #FBEFD6 100%)',
+              '&:hover': { background: 'linear-gradient(135deg, #FFFFFF 0%, #F7E5D8 100%)' },
             }}
             variant="outlined"
           >
             Wisdom Chat
           </Button>
+          <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: '#22345E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12.5px', fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+            {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+          </Box>
         </Box>
       </Box>
 
-      {/* Thread band */}
-      <div className="thread-band thin" />
-
       {/* Main content */}
-      <Box sx={{ px: { xs: 3, md: 5 }, py: 4 }}>
-        <Grid container spacing={4}>
+      <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4.5 }, maxWidth: 1140, mx: 'auto' }}>
+        <Button onClick={() => navigate(-1)} sx={{ color: '#22345E', fontWeight: 600, textTransform: 'none', fontSize: 13, mb: 2.5, display: 'inline-flex', gap: 0.75, alignItems: 'center' }}>
+          ← Back to tree
+        </Button>
+        <Grid container spacing={3.5}>
           {/* Left column — Profile card */}
           <Grid item xs={12} md={4}>
             <Box sx={{
-              bgcolor: 'background.paper', borderRadius: '14px', overflow: 'hidden',
-              border: '1px solid', borderColor: '#E4D3B0', position: 'relative',
+              bgcolor: '#FFFFFF', borderRadius: '16px', overflow: 'hidden',
+              border: '1px solid #E7DCC8', position: 'sticky', top: 24,
+              boxShadow: '0 12px 28px rgba(28,20,16,.06)',
             }}>
 
               {/* Avatar area */}
               <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', mx: -3, mt: -3, overflow: 'hidden' }}>
                 <Box sx={{
                   width: '100%', aspectRatio: '1 / 1',
-                  bgcolor: 'transparent',
-                  background: 'linear-gradient(135deg, #22345E, #3A4F82)',
+                  bgcolor: '#22345E',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   overflow: 'hidden', position: 'relative',
                 }}>
@@ -649,7 +664,7 @@ const PersonDetail = () => {
                     <Box component="img" src={person.profile_photo_url} alt={person.full_name}
                       sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 56, fontWeight: 600, color: '#FFFDF9' }}>
+                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontSize: 54, fontWeight: 600, color: '#fff' }}>
                       {getInitials(person.full_name)}
                     </Typography>
                   )}
@@ -689,8 +704,8 @@ const PersonDetail = () => {
                       <label htmlFor="profile-picture-upload">
                         <IconButton component="span" sx={{
                           position: 'absolute', bottom: 0, right: 0,
-                          bgcolor: 'background.paper', border: '1px solid', borderColor: '#D8BF92',
-                          width: 32, height: 32, '&:hover': { bgcolor: '#F1E6D2' },
+                          bgcolor: '#FFFFFF', border: '1px solid #E7DCC8',
+                          width: 32, height: 32, '&:hover': { bgcolor: '#F3ECE0' },
                         }} disabled={uploadingProfilePicture}>
                           {uploadingProfilePicture ? <CircularProgress size={16} /> : <PhotoCameraIcon sx={{ fontSize: 16 }} />}
                         </IconButton>
@@ -699,15 +714,13 @@ const PersonDetail = () => {
                   )}
                 </Box>
 
-                <Box className="thread-band thin" sx={{ width: '100%' }} />
-
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, mb: 0.25, mt: 3 }}>
-                  <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 22 }}>
+                  <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 21 }}>
                     {person.full_name}
                   </Typography>
                   {person.verified_by_elder && (
                     <Box sx={{
-                      width: 18, height: 18, borderRadius: '50%', bgcolor: '#3F6644', color: '#FFFDF9',
+                      width: 18, height: 18, borderRadius: '50%', bgcolor: '#3F6644', color: '#fff',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                     }}>
                       <CheckCircleIcon sx={{ fontSize: 10 }} />
@@ -715,7 +728,7 @@ const PersonDetail = () => {
                   )}
                 </Box>
                 {(lifeDates || person.place_of_birth) && (
-                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: '#7A6D5C', px: 3, mb: 2.25 }}>
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: '#8C8171', px: 3, mb: 2.25 }}>
                     {[lifeDates, person.place_of_birth].filter(Boolean).join(' · ')}
                   </Typography>
                 )}
@@ -723,7 +736,7 @@ const PersonDetail = () => {
                 {/* Action buttons */}
                 {canEdit && (
                   <Box sx={{ display: 'flex', gap: 1, px: 3, mt: 1.5, mb: 2.25, flexWrap: 'wrap', width: '100%' }}>
-                    <Button size="small" variant="outlined" onClick={openEdit} sx={{ flex: 1, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
+                    <Button size="small" variant="outlined" onClick={openEdit} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Edit
                     </Button>
                     <Button
@@ -740,17 +753,17 @@ const PersonDetail = () => {
                           setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
                         }
                       }}
-                      sx={{ flex: 1, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12.5, py: 0.75 }}
+                      sx={{ flex: 1, borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12.5, py: 0.75 }}
                     >
                       Export PDF
                     </Button>
-                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.owner_user_id} sx={{ flex: 1, borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
+                    <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.owner_user_id} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Invite
                     </Button>
-                    <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ flex: 1, borderColor: '#D8BF92', color: '#3F6644', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
+                    <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#3F6644', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Verify
                     </Button>
-                    <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteDialogOpen(true)} sx={{ flex: 1, borderColor: '#D8BF92', color: '#B8541F', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
+                    <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteDialogOpen(true)} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#C1622D', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Delete
                     </Button>
                   </Box>
@@ -768,16 +781,16 @@ const PersonDetail = () => {
                 ].filter(row => row.value).map((row, i, arr) => (
                   <Box key={i} sx={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    py: 1.125, borderBottom: i < arr.length - 1 ? '1px solid' : 'none', borderColor: '#F1E6D2',
+                    py: 1.125, borderBottom: i < arr.length - 1 ? '1px solid' : 'none', borderColor: '#F3ECE0',
                   }}>
-                    <Typography sx={{ fontSize: 13, color: '#9C8D77' }}>{row.label}</Typography>
+                    <Typography sx={{ fontSize: 13, color: '#8C8171' }}>{row.label}</Typography>
                     <Typography sx={{ fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{row.value}</Typography>
                   </Box>
                 ))}
 
                 {/* Relationship to you */}
                 <Box sx={{ mt: 2 }}>
-                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1 }}>
+                  <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1 }}>
                     Your relationship
                   </Typography>
                   <TextField
@@ -807,15 +820,15 @@ const PersonDetail = () => {
           {/* Right column — Tabs content */}
           <Grid item xs={12} md={8}>
             {/* Tab bar */}
-            <Box sx={{ display: 'flex', gap: 0.5, borderBottom: '2px solid #E4D3B0', mb: 3 }}>
+            <Box sx={{ display: 'flex', gap: 0.5, borderBottom: '1px solid #E7DCC8', mb: 2.75 }}>
               {['Overview', 'Documents', 'Stories', 'Edit history'].map((tab) => (
                 <Box key={tab} onClick={() => setActiveTab(tab.toLowerCase().replace(' ', '_'))}
                   sx={{
-                    px: 2.5, py: 1.5, cursor: 'pointer',
-                    fontSize: '14px', fontWeight: 500,
-                    color: activeTab === tab.toLowerCase().replace(' ', '_') ? '#1C1410' : '#7A6D5C',
-                    borderBottom: activeTab === tab.toLowerCase().replace(' ', '_') ? '2px solid #B8541F' : '2px solid transparent',
-                    marginBottom: '-2px', transition: 'color 0.15s',
+                    px: 0.5, py: 1.25, mr: 3.25, cursor: 'pointer',
+                    fontSize: '13.5px', fontWeight: 600,
+                    color: activeTab === tab.toLowerCase().replace(' ', '_') ? '#1C1410' : '#8C8171',
+                    borderBottom: activeTab === tab.toLowerCase().replace(' ', '_') ? '2px solid #D79A1E' : '2px solid transparent',
+                    marginBottom: '-1px', transition: 'color 0.15s',
                     '&:hover': { color: '#1C1410' },
                   }}
                 >
@@ -830,13 +843,13 @@ const PersonDetail = () => {
                 {/* Biography */}
                 {person.biography && (
                   <Box sx={{
-                    bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
-                    border: '1px solid', borderColor: '#E4D3B0', mb: 2.5,
+                    bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
+                    border: '1px solid #E7DCC8', mb: 3,
                   }}>
-                    <Typography variant="h4" sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.25 }}>
                       Biography
                     </Typography>
-                    <Typography sx={{ fontSize: '14px', lineHeight: 1.65, color: '#463D34' }}>
+                    <Typography sx={{ fontSize: 14, lineHeight: 1.7, color: '#5C5346' }}>
                       {person.biography}
                     </Typography>
                   </Box>
@@ -844,26 +857,26 @@ const PersonDetail = () => {
 
                 {/* Family relationships */}
                 <Box sx={{
-                  bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
-                  border: '1px solid', borderColor: '#E4D3B0',
+                  bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
+                  border: '1px solid #E7DCC8',
                 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16 }}>
+                    <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16 }}>
                       Family relationships
                     </Typography>
                     <Button size="small" variant="outlined" onClick={() => { setFamilyRelType('parent'); setSelectedFamilyPersonId(''); setAddFamilyOpen(true); }}
-                      sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12 }}>
                       + Add family
                     </Button>
                   </Box>
 
                   {/* Parents */}
                   <Box sx={{ mb: 2.5 }}>
-                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.5 }}>
                       Parents
                     </Typography>
                     {parents.length === 0 ? (
-                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No parents linked yet.</Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#8C8171' }}>No parents linked yet.</Typography>
                     ) : (
                       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {parents.filter(p => p && p.person_id).map((p) => {
@@ -871,15 +884,15 @@ const PersonDetail = () => {
                           if (p.gender === 'male') roleLabel = 'Father';
                           if (p.gender === 'female') roleLabel = 'Mother';
                           return (
-                            <Box key={p.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
+                            <Box key={p.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFFFF', border: '1px solid #E7DCC8', borderRadius: '12px', px: 1.125, py: 1.125, cursor: 'pointer', transition: 'transform .15s ease, box-shadow .15s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 18px rgba(28,20,16,.08)' } }}
                               onClick={() => navigate(`/person/${p.person_id}`)}
                             >
-                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#22345E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                                 {getInitials(p.full_name)}
                               </Box>
                               <Box>
-                                <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{p.full_name}</Typography>
-                                <Typography sx={{ fontSize: '11px', color: '#7A6D5C' }}>{roleLabel}</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{p.full_name}</Typography>
+                                <Typography sx={{ fontSize: 11, color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace" }}>{roleLabel}</Typography>
                               </Box>
                               {canEdit && p.relationship_id && (
                                 <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteRelationship(p.relationship_id, 'parent'); }} sx={{ ml: 0.5, p: 0.25 }}>
@@ -895,26 +908,26 @@ const PersonDetail = () => {
 
                   {/* Spouses */}
                   <Box sx={{ mb: 2.5 }}>
-                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.5 }}>
                       Spouses
                     </Typography>
                     {spouses.length === 0 ? (
-                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No spouses linked yet.</Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#8C8171' }}>No spouses linked yet.</Typography>
                     ) : (
                       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {spouses.filter(s => s && s.person_id).map((s) => {
                           const statusLabels = { married: 'Married', divorced: 'Divorced', widowed: 'Widowed', separated: 'Separated' };
                           const marital = s.marital_status || 'married';
                           return (
-                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', borderLeft: '3px solid #B8541F', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
+                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFFFF', border: '1px solid #E7DCC8', borderRadius: '4px 12px 12px 4px', borderLeft: '3px solid #D79A1E', px: 1.125, py: 1.125, cursor: 'pointer', transition: 'transform .15s ease, box-shadow .15s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 18px rgba(28,20,16,.08)' } }}
                               onClick={() => navigate(`/person/${s.person_id}`)}
                             >
-                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D79A1E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                                 {getInitials(s.full_name)}
                               </Box>
                               <Box>
-                                <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{s.full_name}</Typography>
-                                <Typography sx={{ fontSize: '11px', color: '#22345E' }}>{statusLabels[marital] || 'Married'}</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{s.full_name}</Typography>
+                                <Typography sx={{ fontSize: 11, color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace" }}>{statusLabels[marital] || 'Married'}</Typography>
                               </Box>
                               {canEdit && s.relationship_id && (
                                 <>
@@ -935,21 +948,21 @@ const PersonDetail = () => {
 
                   {/* Children */}
                   <Box sx={{ mb: 2.5 }}>
-                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.5 }}>
                       Children
                     </Typography>
                     {children.length === 0 ? (
-                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No children linked yet.</Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#8C8171' }}>No children linked yet.</Typography>
                     ) : (
                       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {children.filter(c => c && c.person_id).map((c) => (
-                          <Box key={c.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
+                          <Box key={c.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFFFF', border: '1px solid #E7DCC8', borderRadius: '12px', px: 1.125, py: 1.125, cursor: 'pointer', transition: 'transform .15s ease, box-shadow .15s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 18px rgba(28,20,16,.08)' } }}
                             onClick={() => navigate(`/person/${c.person_id}`)}
                           >
-                            <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                            <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#3F6644', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                               {getInitials(c.full_name)}
                             </Box>
-                            <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{c.full_name}</Typography>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{c.full_name}</Typography>
                             {canEdit && c.relationship_id && (
                               <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteRelationship(c.relationship_id, 'child'); }} sx={{ p: 0.25 }}>
                                 <DeleteIcon sx={{ fontSize: 14 }} />
@@ -963,11 +976,11 @@ const PersonDetail = () => {
 
                   {/* Siblings */}
                   <Box>
-                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9C8D77', mb: 1.25 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.5 }}>
                       Siblings
                     </Typography>
                     {siblings.length === 0 ? (
-                      <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>No siblings linked yet.</Typography>
+                      <Typography sx={{ fontSize: '13px', color: '#8C8171' }}>No siblings linked yet.</Typography>
                     ) : (
                       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {siblings.filter(s => s && s.person_id).map((s) => {
@@ -975,15 +988,15 @@ const PersonDetail = () => {
                           if (s.gender === 'male') roleLabel = 'Brother';
                           if (s.gender === 'female') roleLabel = 'Sister';
                           return (
-                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0', borderRadius: '11px', px: 1.125, py: 1.125, cursor: 'pointer', '&:hover': { borderColor: '#D8BF92' } }}
+                            <Box key={s.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.125, bgcolor: '#FFFFFF', border: '1px solid #E7DCC8', borderRadius: '12px', px: 1.125, py: 1.125, cursor: 'pointer', transition: 'transform .15s ease, box-shadow .15s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 18px rgba(28,20,16,.08)' } }}
                               onClick={() => navigate(`/person/${s.person_id}`)}
                             >
-                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#D8BF92', color: '#1C1410', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: '#3A4F82', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
                                 {getInitials(s.full_name)}
                               </Box>
                               <Box>
-                                <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{s.full_name}</Typography>
-                                <Typography sx={{ fontSize: '11px', color: '#7A6D5C' }}>{roleLabel}</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{s.full_name}</Typography>
+                                <Typography sx={{ fontSize: 11, color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace" }}>{roleLabel}</Typography>
                               </Box>
                             </Box>
                           );
@@ -998,22 +1011,22 @@ const PersonDetail = () => {
             {/* Documents tab */}
             {activeTab === 'documents' && (
               <Box sx={{
-                bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
-                border: '1px solid', borderColor: '#E4D3B0',
+                bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
+                border: '1px solid #E7DCC8',
               }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-                  <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16 }}>
+                  <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16 }}>
                     Documents & Photos
                   </Typography>
                   {canEdit && (
                     <Button size="small" variant="outlined" startIcon={<UploadIcon />} onClick={() => setUploadDialogOpen(true)}
-                      sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12 }}>
                       Upload
                     </Button>
                   )}
                 </Box>
                 {documents.length === 0 ? (
-                  <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>
+                  <Typography sx={{ fontSize: '13px', color: '#8C8171' }}>
                     No documents or photos yet. {canEdit && 'Click "Upload" to add photos or documents.'}
                   </Typography>
                 ) : (
@@ -1022,8 +1035,8 @@ const PersonDetail = () => {
                       <Grid item xs={6} sm={4} md={3} key={doc.document_id}>
                         <Box sx={{
                           aspectRatio: '3 / 4', borderRadius: '10px', overflow: 'hidden',
-                          border: '1px solid', borderColor: '#D8BF92', position: 'relative',
-                          cursor: 'pointer', transition: 'transform 0.12s', '&:hover': { transform: 'translateY(-2px)' },
+                          border: '1px solid #E7DCC8', position: 'relative',
+                          cursor: 'pointer', transition: 'transform .15s ease', '&:hover': { transform: 'translateY(-3px)' },
                           display: 'flex', flexDirection: 'column',
                         }} onClick={() => window.open(doc.file_url, '_blank')}>
                           {doc.document_type === 'photo' ? (
@@ -1031,22 +1044,22 @@ const PersonDetail = () => {
                               sx={{ width: '100%', flex: 1, objectFit: 'cover' }}
                             />
                           ) : (
-                            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#E4D3B0' }}>
-                              <Typography sx={{ fontSize: 20, color: '#9C8D77' }}>
+                            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#F3ECE0' }}>
+                              <Typography sx={{ fontSize: 20, color: '#8C8171' }}>
                                 {doc.document_type === 'certificate' ? '📜' : doc.document_type === 'audio' ? '🎵' : doc.document_type === 'video' ? '🎬' : '📄'}
                               </Typography>
                             </Box>
                           )}
-                          <Box sx={{ p: 1, bgcolor: '#FFFDF9' }}>
-                            <Typography sx={{ fontSize: '11px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <Box sx={{ p: 1, bgcolor: '#FFFFFF' }}>
+                            <Typography sx={{ fontSize: '11px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {doc.title || 'Untitled'}
                             </Typography>
-                            <Typography sx={{ fontSize: '10px', color: '#9C8D77', fontFamily: "'IBM Plex Mono', monospace" }}>
+                            <Typography sx={{ fontSize: '10px', color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace" }}>
                               {doc.document_type}
                             </Typography>
                           </Box>
                           {canEdit && (
-                            <IconButton size="small" color="error" sx={{ position: 'absolute', top: 6, right: 6, bgcolor: 'rgba(255,253,249,0.9)' }}
+                            <IconButton size="small" color="error" sx={{ position: 'absolute', top: 6, right: 6, bgcolor: 'rgba(255,255,255,0.9)' }}
                               onClick={async () => {
                                 if (window.confirm('Delete this document?')) {
                                   try {
@@ -1073,22 +1086,22 @@ const PersonDetail = () => {
             {/* Stories tab */}
             {activeTab === 'stories' && (
               <Box sx={{
-                bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
-                border: '1px solid', borderColor: '#E4D3B0',
+                bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
+                border: '1px solid #E7DCC8',
               }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-                  <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16 }}>
+                  <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16 }}>
                     Stories & Oral History
                   </Typography>
                   {canEdit && (
                     <Button size="small" variant="outlined" startIcon={<BookIcon />} onClick={() => setStoryDialogOpen(true)}
-                      sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none', fontSize: 12 }}>
+                      sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12 }}>
                       Add story
                     </Button>
                   )}
                 </Box>
                 {stories.length === 0 ? (
-                  <Typography sx={{ fontSize: '13px', color: '#9C8D77' }}>
+                  <Typography sx={{ fontSize: '13px', color: '#8C8171' }}>
                     No stories yet. {canEdit && 'Click "Add story" to preserve oral history and family stories.'}
                   </Typography>
                 ) : (
@@ -1096,12 +1109,12 @@ const PersonDetail = () => {
                     {stories.map((story) => (
                       <Box key={story.story_id} sx={{
                         mb: 1.5, p: '18px 18px 18px 24px', borderRadius: '12px',
-                        bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0',
+                        bgcolor: '#FBF7F0', border: '1px solid #E7DCC8',
                         position: 'relative',
-                        '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', bgcolor: '#C7930A', borderRadius: '12px 0 0 12px' },
+                        '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', bgcolor: '#3F6644', borderRadius: '12px 0 0 12px' },
                       }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                          <Typography variant="h5" sx={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600 }}>
+                          <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 15 }}>
                             {story.title || 'Untitled Story'}
                           </Typography>
                           {canEdit && (
@@ -1137,18 +1150,18 @@ const PersonDetail = () => {
                           )}
                         </Box>
                         {story.narrator_name && (
-                          <Typography sx={{ fontSize: '12px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
+                          <Typography sx={{ fontSize: '12px', color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
                             Narrator: {story.narrator_name}
                           </Typography>
                         )}
                         {(story.recorded_date || story.location) && (
-                          <Typography sx={{ fontSize: '12px', color: '#7A6D5C', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
+                          <Typography sx={{ fontSize: '12px', color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace", mb: 0.75 }}>
                             {story.recorded_date && formatDate(story.recorded_date)}
                             {story.recorded_date && story.location && ' · '}
                             {story.location}
                           </Typography>
                         )}
-                        <Typography sx={{ fontSize: '14px', lineHeight: 1.65, color: '#463D34', mt: 1, whiteSpace: 'pre-wrap' }}>
+                        <Typography sx={{ fontSize: 14, lineHeight: 1.7, color: '#5C5346', mt: 1, whiteSpace: 'pre-wrap' }}>
                           {story.story_text}
                         </Typography>
                         {story.audio_url && (
@@ -1167,7 +1180,7 @@ const PersonDetail = () => {
                               <Box key={idx} sx={{
                                 fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace",
                                 px: 1, py: 0.375, borderRadius: '20px',
-                                bgcolor: '#E8ECF4', color: '#22345E',
+                                bgcolor: '#EAEEF6', color: '#22345E',
                               }}>
                                 {tag}
                               </Box>
@@ -1184,18 +1197,18 @@ const PersonDetail = () => {
             {/* Edit history tab */}
             {activeTab === 'edit_history' && (
               <Box sx={{
-                bgcolor: 'background.paper', borderRadius: '14px', p: '20px 24px',
-                border: '1px solid', borderColor: '#E4D3B0',
+                bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
+                border: '1px solid #E7DCC8',
                 textAlign: 'center',
               }}>
-                <Typography variant="h4" sx={{ fontFamily: "'Fraunces', serif", fontSize: 16, mb: 1 }}>
+                <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16, mb: 1 }}>
                   Edit history
                 </Typography>
-                <Typography sx={{ fontSize: '13px', color: '#7A6D5C', mb: 2 }}>
+                <Typography sx={{ fontSize: '13px', color: '#8C8171', mb: 2 }}>
                   View all changes made to this person's profile over time.
                 </Typography>
                 <Button variant="outlined" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)}
-                  sx={{ borderColor: '#D8BF92', color: '#5A5042', textTransform: 'none' }}>
+                  sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>
                   Open edit history
                 </Button>
               </Box>
