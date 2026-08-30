@@ -1097,8 +1097,10 @@ const PersonDetail = () => {
                   <Box>
                     {stories.map((story) => (
                       <Box key={story.story_id} sx={{
-                        mb: 2, p: '16px 20px', borderRadius: '12px',
-                        bgcolor: '#FBF6EE', border: '1px solid', borderColor: '#E4D3B0',
+                        mb: 1.5, p: '18px 18px 18px 24px', borderRadius: '12px',
+                        bgcolor: '#FFFDF9', border: '1px solid', borderColor: '#E4D3B0',
+                        position: 'relative',
+                        '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', bgcolor: '#C7930A', borderRadius: '12px 0 0 12px' },
                       }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                           <Typography variant="h5" sx={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600 }}>
