@@ -155,7 +155,7 @@ const PersonDetail = () => {
         await Promise.all([
           fetchFamily(personData.family_id),
           fetchFamilyPersons(personData.family_id, personData.person_id),
-          fetchRelationships(personData, res.data.relationships || []),
+          fetchRelationships(personData),
           fetchDocuments(personData.person_id, personData.family_id),
           fetchStories(personData.person_id, personData.family_id),
         ]);
@@ -208,16 +208,16 @@ const PersonDetail = () => {
     }
   };
 
-  const fetchRelationships = async (personData, preloadedRelationships) => {
+  const fetchRelationships = async (personData) => {
     const familyId = personData.family_id;
     if (!familyId) return;
 
     try {
-      let relationships = preloadedRelationships;
-      if (!relationships || relationships.length === 0) {
-        const res = await api.get(`/relationships/family/${familyId}`);
-        relationships = res.data.relationships || [];
-      }
+      // Always fetch the full family list: the person endpoint only returns
+      // relationships involving this person, but sibling derivation needs
+      // the parents' other children too.
+      const res = await api.get(`/relationships/family/${familyId}`);
+      const relationships = res.data.relationships || [];
 
       const pid = parseInt(personData.person_id);
 
