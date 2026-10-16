@@ -127,6 +127,14 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
       return res.status(400).json({ error: `Invalid fields in pending change: ${invalidFields.join(', ')}` });
     }
 
+    const malformedFields = Object.keys(changes).filter(
+      f => changes[f] === null || typeof changes[f] !== 'object' || !('new' in changes[f])
+    );
+    if (malformedFields.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Malformed change values for fields: ${malformedFields.join(', ')}` });
+    }
+
     // Apply changes to the person
     const updateFields = [];
     const updateValues = [];

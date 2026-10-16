@@ -130,8 +130,8 @@ router.get('/person/:personId/ancestors', requireFamilyAccess, async (req, res) 
         SELECT p.person_id, p.full_name, p.gender, p.date_of_birth, p.date_of_death,
                p.profile_photo_url, a.depth + 1, a.root_id
         FROM persons p
-        JOIN relationships r ON r.person2_id = p.person_id
-        JOIN ancestors a ON r.person1_id = a.person_id
+        JOIN relationships r ON r.person1_id = p.person_id
+        JOIN ancestors a ON r.person2_id = a.person_id
         WHERE r.relationship_type = 'parent' AND a.depth < $2
       )
       SELECT * FROM ancestors ORDER BY depth, date_of_birth`,
@@ -163,8 +163,8 @@ router.get('/person/:personId/descendants', requireFamilyAccess, async (req, res
         SELECT p.person_id, p.full_name, p.gender, p.date_of_birth, p.date_of_death,
                p.profile_photo_url, d.depth + 1, d.root_id
         FROM persons p
-        JOIN relationships r ON r.person1_id = p.person_id
-        JOIN descendants d ON r.person2_id = d.person_id
+        JOIN relationships r ON r.person2_id = p.person_id
+        JOIN descendants d ON r.person1_id = d.person_id
         WHERE r.relationship_type = 'parent' AND d.depth < $2
       )
       SELECT * FROM descendants ORDER BY depth, date_of_birth`,
