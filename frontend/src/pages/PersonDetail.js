@@ -347,6 +347,7 @@ const PersonDetail = () => {
     setEditValues({
       full_name: person.full_name || '',
       gender: person.gender || '',
+      alive_status: person.alive_status !== false,
       date_of_birth: person.date_of_birth || '',
       date_of_death: person.date_of_death || '',
       place_of_birth: person.place_of_birth || '',
@@ -370,45 +371,29 @@ const PersonDetail = () => {
     if (!person || !editValues || !user) return;
     
     try {
-      const isElder = (family && family.created_by_user_id === user.user_id);
-      
-      if (isElder) {
-        const updates = {
-          full_name: editValues.full_name,
-          gender: editValues.gender || null,
-          date_of_birth: editValues.date_of_birth || null,
-          date_of_death: editValues.date_of_death || null,
-          place_of_birth: editValues.place_of_birth || null,
-          occupation: editValues.occupation || null,
-          biography: editValues.biography || null,
-          clan_name: editValues.clan_name || null,
-          village_origin: editValues.village_origin || null,
-        };
-        await api.put(`/persons/${person.person_id}`, updates);
-        
-        setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
+      const updates = {
+        full_name: editValues.full_name,
+        gender: editValues.gender || null,
+        alive_status: editValues.alive_status,
+        date_of_birth: editValues.date_of_birth || null,
+        date_of_death: editValues.date_of_death || null,
+        place_of_birth: editValues.place_of_birth || null,
+        occupation: editValues.occupation || null,
+        biography: editValues.biography || null,
+        clan_name: editValues.clan_name || null,
+        village_origin: editValues.village_origin || null,
+      };
+      const res = await api.put(`/persons/${person.person_id}`, updates);
+
+      if (res.data?.pending) {
         setEditOpen(false);
-        setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
-      } else {
-        // For non-elders, we still submit via API but could route through an approval flow
-        // For now, allow direct edit
-        const updates = {
-          full_name: editValues.full_name,
-          gender: editValues.gender || null,
-          date_of_birth: editValues.date_of_birth || null,
-          date_of_death: editValues.date_of_death || null,
-          place_of_birth: editValues.place_of_birth || null,
-          occupation: editValues.occupation || null,
-          biography: editValues.biography || null,
-          clan_name: editValues.clan_name || null,
-          village_origin: editValues.village_origin || null,
-        };
-        await api.put(`/persons/${person.person_id}`, updates);
-        
-        setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
-        setEditOpen(false);
-        setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
+        setSnackbar({ open: true, message: 'This profile is managed by its account owner — your changes will appear once they confirm them.', severity: 'info' });
+        return;
       }
+
+      setPerson((prev) => (prev ? { ...prev, ...updates } : prev));
+      setEditOpen(false);
+      setSnackbar({ open: true, message: 'Person details updated successfully', severity: 'success' });
     } catch (error) {
       console.error('Failed to save edit:', error);
       setSnackbar({ open: true, message: 'Failed to save changes. Please try again.', severity: 'error' });
@@ -2123,6 +2108,19 @@ const PersonDetail = () => {
                 onChange={handleEditChange}
                 InputLabelProps={{ shrink: true }}
               />
+              <TextField
+                select
+                fullWidth
+                margin="normal"
+                label="Status"
+                name="alive_status"
+                value={editValues.alive_status === false ? 'deceased' : 'living'}
+                onChange={(e) => setEditValues((prev) => ({ ...prev, alive_status: e.target.value === 'living' }))}
+                helperText="Mark as deceased to show the memorial indicator on the tree"
+              >
+                <MenuItem value="living">Living</MenuItem>
+                <MenuItem value="deceased">Deceased</MenuItem>
+              </TextField>
               <TextField
                 fullWidth
                 margin="normal"

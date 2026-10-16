@@ -167,6 +167,58 @@ router.put('/:personId', requireFamilyAccess, async (req, res) => {
       'migration_history', 'verified_by_elder', 'verified_by_user_id'
     ];
 
+    // Claimed profiles: edits by anyone other than the owning account are
+    // converted into pending changes that only the owner can confirm.
+    const currentResult = await pool.query(
+      'SELECT * FROM persons WHERE person_id = $1',
+      [personId]
+    );
+    if (currentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+    const current = currentResult.rows[0];
+
+    if (current.owner_user_id && current.owner_user_id !== req.user.user_id) {
+      const norm = (v) => (v === null || v === undefined || v === '' ? null : String(v).trim());
+      const changes = {};
+      const changedFields = [];
+      for (const field of allowedFields) {
+        if (updates[field] === undefined) continue;
+        if (norm(current[field]) !== norm(updates[field])) {
+          changes[field] = { old: current[field] === undefined ? null : current[field], new: updates[field] };
+          changedFields.push(field);
+        }
+      }
+      if (changedFields.length === 0) {
+        return res.json({ message: 'No changes detected', person: current });
+      }
+
+      const conflictResult = await pool.query(
+        `SELECT pending_change_id, changed_fields FROM pending_changes
+         WHERE person_id = $1 AND status = 'pending'`,
+        [personId]
+      );
+      const conflicts = [];
+      conflictResult.rows.forEach((row) => {
+        if (changedFields.some((f) => (row.changed_fields || []).includes(f))) {
+          conflicts.push(row.pending_change_id);
+        }
+      });
+
+      const pendingResult = await pool.query(
+        `INSERT INTO pending_changes (person_id, family_id, changed_by_user_id, changes, changed_fields, reason, conflicts_with)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [personId, current.family_id, req.user.user_id, JSON.stringify(changes), changedFields, updates.reason || null, conflicts]
+      );
+
+      return res.status(202).json({
+        pending: true,
+        message: 'This profile is managed by its account owner. Your change was submitted for their confirmation.',
+        pendingChange: pendingResult.rows[0]
+      });
+    }
+
     const updateFields = [];
     const values = [];
     let paramCount = 1;

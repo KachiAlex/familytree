@@ -111,6 +111,18 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
     }
 
     const pendingChange = pcResult.rows[0];
+
+    // Claimed profiles: only the owning account may confirm changes
+    const ownerResult = await client.query(
+      'SELECT owner_user_id FROM persons WHERE person_id = $1',
+      [pendingChange.person_id]
+    );
+    const ownerUserId = ownerResult.rows[0]?.owner_user_id;
+    if (ownerUserId && ownerUserId !== req.user.user_id) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Only the account owner can confirm changes to this claimed profile' });
+    }
+
     const changes = pendingChange.changes;
 
     // Validate field names before applying to prevent SQL injection
@@ -207,6 +219,30 @@ router.post('/pending/:pendingChangeId/reject', requireFamilyAccess, async (req,
   try {
     const { pendingChangeId } = req.params;
     const { rejection_reason } = req.body;
+
+    const pcResult = await pool.query(
+      `SELECT person_id, changed_by_user_id FROM pending_changes
+       WHERE pending_change_id = $1 AND status = 'pending'`,
+      [pendingChangeId]
+    );
+    if (pcResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Pending change not found or already resolved' });
+    }
+
+    // Claimed profiles: only the owning account (or the submitter withdrawing
+    // their own proposal) may reject
+    const ownerResult = await pool.query(
+      'SELECT owner_user_id FROM persons WHERE person_id = $1',
+      [pcResult.rows[0].person_id]
+    );
+    const ownerUserId = ownerResult.rows[0]?.owner_user_id;
+    if (
+      ownerUserId &&
+      ownerUserId !== req.user.user_id &&
+      req.user.user_id !== pcResult.rows[0].changed_by_user_id
+    ) {
+      return res.status(403).json({ error: 'Only the account owner can reject changes to this claimed profile' });
+    }
 
     const result = await pool.query(
       `UPDATE pending_changes 
