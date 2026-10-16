@@ -27,6 +27,8 @@ import api from '../services/api';
 import { exportPersonProfileToPDF } from '../utils/pdfExport';
 import { compressImage } from '../utils/imageCompression';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
 import PendingChangesDialog from '../components/PendingChangesDialog';
 import EditHistoryDialog from '../components/EditHistoryDialog';
@@ -36,6 +38,7 @@ import { getPendingChanges } from '../utils/editHistory';
 
 const PersonDetail = () => {
   const { personId } = useParams();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [person, setPerson] = useState(null);
@@ -65,6 +68,7 @@ const PersonDetail = () => {
   const [deleting, setDeleting] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [inviteResult, setInviteResult] = useState(null);
@@ -676,9 +680,10 @@ const PersonDetail = () => {
             <circle cx="62" cy="90" r="8" fill="#3F6644" />
             <circle cx="138" cy="90" r="8" fill="#3F6644" />
           </svg>
-          Family Tree
+          {t('app.name')}
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <LanguageSwitcher />
           <Button size="small" startIcon={<PdfIcon />} onClick={async () => {
             try {
               setSnackbar({ open: true, message: 'Generating PDF with photo...', severity: 'info' });
@@ -689,19 +694,19 @@ const PersonDetail = () => {
               setSnackbar({ open: true, message: 'Failed to export PDF. Please try again.', severity: 'error' });
             }
           }} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
-            Export PDF
+            {t('person.exportPdf')}
           </Button>
           <Button size="small" startIcon={<PendingActionsIcon />} onClick={() => setPendingChangesOpen(true)} sx={{ borderColor: pendingCount > 0 ? '#C25E10' : '#EAEEF6', color: pendingCount > 0 ? '#C25E10' : '#22345E', textTransform: 'none' }} variant="outlined">
-            Pending{pendingCount > 0 ? ` (${pendingCount})` : ''}
+            {t('person.pending')}{pendingCount > 0 ? ` (${pendingCount})` : ''}
           </Button>
           <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
-            History
+            {t('person.history')}
           </Button>
           <Button size="small" onClick={() => { setKinshipOpen(true); setKinshipResult(null); setKinshipTarget(''); }} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
-            How Related?
+            {t('person.howRelated')}
           </Button>
           <Button size="small" onClick={() => setInterviewOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
-            Interview
+            {t('person.interview')}
           </Button>
           <Button
             size="small"
@@ -716,7 +721,7 @@ const PersonDetail = () => {
             }}
             variant="outlined"
           >
-            Wisdom Chat
+            {t('person.wisdomChat')}
           </Button>
           <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: '#22345E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12.5px', fontWeight: 600, fontFamily: "'Fraunces', serif" }}>
             {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
@@ -727,7 +732,7 @@ const PersonDetail = () => {
       {/* Main content */}
       <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4.5 }, maxWidth: 1140, mx: 'auto' }}>
         <Button onClick={() => navigate(-1)} sx={{ color: '#22345E', fontWeight: 600, textTransform: 'none', fontSize: 13, mb: 2.5, display: 'inline-flex', gap: 0.75, alignItems: 'center' }}>
-          ← Back to tree
+          ← {t('common.back')}
         </Button>
         <Grid container spacing={3.5}>
           {/* Left column — Profile card */}
@@ -861,16 +866,16 @@ const PersonDetail = () => {
                       }}
                       sx={{ flex: 1, borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12.5, py: 0.75 }}
                     >
-                      Export PDF
+                      {t('person.exportPdf')}
                     </Button>
                     <Button size="small" variant="outlined" startIcon={<EmailIcon />} onClick={() => setInviteDialogOpen(true)} disabled={!!person.owner_user_id} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
-                      Invite
+                      {t('person.inviteClaim')}
                     </Button>
                     <Button size="small" variant="outlined" startIcon={<CheckCircleIcon />} onClick={() => setSnackbar({ open: true, message: 'Elder verification feature coming soon', severity: 'info' })} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#3F6644', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
                       Verify
                     </Button>
                     <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteDialogOpen(true)} sx={{ flex: 1, borderColor: '#EAEEF6', color: '#C1622D', textTransform: 'none', fontSize: 12.5, py: 0.75 }}>
-                      Delete
+                      {t('common.delete')}
                     </Button>
                   </Box>
                 )}
@@ -883,7 +888,7 @@ const PersonDetail = () => {
                   { label: 'Clan', value: person.clan_name },
                   { label: 'Village', value: person.village_origin },
                   { label: 'Occupation', value: person.occupation },
-                  { label: 'Status', value: person.alive_status ? 'Living' : 'Deceased' },
+                  { label: t('person.status'), value: person.alive_status ? t('person.living') : t('person.deceased') },
                 ].filter(row => row.value).map((row, i, arr) => (
                   <Box key={i} sx={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -972,7 +977,7 @@ const PersonDetail = () => {
                     </Typography>
                     <Button size="small" variant="outlined" onClick={() => { setFamilyRelType('parent'); setSelectedFamilyPersonId(''); setAddFamilyOpen(true); }}
                       sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', fontSize: 12 }}>
-                      + Add family
+                      + {t('person.addFamily')}
                     </Button>
                   </Box>
 
@@ -1877,23 +1882,32 @@ const PersonDetail = () => {
         setInviteEmail('');
         setInviteResult(null);
       }} fullWidth maxWidth="sm">
-        <DialogTitle>Invite to Claim Account</DialogTitle>
+        <DialogTitle>{t('invite.title')}</DialogTitle>
         <DialogContent>
           {!inviteSuccess ? (
             <>
               <DialogContentText sx={{ mb: 2 }}>
-                Send an invitation to <strong>{person?.full_name}</strong> to claim their profile. 
-                They will receive a link to sign up and claim this account.
+                {t('invite.description', { name: person?.full_name })}
               </DialogContentText>
               <TextField
                 fullWidth
                 margin="normal"
-                label="Email Address"
+                label={t('invite.email')}
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="Enter their email address"
                 helperText="They'll get a claim link by email, or you can copy and share it yourself"
+              />
+              <TextField
+                fullWidth
+                margin="normal"
+                label={t('invite.phone')}
+                type="tel"
+                value={invitePhone}
+                onChange={(e) => setInvitePhone(e.target.value)}
+                placeholder="e.g. 08031234567 or +2348031234567"
+                helperText={t('invite.phoneHelper')}
               />
             </>
           ) : (
@@ -1901,7 +1915,7 @@ const PersonDetail = () => {
               <DialogContentText sx={{ mb: 2, textAlign: 'center' }} component="div">
                 <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 2 }} />
                 <Typography variant="h6" gutterBottom>
-                  {inviteResult?.email_sent ? 'Invitation Email Sent!' : 'Invitation Created!'}
+                  {inviteResult?.email_sent ? t('invite.sent') : t('invite.created')}
                 </Typography>
                 {inviteResult?.email_sent ? (
                   <>
@@ -1930,10 +1944,20 @@ const PersonDetail = () => {
                       sx={{ mt: 1 }}
                       onClick={() => navigator.clipboard.writeText(inviteResult?.invitationLink || '')}
                     >
-                      Copy Link
+                      {t('invite.copyLink')}
                     </Button>
+                    {inviteResult?.whatsappLink && (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        sx={{ mt: 1, ml: 1, bgcolor: '#25D366', '&:hover': { bgcolor: '#1eb856' } }}
+                        onClick={() => window.open(inviteResult.whatsappLink, '_blank')}
+                      >
+                        {t('invite.shareWhatsApp')}
+                      </Button>
+                    )}
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                      The link expires in 7 days.
+                      {t('invite.expires')}
                     </Typography>
                   </>
                 )}
@@ -1949,7 +1973,7 @@ const PersonDetail = () => {
                 setInviteEmail('');
                 setInviteResult(null);
               }} disabled={inviteSending}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 onClick={async () => {
@@ -1965,6 +1989,7 @@ const PersonDetail = () => {
                   try {
                     const res = await api.post(`/families/${person.family_id}/invite`, {
                       email: inviteEmail.trim().toLowerCase(),
+                      phone: invitePhone.trim() || undefined,
                       person_id: person.person_id,
                       person_name: person.full_name,
                     });
@@ -1982,7 +2007,7 @@ const PersonDetail = () => {
                 disabled={!inviteEmail || inviteSending}
                 startIcon={<EmailIcon />}
               >
-                {inviteSending ? 'Creating...' : 'Create Invitation'}
+                {inviteSending ? t('invite.creating') : t('invite.create')}
               </Button>
             </>
           ) : (
@@ -2184,14 +2209,14 @@ const PersonDetail = () => {
                 select
                 fullWidth
                 margin="normal"
-                label="Status"
+                label={t('person.status')}
                 name="alive_status"
                 value={editValues.alive_status === false ? 'deceased' : 'living'}
                 onChange={(e) => setEditValues((prev) => ({ ...prev, alive_status: e.target.value === 'living' }))}
                 helperText="Mark as deceased to show the memorial indicator on the tree"
               >
-                <MenuItem value="living">Living</MenuItem>
-                <MenuItem value="deceased">Deceased</MenuItem>
+                <MenuItem value="living">{t('person.living')}</MenuItem>
+                <MenuItem value="deceased">{t('person.deceased')}</MenuItem>
               </TextField>
               <TextField
                 fullWidth

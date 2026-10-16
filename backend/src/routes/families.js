@@ -4,6 +4,7 @@ const { authenticateToken, requireFamilyAccess } = require('../middleware/auth')
 const { checkResourceLimit, getFamilyUsageInfo } = require('../middleware/tierLimits');
 const { getTierLimits } = require('../config/tiers');
 const { isMailConfigured, sendInvitationEmail } = require('../utils/mailer');
+const { isWhatsAppConfigured, whatsappShareLink, sendWhatsAppText } = require('../utils/whatsapp');
 const crypto = require('crypto');
 
 const router = express.Router();
@@ -295,11 +296,27 @@ router.post('/:familyId/invite', requireFamilyAccess, checkResourceLimit('member
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const claimLink = `${frontendUrl}/claim/${token}`;
+    const inviteText = `You've been invited to join ${context.family_name || 'our family'} on African Family Tree${context.person_name ? ` and claim the profile of ${context.person_name}` : ''}. Claim your profile here: ${claimLink}`;
+
+    // WhatsApp: deep link always works (inviter taps to share). If the Cloud
+    // API is configured and a phone number was provided, also send directly.
+    let whatsappSent = false;
+    if (isWhatsAppConfigured() && phone) {
+      try {
+        const wa = await sendWhatsAppText({ to: phone, text: inviteText });
+        whatsappSent = wa.sent;
+      } catch (waError) {
+        console.error('Failed to send WhatsApp invitation:', waError.message);
+      }
+    }
 
     res.json({
-      message: emailSent ? 'Invitation sent successfully' : 'Invitation created successfully',
+      message: emailSent || whatsappSent ? 'Invitation sent successfully' : 'Invitation created successfully',
       email_sent: emailSent,
-      invitationLink: `${frontendUrl}/claim/${token}`
+      whatsapp_sent: whatsappSent,
+      invitationLink: claimLink,
+      whatsappLink: whatsappShareLink(phone, inviteText)
     });
   } catch (error) {
     console.error('Error sending invitation:', error);

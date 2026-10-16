@@ -42,6 +42,8 @@ import api from '../services/api';
 import { exportFamilyTreeToPDF } from '../utils/pdfExport';
 import { exportGEDCOM, parseGEDCOM } from '../utils/gedcomExport';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import { isProfileComplete } from '../utils/profileUtils';
 import VerticalTreeView from '../components/TreeViews/VerticalTreeView';
 import HorizontalTreeView from '../components/TreeViews/HorizontalTreeView';
@@ -55,6 +57,7 @@ import ActivityFeedDialog from '../components/ActivityFeedDialog';
 
 const FamilyTree = () => {
   const { familyId } = useParams();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [treeData, setTreeData] = useState(null);
@@ -599,13 +602,13 @@ const FamilyTree = () => {
         </Typography>
 
         <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8C8171', m: '14px 8px 8px' }}>
-          Structure
+          {t('tree.structure')}
         </Typography>
         {[
-          { label: 'Vertical', value: 'vertical', icon: '↓' },
-          { label: 'Horizontal', value: 'horizontal', icon: '→' },
-          { label: 'Radial', value: 'radial', icon: '◎' },
-          { label: '3D view', value: '3d', icon: '◈' },
+          { label: t('tree.viewVertical'), value: 'vertical', icon: '↓' },
+          { label: t('tree.viewHorizontal'), value: 'horizontal', icon: '→' },
+          { label: t('tree.viewRadial'), value: 'radial', icon: '◎' },
+          { label: t('tree.view3d'), value: '3d', icon: '◈' },
         ].map((tab) => (
           <Button key={tab.value} onClick={() => setViewType(tab.value)}
             sx={{
@@ -624,11 +627,11 @@ const FamilyTree = () => {
         ))}
 
         <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8C8171', m: '14px 8px 8px' }}>
-          Chronology
+          {t('tree.chronology')}
         </Typography>
         {[
-          { label: 'Timeline', value: 'timeline', icon: '▤' },
-          { label: 'Migration map', value: 'map', icon: '⛝' },
+          { label: t('tree.timeline'), value: 'timeline', icon: '▤' },
+          { label: t('tree.migrationMap'), value: 'map', icon: '⛝' },
         ].map((tab) => (
           <Button key={tab.value} onClick={() => setViewType(tab.value)}
             sx={{
@@ -647,22 +650,22 @@ const FamilyTree = () => {
         ))}
 
         <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#8C8171', m: '14px 8px 8px' }}>
-          Manage
+          {t('tree.manage')}
         </Typography>
         <Button onClick={(e) => setExportMenuAnchor(e.currentTarget)}
           sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#5C5346', '&:hover': { bgcolor: '#F3ECE0' }, textTransform: 'none', minWidth: 0 }}>
           <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⇩</Box>
-          Export tree
+          {t('tree.exportTree')}
         </Button>
         <Button onClick={() => setGedcomImportOpen(true)}
           sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#5C5346', '&:hover': { bgcolor: '#F3ECE0' }, textTransform: 'none', minWidth: 0 }}>
           <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⇧</Box>
-          Import GEDCOM
+          {t('tree.importGedcom')}
         </Button>
         <Button onClick={() => navigate(`/family/${familyId}/settings`)}
           sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25, borderRadius: '10px', fontSize: '13.5px', fontWeight: 500, textAlign: 'left', width: '100%', color: '#5C5346', '&:hover': { bgcolor: '#F3ECE0' }, textTransform: 'none', minWidth: 0 }}>
           <Box component="span" sx={{ width: 18, textAlign: 'center', fontSize: 14 }}>⚙</Box>
-          Settings
+          {t('tree.settings')}
         </Button>
       </Box>
 
@@ -699,7 +702,7 @@ const FamilyTree = () => {
             <Typography sx={{ fontSize: '13.5px', color: '#8C8171', flex: 1 }}>
               {searchQuery || clanFilter || villageFilter
                 ? `${searchQuery || ''} ${clanFilter ? `| Clan: ${clanFilter}` : ''} ${villageFilter ? `| Village: ${villageFilter}` : ''}`
-                : 'Search people…'}
+                : t('tree.searchPeople')}
             </Typography>
             {searchFiltersExpanded ? <ExpandLessIcon sx={{ fontSize: 18 }} /> : <ExpandMoreIcon sx={{ fontSize: 18 }} />}
           </Box>
@@ -710,18 +713,19 @@ const FamilyTree = () => {
               fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.625, py: 0.75, borderRadius: '20px',
               bgcolor: '#fff', border: '1px solid #E7DCC8', color: '#5C5346', cursor: 'pointer',
             }}>
-              Clan: {clanFilter || 'any'} ▾
+              {t('tree.clan')}: {clanFilter || t('tree.any')} ▾
             </Box>
             <Box onClick={() => setSearchFiltersExpanded(true)} sx={{
               fontSize: '12.5px', fontFamily: "'IBM Plex Mono', monospace", px: 1.625, py: 0.75, borderRadius: '20px',
               bgcolor: '#fff', border: '1px solid #E7DCC8', color: '#5C5346', cursor: 'pointer',
             }}>
-              Village: {villageFilter || 'any'} ▾
+              {t('tree.village')}: {villageFilter || t('tree.any')} ▾
             </Box>
           </Box>
 
           {/* Action buttons */}
-          <Box sx={{ display: 'flex', gap: 1.25 }}>
+          <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center' }}>
+            <LanguageSwitcher />
             <IconButton onClick={(e) => setRelationshipAnchor(e.currentTarget)} sx={{
               width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
               bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },

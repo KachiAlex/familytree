@@ -25,6 +25,8 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import api from '../services/api';
 
 const Logo = () => (
@@ -56,6 +58,7 @@ const Dashboard = () => {
   const [deleting, setDeleting] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const { user, logout, loading: authLoading } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const fetchFamilies = useCallback(async (showRetry = false) => {
@@ -170,9 +173,10 @@ const Dashboard = () => {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 3, md: 4.5 }, py: 2, bgcolor: '#FFFFFF', borderBottom: '1px solid #E7DCC8' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 17 }}>
           <Logo />
-          Family Tree
+          {t('app.name')}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75 }}>
+          <LanguageSwitcher />
           <IconButton onClick={handleMenuOpen} sx={{ p: 0 }}>
             <Box sx={{
               width: 36, height: 36, borderRadius: '50%', bgcolor: '#22345E', color: '#fff',
@@ -185,7 +189,7 @@ const Dashboard = () => {
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
             <MenuItem disabled>{user?.full_name}</MenuItem>
             <MenuItem onClick={handleLogout}>
-              <LogoutIcon sx={{ mr: 1 }} /> Logout
+              <LogoutIcon sx={{ mr: 1 }} /> {t('nav.logout')}
             </MenuItem>
           </Menu>
         </Box>
@@ -196,10 +200,10 @@ const Dashboard = () => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 4, flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 32 }}>
-              Your families
+              {t('dashboard.yourFamilies')}
             </Typography>
             <Typography sx={{ color: '#5C5346', fontSize: 14, mt: 0.75 }}>
-              Every tree you belong to, in one place.
+              {t('dashboard.subtitle')}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1.25 }}>
@@ -210,7 +214,7 @@ const Dashboard = () => {
               disabled={retrying || loading}
               sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none', '&:hover': { borderColor: '#3A4F82' } }}
             >
-              Refresh
+              {t('dashboard.refresh')}
             </Button>
             <Button
               variant="contained"
@@ -221,7 +225,7 @@ const Dashboard = () => {
                 '&:hover': { bgcolor: '#22345E', transform: 'translateY(-2px)' },
               }}
             >
-              + New family
+              + {t('dashboard.newFamily')}
             </Button>
           </Box>
         </Box>
@@ -251,10 +255,10 @@ const Dashboard = () => {
         ) : families.length === 0 ? (
           <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7DCC8', p: 6, textAlign: 'center' }}>
             <Typography sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, mb: 1 }}>
-              No family trees yet
+              {t('dashboard.noFamilies')}
             </Typography>
             <Typography sx={{ color: '#5C5346' }}>
-              Create your first family tree to get started
+              {t('dashboard.createFirst')}
             </Typography>
           </Box>
         ) : (
@@ -309,9 +313,9 @@ const Dashboard = () => {
                         fontSize: '11.5px', color: '#8C8171', borderTop: '1px dashed #E7DCC8', pt: 1.75,
                       }}>
                         {[
-                          { label: 'members', value: family.person_count || 0 },
-                          { label: 'generations', value: family.generation_count || 0 },
-                          { label: 'stories', value: family.story_count || 0 },
+                          { label: t('dashboard.members'), value: family.person_count || 0 },
+                          { label: t('dashboard.generations'), value: family.generation_count || 0 },
+                          { label: t('dashboard.stories'), value: family.story_count || 0 },
                         ].map((stat, i) => (
                           <Box key={i}>
                             <Typography sx={{ color: '#1C1410', fontFamily: "'Work Sans', sans-serif", fontWeight: 700, fontSize: 16, display: 'block' }}>
@@ -331,7 +335,7 @@ const Dashboard = () => {
                             disabled={deleting}
                             sx={{ fontSize: 12, textTransform: 'none', color: '#C1622D' }}
                           >
-                            Delete
+                            {t('common.delete')}
                           </Button>
                         </Box>
                       )}
@@ -361,7 +365,7 @@ const Dashboard = () => {
                   +
                 </Box>
                 <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
-                  Start a new family tree
+                  {t('dashboard.startNew')}
                 </Typography>
               </Box>
             </Grid>
@@ -388,18 +392,16 @@ const Dashboard = () => {
         PaperProps={{ sx: { borderRadius: '16px' } }}
       >
         <DialogTitle id="delete-dialog-title" sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
-          Delete Family Tree?
+          {t('dashboard.deleteFamily')}
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to permanently delete <strong>{familyToDelete?.family_name}</strong>?
-            This will delete all persons, relationships, documents, stories, and other data associated with this family tree.
-            This action cannot be undone.
+            {t('dashboard.deleteFamilyWarning', { name: familyToDelete?.family_name })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={handleDeleteCancel} disabled={deleting} variant="outlined" sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleDeleteConfirm}
@@ -409,7 +411,7 @@ const Dashboard = () => {
             startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
             sx={{ bgcolor: '#C1622D', textTransform: 'none' }}
           >
-            {deleting ? 'Deleting...' : 'Delete'}
+            {deleting ? t('dashboard.deleting') : t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>
