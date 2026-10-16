@@ -113,6 +113,16 @@ async function createTables(pool) {
     `);
 
     await addColumnIfNotExists('persons', 'owner_user_id', 'INTEGER REFERENCES users(user_id)');
+    await addColumnIfNotExists('relationships', 'marital_status', "VARCHAR(20) DEFAULT 'married'");
+
+    // Backfill marital_status from legacy data stored in notes
+    await client.query(`
+      UPDATE relationships
+      SET marital_status = notes
+      WHERE relationship_type = 'spouse'
+        AND marital_status = 'married'
+        AND notes IN ('divorced', 'widowed', 'separated')
+    `);
 
     // Relationships table (graph structure)
     await client.query(`
@@ -122,6 +132,8 @@ async function createTables(pool) {
         person2_id INTEGER REFERENCES persons(person_id) ON DELETE CASCADE,
         relationship_type VARCHAR(50) NOT NULL,
         -- Types: 'parent', 'spouse', 'sibling', 'cousin', 'uncle_aunt', 'in_law'
+        marital_status VARCHAR(20) DEFAULT 'married',
+        -- For spouse relationships: 'married', 'divorced', 'widowed', 'separated'
         verified BOOLEAN DEFAULT false,
         verified_by_user_id INTEGER REFERENCES users(user_id),
         notes TEXT,

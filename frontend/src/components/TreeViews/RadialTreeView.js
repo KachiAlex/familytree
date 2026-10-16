@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import * as d3 from 'd3';
 import { Box, Paper, Typography, Divider, Chip } from '@mui/material';
-import { 
-  generationColors, 
-  generationLabels, 
+import {
+  generationColors,
+  generationLabels,
   layoutConfig,
-  treeStyles 
+  treeStyles,
+  isDeceased,
+  deceasedStyle
 } from '../../config/treeConfig';
 
 const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
@@ -446,11 +448,14 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
       const spouseList = spouses.get(id) || [];
       const hasSpouse = spouseList.length > 0;
       const isDivorced = hasDivorcedRelationship(id);
+      const isDead = isDeceased(person.data);
+      const isVerified = person.data?.verified_by_elder === true;
+      const isUnclaimed = !person.data?.owner_user_id;
 
       // Determine colors based on generation
       const levelIndex = Math.min(depth, generationColors.background.length - 1);
-      const backgroundColor = generationColors.background[levelIndex];
-      const borderColor = generationColors.border[levelIndex];
+      const backgroundColor = isDead ? deceasedStyle.fill : generationColors.background[levelIndex];
+      const borderColor = isDead ? deceasedStyle.border : generationColors.border[levelIndex];
 
       // Add focus indicator if this is the focal person
       if (id === focalPersonId) {
@@ -464,7 +469,7 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
           .attr('stroke-dasharray', '4,2');
       }
 
-      // Draw node circle
+      // Draw node circle (dashed border for unclaimed profiles)
       group
         .append('circle')
         .attr('cx', 0)
@@ -472,7 +477,38 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
         .attr('r', circleRadius)
         .attr('fill', person.data?.profile_photo_url ? `url(#avatar-r-${id})` : backgroundColor)
         .attr('stroke', borderColor)
-        .attr('stroke-width', 2);
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', isUnclaimed ? '3,3' : 'none');
+
+      // Deceased marker (†) at top-right
+      if (isDead) {
+        group
+          .append('text')
+          .attr('x', circleRadius - 2)
+          .attr('y', -circleRadius + 10)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '15px')
+          .attr('font-weight', '700')
+          .attr('fill', deceasedStyle.badgeColor)
+          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
+          .text('†')
+          .style('pointer-events', 'none');
+      }
+
+      // Elder-verified marker (✓) at top-left
+      if (isVerified) {
+        group
+          .append('text')
+          .attr('x', -circleRadius + 2)
+          .attr('y', -circleRadius + 10)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '13px')
+          .attr('font-weight', '700')
+          .attr('fill', '#D79A1E')
+          .attr('transform', `rotate(${(pos.angle * 180 / Math.PI)})`)
+          .text('✓')
+          .style('pointer-events', 'none');
+      }
 
       // Add spouse indicator bar
       if (hasSpouse) {
@@ -647,6 +683,34 @@ const RadialTreeView = ({ data, onPersonClick, onSetFocalPerson }) => {
             />
             <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
               Relationship
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+            <Box sx={{ width: 24, height: 2, borderTop: `2px dashed ${treeStyles.lineColor}`, mr: 1.5, flexShrink: 0 }} />
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Divorced / separated
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: deceasedStyle.badgeColor, width: 24, textAlign: 'center', mr: 1.5, flexShrink: 0 }}>†</Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Deceased
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#D79A1E', width: 24, textAlign: 'center', mr: 1.5, flexShrink: 0 }}>✓</Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Verified by elder
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+            <Box sx={{ width: 18, height: 18, border: '1.5px dashed #94A7C9', borderRadius: '50%', mr: 1.5, flexShrink: 0 }} />
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: treeStyles.textSoftColor }}>
+              Profile not yet claimed
             </Typography>
           </Box>
         </Paper>

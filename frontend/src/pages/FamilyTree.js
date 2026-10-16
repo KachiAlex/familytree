@@ -137,7 +137,7 @@ const FamilyTree = () => {
             type: 'spouse',
             verified: e.verified || false,
             label: 'spouse',
-            marital_status: 'married',
+            marital_status: e.marital_status || 'married',
           };
         }
         return {

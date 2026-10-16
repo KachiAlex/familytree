@@ -3,9 +3,11 @@ import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Text, Line } from '@react-three/drei';
 import { Box } from '@mui/material';
 import * as THREE from 'three';
-import { 
-  generationColors, 
-  treeStyles 
+import {
+  generationColors,
+  treeStyles,
+  isDeceased,
+  deceasedStyle
 } from '../../config/treeConfig';
 
 // Person node component
@@ -58,11 +60,14 @@ function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
     }
   });
 
-  // Color based on depth
+  const isDead = isDeceased(person.data || person);
+
+  // Color based on depth (greyed out for deceased)
   const color = useMemo(() => {
+    if (isDead) return deceasedStyle.fill;
     const levelIndex = Math.min(depth, generationColors.background.length - 1);
     return generationColors.background[levelIndex];
-  }, [depth]);
+  }, [depth, isDead]);
 
   return (
     <group position={position}>
@@ -106,7 +111,7 @@ function PersonNode({ position, person, onClick, depth = 0, isFocal }) {
           textAlign="center"
           fontWeight="bold"
         >
-          {(person.traditional_title ? person.traditional_title.toUpperCase() + "\n" : "") + (person.full_name || person.label || 'Unknown')}
+          {(isDead ? '† ' : '') + (person.traditional_title ? person.traditional_title.toUpperCase() + "\n" : "") + (person.full_name || person.label || 'Unknown')}
         </Text>
         {person.date_of_birth && (
           <Text

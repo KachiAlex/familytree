@@ -291,7 +291,7 @@ const PersonDetail = () => {
           ...pData,
           person_id: spouseId,
           relationship_id: r.relationship_id,
-          marital_status: r.notes || 'married', // Use notes for marital status fallback
+          marital_status: r.marital_status || (['married', 'divorced', 'widowed', 'separated'].includes(r.notes) ? r.notes : 'married'),
         };
       });
       setSpouses(spousePersons.filter((s) => s && s.person_id));
@@ -490,6 +490,7 @@ const PersonDetail = () => {
           person1_id: person.person_id,
           person2_id: targetPersonId,
           relationship_type: 'spouse',
+          marital_status: maritalStatus,
         });
       } else {
         // parent-child relationship
@@ -538,7 +539,7 @@ const PersonDetail = () => {
     
     try {
       await api.put(`/relationships/${editingSpouseRel.relationship_id}`, {
-        notes: editingMaritalStatus,
+        marital_status: editingMaritalStatus,
       });
       
       await fetchRelationships(person);

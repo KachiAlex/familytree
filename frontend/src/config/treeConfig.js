@@ -123,3 +123,21 @@ export const getMaritalStatusColor = (status) => {
   return maritalStatusColors[status] || maritalStatusColors.single;
 };
 
+/**
+ * Check if a person is deceased (alive_status false OR date_of_death set)
+ * @param {Object} personData - person.data from a tree node, or a person record
+ * @returns {boolean}
+ */
+export const isDeceased = (personData) => {
+  if (!personData) return false;
+  if (personData.alive_status === false) return true;
+  return Boolean(personData.date_of_death);
+};
+
+// Indicator styling for deceased nodes
+export const deceasedStyle = {
+  fill: '#B0B7BF',       // muted grey fill (when no profile photo)
+  border: '#6B7280',     // grey border
+  badgeColor: '#4B5563', // † marker color
+};
+

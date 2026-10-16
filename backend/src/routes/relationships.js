@@ -34,7 +34,8 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
 router.post('/', [
   body('person1_id').isInt(),
   body('person2_id').isInt(),
-  body('relationship_type').isIn(['parent', 'spouse', 'sibling', 'cousin', 'uncle_aunt', 'in_law'])
+  body('relationship_type').isIn(['parent', 'spouse', 'sibling', 'cousin', 'uncle_aunt', 'in_law']),
+  body('marital_status').optional().isIn(['married', 'divorced', 'widowed', 'separated', 'single'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -42,7 +43,7 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { person1_id, person2_id, relationship_type, notes } = req.body;
+    const { person1_id, person2_id, relationship_type, notes, marital_status } = req.body;
 
     if (person1_id === person2_id) {
       return res.status(400).json({ error: 'A person cannot have a relationship with themselves' });
@@ -89,10 +90,11 @@ router.post('/', [
     // For parent relationships: person1_id = parent, person2_id = child (order matters)
     // For other types (spouse, sibling, etc.): order doesn't matter, store as-is
     const result = await pool.query(
-      `INSERT INTO relationships (person1_id, person2_id, relationship_type, notes, verified_by_user_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO relationships (person1_id, person2_id, relationship_type, notes, marital_status, verified_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [person1_id, person2_id, relationship_type, notes || null, req.user.user_id]
+      [person1_id, person2_id, relationship_type, notes || null,
+       relationship_type === 'spouse' ? (marital_status || 'married') : null, req.user.user_id]
     );
 
     res.status(201).json({
@@ -112,16 +114,17 @@ router.post('/', [
 router.put('/:relationshipId', requireFamilyAccess, async (req, res) => {
   try {
     const { relationshipId } = req.params;
-    const { verified, notes } = req.body;
+    const { verified, notes, marital_status } = req.body;
 
     const result = await pool.query(
       `UPDATE relationships 
        SET verified = COALESCE($1, verified),
            notes = COALESCE($2, notes),
+           marital_status = COALESCE($3, marital_status),
            updated_at = CURRENT_TIMESTAMP
-       WHERE relationship_id = $3
+       WHERE relationship_id = $4
        RETURNING *`,
-      [verified, notes, relationshipId]
+      [verified, notes, marital_status, relationshipId]
     );
 
     if (result.rows.length === 0) {

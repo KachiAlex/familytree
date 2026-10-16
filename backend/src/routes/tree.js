@@ -15,7 +15,7 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
     const personsResult = await pool.query(
       `SELECT person_id, full_name, gender, date_of_birth, date_of_death,
               alive_status, profile_photo_url, place_of_birth, occupation,
-              biography, clan_name, village_origin
+              biography, clan_name, village_origin, verified_by_elder, owner_user_id
        FROM persons 
        WHERE family_id = $1
        ORDER BY date_of_birth ASC NULLS LAST`,
@@ -25,7 +25,7 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
     // Get all relationships
     const relationshipsResult = await pool.query(
       `SELECT r.relationship_id, r.person1_id, r.person2_id, r.relationship_type,
-              r.verified, r.notes
+              r.marital_status, r.verified, r.notes
        FROM relationships r
        JOIN persons p1 ON r.person1_id = p1.person_id
        JOIN persons p2 ON r.person2_id = p2.person_id
@@ -48,6 +48,7 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
       target: rel.person2_id.toString(),
       type: rel.relationship_type,
       verified: rel.verified,
+      marital_status: rel.marital_status || 'married',
       label: rel.relationship_type
     }));
 
