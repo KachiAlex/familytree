@@ -5,6 +5,7 @@ const { checkResourceLimit } = require('../middleware/tierLimits');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const { uploadToR2 } = require('../utils/s3');
+const { notifyProfileOwnerOfPendingChange } = require('../utils/pendingNotify');
 const router = express.Router();
 
 const IMAGE_MIME_TYPES = new Set([
@@ -212,6 +213,14 @@ router.put('/:personId', requireFamilyAccess, async (req, res) => {
         [personId, current.family_id, req.user.user_id, JSON.stringify(changes), changedFields, updates.reason || null, conflicts]
       );
 
+      await notifyProfileOwnerOfPendingChange({
+        ownerUserId: current.owner_user_id,
+        personId,
+        personName: current.full_name,
+        changerName: req.user.full_name || req.user.email,
+        summary: `Profile edit: ${changedFields.join(', ')}`,
+      });
+
       return res.status(202).json({
         pending: true,
         message: 'This profile is managed by its account owner. Your change was submitted for their confirmation.',
@@ -268,6 +277,42 @@ router.put('/:personId', requireFamilyAccess, async (req, res) => {
 router.delete('/:personId', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
+
+    // Claimed profiles: deletion by anyone other than the owning account is
+    // a pending change that only the owner can confirm.
+    const personResult = await pool.query(
+      'SELECT * FROM persons WHERE person_id = $1',
+      [personId]
+    );
+    if (personResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+    const target = personResult.rows[0];
+
+    if (target.owner_user_id && target.owner_user_id !== req.user.user_id) {
+      const pendingResult = await pool.query(
+        `INSERT INTO pending_changes (person_id, family_id, changed_by_user_id, changes, changed_fields, reason, change_type, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, 'delete', NULL)
+         RETURNING *`,
+        [personId, target.family_id, req.user.user_id,
+         JSON.stringify({ profile: { old: 'Active', new: 'Delete profile' } }),
+         ['delete'], req.body?.reason || null]
+      );
+
+      await notifyProfileOwnerOfPendingChange({
+        ownerUserId: target.owner_user_id,
+        personId,
+        personName: target.full_name,
+        changerName: req.user.full_name || req.user.email,
+        summary: 'Requested deletion of this profile',
+      });
+
+      return res.status(202).json({
+        pending: true,
+        message: 'This profile is managed by its account owner. The deletion was submitted for their confirmation.',
+        pendingChange: pendingResult.rows[0]
+      });
+    }
 
     const result = await pool.query(
       'DELETE FROM persons WHERE person_id = $1 RETURNING person_id',

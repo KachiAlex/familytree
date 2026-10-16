@@ -29,6 +29,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
 import PendingChangesDialog from '../components/PendingChangesDialog';
 import EditHistoryDialog from '../components/EditHistoryDialog';
+import { getPendingChanges } from '../utils/editHistory';
 
 const PersonDetail = () => {
   const { personId } = useParams();
@@ -99,6 +100,7 @@ const PersonDetail = () => {
     village_origin: '',
   });
   const [pendingChangesOpen, setPendingChangesOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -158,6 +160,7 @@ const PersonDetail = () => {
           fetchRelationships(personData),
           fetchDocuments(personData.person_id, personData.family_id),
           fetchStories(personData.person_id, personData.family_id),
+          fetchPendingCount(personData.person_id),
         ]);
       }
     } catch (error) {
@@ -165,6 +168,15 @@ const PersonDetail = () => {
       setPerson(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPendingCount = async (pid) => {
+    try {
+      const changes = await getPendingChanges(pid);
+      setPendingCount(changes.length);
+    } catch (error) {
+      console.error('Failed to fetch pending changes count:', error);
     }
   };
 
@@ -445,8 +457,8 @@ const PersonDetail = () => {
       const newPersonId = res.data.person.person_id;
 
       // Now create the relationship based on the selected type
-      await handleAddFamilyRelationship(newPersonId);
-      
+      const relResult = await handleAddFamilyRelationship(newPersonId);
+
       // Refresh data
       await fetchFamilyPersons(person.family_id, person.person_id);
       await fetchRelationships(person);
@@ -465,7 +477,12 @@ const PersonDetail = () => {
       setAddNewPersonOpen(false);
       setAddFamilyOpen(false);
       setSiblingParentIds([]);
-      setSnackbar({ open: true, message: 'New family member added and linked successfully', severity: 'success' });
+      if (relResult?.pending) {
+        setPendingCount((c) => c + 1);
+        setSnackbar({ open: true, message: 'Member created — the relationship will appear once the profile owner confirms it.', severity: 'info' });
+      } else {
+        setSnackbar({ open: true, message: 'New family member added and linked successfully', severity: 'success' });
+      }
     } catch (error) {
       console.error('Failed to create new person:', error);
       const apiMsg = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg;
@@ -477,43 +494,49 @@ const PersonDetail = () => {
     if (!person || !targetPersonId) return;
     try {
       if (familyRelType === 'spouse') {
-        await api.post('/relationships', {
+        const res = await api.post('/relationships', {
           person1_id: person.person_id,
           person2_id: targetPersonId,
           relationship_type: 'spouse',
           marital_status: maritalStatus,
         });
+        if (res.data?.pending) return res.data;
       } else if (familyRelType === 'sibling') {
         // Siblings are derived from shared parents: link the new person
         // as a child of each selected shared parent. A link that already
         // exists is skipped so partial states still complete.
         let lastError = null;
         let linked = 0;
+        let anyPending = false;
         for (const parentId of siblingParentIds) {
           try {
-            await api.post('/relationships', {
+            const res = await api.post('/relationships', {
               person1_id: parentId,
               person2_id: targetPersonId,
               relationship_type: 'parent',
             });
+            if (res.data?.pending) { anyPending = true; continue; }
             linked++;
           } catch (err) {
             lastError = err;
             if (err.response?.status !== 400) throw err;
           }
         }
-        if (linked === 0 && lastError) throw lastError;
+        if (linked === 0 && !anyPending && lastError) throw lastError;
+        if (anyPending) return { pending: true };
       } else {
         // parent-child relationship
         const parentId = familyRelType === 'parent' ? targetPersonId : person.person_id;
         const childId = familyRelType === 'parent' ? person.person_id : targetPersonId;
-        await api.post('/relationships', {
+        const res = await api.post('/relationships', {
           person1_id: parentId,
           person2_id: childId,
           relationship_type: 'parent',
         });
+        if (res.data?.pending) return res.data;
       }
       await fetchRelationships(person);
+      return null;
     } catch (error) {
       console.error('Failed to add family relationship:', error);
       throw error;
@@ -568,7 +591,15 @@ const PersonDetail = () => {
 
     setDeleting(true);
     try {
-      await api.delete(`/persons/${person.person_id}`);
+      const res = await api.delete(`/persons/${person.person_id}`);
+
+      if (res.data?.pending) {
+        setDeleteDialogOpen(false);
+        setDeleting(false);
+        setPendingCount((c) => c + 1);
+        setSnackbar({ open: true, message: 'This profile is managed by its account owner — the deletion was submitted for their confirmation.', severity: 'info' });
+        return;
+      }
 
       // Redirect to family tree
       navigate(`/family/${person.family_id}/tree`);
@@ -651,8 +682,8 @@ const PersonDetail = () => {
           }} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             Export PDF
           </Button>
-          <Button size="small" startIcon={<PendingActionsIcon />} onClick={() => setPendingChangesOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
-            Pending
+          <Button size="small" startIcon={<PendingActionsIcon />} onClick={() => setPendingChangesOpen(true)} sx={{ borderColor: pendingCount > 0 ? '#C25E10' : '#EAEEF6', color: pendingCount > 0 ? '#C25E10' : '#22345E', textTransform: 'none' }} variant="outlined">
+            Pending{pendingCount > 0 ? ` (${pendingCount})` : ''}
           </Button>
           <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             History
@@ -1593,12 +1624,17 @@ const PersonDetail = () => {
             onClick={async () => {
               if (!person || !selectedFamilyPersonId) return;
               try {
-                await handleAddFamilyRelationship(selectedFamilyPersonId);
+                const result = await handleAddFamilyRelationship(selectedFamilyPersonId);
                 setAddFamilyOpen(false);
                 setSelectedFamilyPersonId('');
                 setMaritalStatus('married'); // Reset marital status
                 setSiblingParentIds([]);
-                setSnackbar({ open: true, message: 'Family relationship added successfully', severity: 'success' });
+                if (result?.pending) {
+                  setPendingCount((c) => c + 1);
+                  setSnackbar({ open: true, message: 'Submitted — this will appear once the profile owner confirms it.', severity: 'info' });
+                } else {
+                  setSnackbar({ open: true, message: 'Family relationship added successfully', severity: 'success' });
+                }
               } catch (error) {
                 console.error('Failed to add family relationship:', error);
                 const apiMsg = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg;

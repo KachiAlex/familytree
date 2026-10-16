@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../db/connection');
 const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
+const { notifyProfileOwnerOfPendingChange } = require('../utils/pendingNotify');
 const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
@@ -85,6 +86,43 @@ router.post('/', [
 
     if (existingResult.rows.length > 0) {
       return res.status(400).json({ error: 'Relationship already exists' });
+    }
+
+    // If either person's profile is claimed by an account other than the
+    // requester, the relationship is information about them — it becomes a
+    // pending change that only the owning account can confirm.
+    const partyResult = await pool.query(
+      'SELECT person_id, full_name, owner_user_id FROM persons WHERE person_id = ANY($1)',
+      [[person1_id, person2_id]]
+    );
+    const claimed = partyResult.rows.find(
+      (row) => row.owner_user_id && row.owner_user_id !== req.user.user_id
+    );
+    if (claimed) {
+      const other = partyResult.rows.find((row) => row.person_id !== claimed.person_id);
+      const pendingResult = await pool.query(
+        `INSERT INTO pending_changes (person_id, family_id, changed_by_user_id, changes, changed_fields, reason, change_type, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, 'relationship', $7)
+         RETURNING *`,
+        [claimed.person_id, family1, req.user.user_id,
+         JSON.stringify({ relationship: { old: null, new: `${relationship_type} — ${other?.full_name || 'another person'}` } }),
+         ['relationship'], notes || null,
+         JSON.stringify({ person1_id, person2_id, relationship_type, marital_status, notes })]
+      );
+
+      await notifyProfileOwnerOfPendingChange({
+        ownerUserId: claimed.owner_user_id,
+        personId: claimed.person_id,
+        personName: claimed.full_name,
+        changerName: req.user.full_name || req.user.email,
+        summary: `New ${relationship_type} link to ${other?.full_name || 'another person'}`,
+      });
+
+      return res.status(202).json({
+        pending: true,
+        message: `${claimed.full_name}'s profile is managed by its account owner. This relationship was submitted for their confirmation.`,
+        pendingChange: pendingResult.rows[0]
+      });
     }
 
     // For parent relationships: person1_id = parent, person2_id = child (order matters)

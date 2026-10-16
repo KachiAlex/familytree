@@ -114,6 +114,30 @@ async function createTables(pool) {
 
     await addColumnIfNotExists('persons', 'owner_user_id', 'INTEGER REFERENCES users(user_id)');
     await addColumnIfNotExists('relationships', 'marital_status', "VARCHAR(20) DEFAULT 'married'");
+    await addColumnIfNotExists('pending_changes', 'change_type', "TEXT DEFAULT 'fields'");
+    await addColumnIfNotExists('pending_changes', 'payload', 'JSONB');
+
+    // edit_history is an audit trail: keep records when a person is deleted
+    // by nulling the FK instead of cascading the row away.
+    await client.query(`
+      DO $$
+      DECLARE cname TEXT;
+      BEGIN
+        SELECT con.conname INTO cname
+        FROM pg_constraint con
+        JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+        WHERE con.conrelid = 'edit_history'::regclass
+          AND con.confrelid = 'persons'::regclass
+          AND att.attname = 'person_id'
+          AND con.contype = 'f'
+          AND con.confdeltype <> 'n';
+        IF cname IS NOT NULL THEN
+          EXECUTE format('ALTER TABLE edit_history DROP CONSTRAINT %I', cname);
+          ALTER TABLE edit_history
+            ADD FOREIGN KEY (person_id) REFERENCES persons(person_id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `);
 
     // Backfill marital_status from legacy data stored in notes
     await client.query(`
