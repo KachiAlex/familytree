@@ -23,7 +23,8 @@ import {
   Collapse, 
   Paper, 
   Drawer, 
-  Chip
+  Chip,
+  CircularProgress
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -37,6 +38,7 @@ import {
   History as HistoryIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
+  Favorite as FavoriteIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
 import { exportFamilyTreeToPDF } from '../utils/pdfExport';
@@ -64,6 +66,9 @@ const FamilyTree = () => {
   const [viewType, setViewType] = useState('vertical');
   const [loading, setLoading] = useState(true);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const [health, setHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [clanFilter, setClanFilter] = useState('');
@@ -738,6 +743,18 @@ const FamilyTree = () => {
             }}>
               <FileDownloadIcon sx={{ fontSize: 16 }} />
             </IconButton>
+            <IconButton onClick={async () => {
+              setHealthOpen(true); setHealthLoading(true);
+              try {
+                const res = await api.get(`/families/${familyId}/health`);
+                setHealth(res.data);
+              } catch (e) { setHealth(null); } finally { setHealthLoading(false); }
+            }} title="Tree health" sx={{
+              width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
+              bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
+            }}>
+              <FavoriteIcon sx={{ fontSize: 16 }} />
+            </IconButton>
             <IconButton onClick={() => setActivityOpen(true)} title="Family activity" sx={{
               width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
               bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
@@ -1034,6 +1051,69 @@ const FamilyTree = () => {
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
       />
+
+      {/* Tree Health Dialog */}
+      <Dialog open={healthOpen} onClose={() => setHealthOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Tree health</DialogTitle>
+        <DialogContent>
+          {healthLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          ) : !health ? (
+            <Typography color="text.secondary">Could not load health report.</Typography>
+          ) : (
+            <>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5, mb: 2.5 }}>
+                {[
+                  ['Members', health.completeness.total],
+                  ['No birth date', health.completeness.missing_birth_date],
+                  ['No photo', health.completeness.missing_photo],
+                  ['No village', health.completeness.missing_village],
+                  ['Unclaimed', health.completeness.unclaimed],
+                  ['No biography', health.completeness.missing_biography],
+                ].map(([label, val]) => (
+                  <Box key={label} sx={{ bgcolor: '#FBF7F0', border: '1px solid #E7DCC8', borderRadius: '10px', p: 1.5, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: 20, fontWeight: 700, color: '#22345E' }}>{val}</Typography>
+                    <Typography sx={{ fontSize: 11, color: '#8C8171', fontFamily: "'IBM Plex Mono', monospace" }}>{label}</Typography>
+                  </Box>
+                ))}
+              </Box>
+
+              {health.isolated.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography sx={{ fontWeight: 600, fontSize: 13.5, mb: 0.75 }}>Not linked to anyone ({health.isolated.length})</Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {health.isolated.map((p) => (
+                      <Chip key={p.person_id} label={p.full_name} size="small" variant="outlined"
+                        onClick={() => { setHealthOpen(false); navigate(`/person/${p.person_id}`); }} clickable />
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {health.duplicates.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontWeight: 600, fontSize: 13.5, mb: 0.75 }}>Possible duplicates</Typography>
+                  {health.duplicates.map((d) => (
+                    <Box key={d.norm_name} sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 0.75, alignItems: 'center' }}>
+                      {d.persons.map((p) => (
+                        <Chip key={p.person_id} label={p.full_name} size="small" color="warning" variant="outlined"
+                          onClick={() => { setHealthOpen(false); navigate(`/person/${p.person_id}`); }} clickable />
+                      ))}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+
+              {health.isolated.length === 0 && health.duplicates.length === 0 && (
+                <Typography variant="body2" color="text.secondary">No structural issues found — the tree is well-connected.</Typography>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setHealthOpen(false)} sx={{ textTransform: 'none' }}>{t('common.close')}</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Profile Completion Dialog */}
       <Dialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)} PaperProps={{ sx: { borderRadius: '16px' } }}>

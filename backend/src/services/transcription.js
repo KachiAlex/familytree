@@ -1,7 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const { getGeminiModel } = require('../utils/gemini');
 
 // Gemini inline-data limit is ~20MB; keep headroom.
 const MAX_INLINE_BYTES = 18 * 1024 * 1024;
@@ -15,7 +12,7 @@ async function transcribeAudio(buffer, mimetype) {
   if (!process.env.GEMINI_API_KEY || !buffer || buffer.length === 0) return null;
   if (buffer.length > MAX_INLINE_BYTES) return null;
 
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const model = getGeminiModel();
   const result = await model.generateContent([
     {
       inlineData: {

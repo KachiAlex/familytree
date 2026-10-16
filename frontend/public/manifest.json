@@ -1,0 +1,19 @@
+{
+  "name": "African Family Tree",
+  "short_name": "Family Tree",
+  "description": "Preserve your family lineage and oral history",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FBF7F0",
+  "theme_color": "#22345E",
+  "icons": [
+    {
+      "src": "/family-tree-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

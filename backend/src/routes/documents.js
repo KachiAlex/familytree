@@ -158,6 +158,32 @@ router.get('/person/:personId', requireFamilyAccess, async (req, res) => {
   }
 });
 
+// Extract genealogical fields from a document image with Gemini vision.
+// Returns proposed field values — the client reviews and applies via
+// PUT /persons/:id, so claimed-profile gating is preserved automatically.
+router.post('/:documentId/extract', requireFamilyAccess, async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { rows } = await pool.query(
+      'SELECT document_id, person_id, file_url, mime_type, title FROM documents WHERE document_id = $1',
+      [documentId]
+    );
+    const doc = rows[0];
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    if (!doc.person_id) return res.status(400).json({ error: 'Document is not linked to a person' });
+
+    const { extractDocumentFields } = require('../services/documentOcr');
+    const extracted = await extractDocumentFields(doc.file_url, doc.mime_type);
+    if (!extracted) {
+      return res.status(422).json({ error: 'Could not extract details from this document type' });
+    }
+    res.json({ person_id: doc.person_id, ...extracted });
+  } catch (error) {
+    console.error('Error extracting document fields:', error.message);
+    res.status(500).json({ error: 'Failed to extract details from document' });
+  }
+});
+
 // List face tags on a document
 router.get('/:documentId/faces', requireFamilyAccess, async (req, res) => {
   try {

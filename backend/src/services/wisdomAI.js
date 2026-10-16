@@ -1,9 +1,5 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { pool } = require('../db/connection');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const { getGeminiModel } = require('../utils/gemini');
 
 /**
  * Retrieve relevant stories for a person based on keyword matching.
@@ -134,8 +130,7 @@ Guidelines:
  * Generate a wisdom response using Gemini.
  */
 async function generateWisdomResponse(person, stories, conversationHistory, userQuestion) {
-  const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
+  const model = getGeminiModel({
     systemInstruction: buildSystemPrompt(person, stories),
     generationConfig: {
       temperature: 0.7,
@@ -171,5 +166,5 @@ async function generateWisdomResponse(person, stories, conversationHistory, user
 module.exports = {
   retrieveRelevantStories,
   generateWisdomResponse,
-  MODEL_NAME,
+  MODEL_NAME: require('../utils/gemini').MODEL_NAME,
 };

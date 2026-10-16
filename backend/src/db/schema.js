@@ -297,6 +297,17 @@ async function createTables(pool) {
       )
     `);
 
+    // Weekly digest log — dedupes digest sends per recipient/ISO week
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS digest_log (
+        user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+        family_id INTEGER REFERENCES families(family_id) ON DELETE CASCADE,
+        iso_week VARCHAR(10) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, family_id, iso_week)
+      )
+    `);
+
     // Password reset tokens (hashed; single-use; 1 hour expiry)
     await client.query(`
       CREATE TABLE IF NOT EXISTS password_resets (

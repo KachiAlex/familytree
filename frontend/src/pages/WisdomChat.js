@@ -19,7 +19,12 @@ import {
   AutoAwesome as AutoAwesomeIcon,
   DeleteOutline as DeleteIcon,
   Lightbulb as LightbulbIcon,
+  Mic as MicIcon,
+  MicOff as MicOffIcon,
+  VolumeUp as VolumeUpIcon,
+  VolumeOff as VolumeOffIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 
 const SUGGESTED_QUESTIONS = [
@@ -33,8 +38,10 @@ const SUGGESTED_QUESTIONS = [
 
 const WisdomChat = () => {
   const { personId } = useParams();
+  const { i18n } = useTranslation();
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   const [person, setPerson] = useState(null);
   const [availability, setAvailability] = useState(null);
@@ -43,6 +50,58 @@ const WisdomChat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [listening, setListening] = useState(false);
+  const [voiceReplies, setVoiceReplies] = useState(true);
+
+  const speechSupported = typeof window !== 'undefined' &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+  // Speak assistant replies when voice mode is on — pick a voice matching
+  // the app language where the browser offers one.
+  const speak = (text) => {
+    if (!voiceReplies || !ttsSupported) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const lang = (i18n.language || 'en').split('-')[0];
+    const voices = window.speechSynthesis.getVoices();
+    const match = voices.find((v) => v.lang.toLowerCase().startsWith(lang));
+    if (match) utterance.voice = match;
+    utterance.lang = match ? match.lang : 'en-US';
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleListening = () => {
+    if (!speechSupported) return;
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new Recognition();
+    recognition.lang = i18n.language || 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      let transcript = '';
+      let isFinal = false;
+      for (const res of event.results) {
+        transcript += res[0].transcript;
+        if (res.isFinal) isFinal = true;
+      }
+      setInput(transcript);
+      if (isFinal && transcript.trim()) {
+        setListening(false);
+        handleSend(transcript);
+      }
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  };
 
   useEffect(() => {
     fetchAvailability();
@@ -100,6 +159,7 @@ const WisdomChat = () => {
         created_at: res.data.createdAt,
       };
       setMessages((prev) => [...prev, aiMsg]);
+      speak(res.data.message);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to get response. Please try again.');
       // Remove the optimistic user message on error
@@ -204,6 +264,13 @@ const WisdomChat = () => {
             </Typography>
           </Box>
         </Box>
+        {ttsSupported && (
+          <Tooltip title={voiceReplies ? 'Mute spoken replies' : 'Speak replies aloud'}>
+            <IconButton onClick={() => { setVoiceReplies(!voiceReplies); if (voiceReplies) window.speechSynthesis.cancel(); }} size="small">
+              {voiceReplies ? <VolumeUpIcon /> : <VolumeOffIcon />}
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Clear conversation">
           <IconButton onClick={handleClearHistory} size="small" disabled={messages.length === 0}>
             <DeleteIcon />
@@ -370,6 +437,23 @@ const WisdomChat = () => {
             size="small"
             disabled={sending}
           />
+          {speechSupported && (
+            <Tooltip title={listening ? 'Stop listening' : 'Speak your question'}>
+              <IconButton
+                onClick={toggleListening}
+                disabled={sending}
+                sx={{
+                  color: listening ? '#fff' : 'primary.main',
+                  bgcolor: listening ? 'error.main' : 'transparent',
+                  '&:hover': { bgcolor: listening ? 'error.dark' : 'action.hover' },
+                  animation: listening ? 'pulse 1.5s infinite' : 'none',
+                  '@keyframes pulse': { '50%': { opacity: 0.6 } },
+                }}
+              >
+                {listening ? <MicOffIcon /> : <MicIcon />}
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton
             color="primary"
             onClick={() => handleSend()}

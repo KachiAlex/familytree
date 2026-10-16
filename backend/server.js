@@ -180,6 +180,7 @@ initializeDatabase()
       console.log(`🚀 Server running on ${HOST}:${PORT}`);
       console.log(`📊 API available at http://localhost:${PORT}/api`);
       require('./src/jobs/anniversaries').startAnniversaryJob();
+      require('./src/jobs/weeklyDigest').startDigestJob();
     });
   })
   .catch((error) => {

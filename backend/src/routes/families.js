@@ -399,5 +399,51 @@ router.delete('/:familyId', async (req, res) => {
   }
 });
 
+// Tree health: completeness stats + data-quality hints for the family
+router.get('/:familyId/health', requireFamilyAccess, async (req, res) => {
+  try {
+    const { familyId } = req.params;
+
+    const { rows: [completeness] } = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE date_of_birth IS NULL)::int AS missing_birth_date,
+         COUNT(*) FILTER (WHERE profile_photo_url IS NULL OR profile_photo_url = '')::int AS missing_photo,
+         COUNT(*) FILTER (WHERE village_origin IS NULL OR village_origin = '')::int AS missing_village,
+         COUNT(*) FILTER (WHERE owner_user_id IS NULL)::int AS unclaimed,
+         COUNT(*) FILTER (WHERE biography IS NULL OR biography = '')::int AS missing_biography
+       FROM persons WHERE family_id = $1`,
+      [familyId]
+    );
+
+    // Persons with no relationships at all
+    const { rows: isolated } = await pool.query(
+      `SELECT p.person_id, p.full_name
+       FROM persons p
+       WHERE p.family_id = $1
+         AND NOT EXISTS (SELECT 1 FROM relationships r WHERE r.person1_id = p.person_id OR r.person2_id = p.person_id)
+       ORDER BY p.full_name LIMIT 20`,
+      [familyId]
+    );
+
+    // Possible duplicates: same normalized name within the family
+    const { rows: duplicates } = await pool.query(
+      `SELECT LOWER(TRIM(full_name)) AS norm_name,
+              json_agg(json_build_object('person_id', person_id, 'full_name', full_name)) AS persons
+       FROM persons
+       WHERE family_id = $1
+       GROUP BY LOWER(TRIM(full_name))
+       HAVING COUNT(*) > 1
+       LIMIT 20`,
+      [familyId]
+    );
+
+    res.json({ completeness, isolated, duplicates });
+  } catch (error) {
+    console.error('Error computing family health:', error);
+    res.status(500).json({ error: 'Failed to compute tree health' });
+  }
+});
+
 module.exports = router;
 

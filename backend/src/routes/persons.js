@@ -647,5 +647,66 @@ router.get('/:personId/kinship/:otherId', requireFamilyAccess, async (req, res) 
   }
 });
 
+// Generate a narrative biography from recorded facts + stories via Gemini.
+// Returns draft text — the client previews it and applies through the normal
+// PUT route, so claimed-profile owner-confirmation still applies.
+router.post('/:personId/generate-bio', requireFamilyAccess, async (req, res) => {
+  try {
+    const { personId } = req.params;
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: 'Biography generation is not configured' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT person_id, family_id, full_name, gender, date_of_birth, date_of_death,
+              alive_status, place_of_birth, occupation, biography, clan_name, village_origin
+       FROM persons WHERE person_id = $1`,
+      [personId]
+    );
+    const person = rows[0];
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const { rows: rels } = await pool.query(
+      `SELECT r.relationship_type, p.full_name, p.gender
+       FROM relationships r
+       JOIN persons p ON p.person_id = CASE WHEN r.person1_id = $1 THEN r.person2_id ELSE r.person1_id END
+       WHERE r.person1_id = $1 OR r.person2_id = $1`,
+      [personId]
+    );
+
+    const { rows: stories } = await pool.query(
+      `SELECT title, story_text FROM stories
+       WHERE person_id = $1 AND story_text IS NOT NULL AND story_text <> ''
+       ORDER BY created_at DESC LIMIT 8`,
+      [personId]
+    );
+
+    const { getGeminiModel } = require('../utils/gemini');
+    const model = getGeminiModel();
+
+    const facts = [
+      `Name: ${person.full_name}`,
+      person.gender && `Gender: ${person.gender}`,
+      person.date_of_birth && `Born: ${person.date_of_birth}`,
+      person.place_of_birth && `Place of birth: ${person.place_of_birth}`,
+      person.date_of_death && `Died: ${person.date_of_death}`,
+      person.occupation && `Occupation: ${person.occupation}`,
+      person.clan_name && `Clan: ${person.clan_name}`,
+      person.village_origin && `Village of origin: ${person.village_origin}`,
+      rels.length && `Family: ${rels.slice(0, 12).map((r) => `${r.full_name} (${r.relationship_type})`).join(', ')}`,
+      stories.length && `Recorded stories: ${stories.map((s) => `"${s.title || 'Untitled'}": ${String(s.story_text).slice(0, 300)}`).join(' | ')}`,
+    ].filter(Boolean).join('\n');
+
+    const result = await model.generateContent(
+      `Write a respectful 2-3 paragraph narrative biography for this family member, honoring African oral-tradition storytelling. Use only the facts below; do not invent events. Where facts are sparse, lean on the recorded stories. Plain prose, no headings.\n\n${facts}`
+    );
+
+    res.json({ biography: result.response.text().trim(), sources: { relatives: rels.length, stories: stories.length } });
+  } catch (error) {
+    console.error('Error generating biography:', error.message);
+    res.status(500).json({ error: 'Failed to generate biography' });
+  }
+});
+
 module.exports = router;
 

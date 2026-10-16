@@ -112,6 +112,10 @@ const PersonDetail = () => {
   const [kinshipOpen, setKinshipOpen] = useState(false);
   const [interviewOpen, setInterviewOpen] = useState(false);
   const [faceTagDoc, setFaceTagDoc] = useState(null);
+  const [extractDoc, setExtractDoc] = useState(null);
+  const [extractResult, setExtractResult] = useState(null);
+  const [extractLoading, setExtractLoading] = useState(false);
+  const [bioDialog, setBioDialog] = useState({ open: false, text: '', loading: false });
   const [kinshipTarget, setKinshipTarget] = useState('');
   const [kinshipResult, setKinshipResult] = useState(null);
   const [kinshipLoading, setKinshipLoading] = useState(false);
@@ -952,19 +956,42 @@ const PersonDetail = () => {
             {activeTab === 'overview' && (
               <Box>
                 {/* Biography */}
-                {person.biography && (
-                  <Box sx={{
-                    bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
-                    border: '1px solid #E7DCC8', mb: 3,
-                  }}>
-                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171', mb: 1.25 }}>
+                <Box sx={{
+                  bgcolor: '#FFFFFF', borderRadius: '16px', p: '22px 24px',
+                  border: '1px solid #E7DCC8', mb: 3,
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.25 }}>
+                    <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#8C8171' }}>
                       Biography
                     </Typography>
-                    <Typography sx={{ fontSize: 14, lineHeight: 1.7, color: '#5C5346' }}>
+                    {canEdit && (
+                      <Button size="small" startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />}
+                        disabled={bioDialog.loading}
+                        onClick={async () => {
+                          setBioDialog({ open: true, text: '', loading: true });
+                          try {
+                            const res = await api.post(`/persons/${person.person_id}/generate-bio`);
+                            setBioDialog({ open: true, text: res.data.biography, loading: false });
+                          } catch (err) {
+                            setBioDialog({ open: false, text: '', loading: false });
+                            setSnackbar({ open: true, message: err.response?.data?.error || 'Could not generate biography', severity: 'error' });
+                          }
+                        }}
+                        sx={{ textTransform: 'none', fontSize: 11.5, color: '#22345E' }}>
+                        {bioDialog.loading ? 'Writing…' : (person.biography ? 'Rewrite with AI' : 'Generate with AI')}
+                      </Button>
+                    )}
+                  </Box>
+                  {person.biography ? (
+                    <Typography sx={{ fontSize: 14, lineHeight: 1.7, color: '#5C5346', whiteSpace: 'pre-wrap' }}>
                       {person.biography}
                     </Typography>
-                  </Box>
-                )}
+                  ) : (
+                    <Typography sx={{ fontSize: 13, color: '#8C8171', fontStyle: 'italic' }}>
+                      No biography yet{canEdit ? ' — generate one from recorded facts and stories.' : '.'}
+                    </Typography>
+                  )}
+                </Box>
 
                 {/* Family relationships */}
                 <Box sx={{
@@ -1174,6 +1201,24 @@ const PersonDetail = () => {
                               onClick={(e) => { e.stopPropagation(); setFaceTagDoc(doc); }}
                             >
                               <PhotoCameraIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          )}
+                          {canEdit && !doc.tagged_in_photo && /^(image\/|application\/pdf)/.test(doc.mime_type || '') && (
+                            <IconButton size="small" title="Extract details with AI"
+                              sx={{ position: 'absolute', top: 6, left: doc.document_type === 'photo' ? 34 : 6, bgcolor: 'rgba(255,255,255,0.9)', color: '#22345E' }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setExtractDoc(doc); setExtractResult(null); setExtractLoading(true);
+                                try {
+                                  const res = await api.post(`/documents/${doc.document_id}/extract`);
+                                  setExtractResult(res.data);
+                                } catch (err) {
+                                  setSnackbar({ open: true, message: err.response?.data?.error || 'Extraction failed', severity: 'error' });
+                                  setExtractDoc(null);
+                                } finally { setExtractLoading(false); }
+                              }}
+                            >
+                              <AutoAwesomeIcon sx={{ fontSize: 14 }} />
                             </IconButton>
                           )}
                           {doc.tagged_in_photo && (
@@ -2495,6 +2540,95 @@ const PersonDetail = () => {
         open={editHistoryOpen}
         onClose={() => setEditHistoryOpen(false)}
       />
+
+      {/* AI Biography Dialog */}
+      <Dialog open={bioDialog.open} onClose={() => setBioDialog({ open: false, text: '', loading: false })} fullWidth maxWidth="sm">
+        <DialogTitle>Generated biography for {person?.full_name}</DialogTitle>
+        <DialogContent>
+          {bioDialog.loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          ) : (
+            <Typography sx={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{bioDialog.text}</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBioDialog({ open: false, text: '', loading: false })}>{t('common.cancel')}</Button>
+          <Button variant="contained" disabled={!bioDialog.text}
+            onClick={async () => {
+              try {
+                const res = await api.put(`/persons/${person.person_id}`, { biography: bioDialog.text });
+                setBioDialog({ open: false, text: '', loading: false });
+                if (res.status === 202 || res.data?.pending) {
+                  setSnackbar({ open: true, message: 'Biography submitted for owner confirmation', severity: 'info' });
+                } else {
+                  setSnackbar({ open: true, message: 'Biography updated', severity: 'success' });
+                  await fetchPersonDetails();
+                }
+              } catch (err) {
+                setSnackbar({ open: true, message: err.response?.data?.error || 'Failed to save biography', severity: 'error' });
+              }
+            }}>
+            Use as biography
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Document extract dialog */}
+      <Dialog open={!!extractDoc} onClose={() => { setExtractDoc(null); setExtractResult(null); }} fullWidth maxWidth="sm">
+        <DialogTitle>Extract details — {extractDoc?.title || 'document'}</DialogTitle>
+        <DialogContent>
+          {extractLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 3 }}>
+              <CircularProgress size={22} />
+              <Typography variant="body2" color="text.secondary">Reading the document…</Typography>
+            </Box>
+          )}
+          {extractResult && (
+            <>
+              {extractResult.notes && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
+                  {extractResult.notes}
+                </Typography>
+              )}
+              {Object.keys(extractResult.fields || {}).length === 0 ? (
+                <Typography variant="body2">No profile facts could be extracted from this document.</Typography>
+              ) : (
+                Object.entries(extractResult.fields).map(([field, value]) => (
+                  <Box key={field} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 0.75, borderBottom: '1px dashed #E7DCC8' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{field.replace(/_/g, ' ')}</Typography>
+                    <Typography variant="body2" sx={{ textAlign: 'right', maxWidth: '60%' }}>{String(value)}</Typography>
+                  </Box>
+                ))
+              )}
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+                Applying writes these fields to {person?.full_name}'s profile — claimed profiles require owner confirmation.
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setExtractDoc(null); setExtractResult(null); }}>{t('common.close')}</Button>
+          {extractResult && Object.keys(extractResult.fields || {}).length > 0 && (
+            <Button variant="contained"
+              onClick={async () => {
+                try {
+                  const res = await api.put(`/persons/${person.person_id}`, extractResult.fields);
+                  setExtractDoc(null); setExtractResult(null);
+                  if (res.status === 202 || res.data?.pending) {
+                    setSnackbar({ open: true, message: 'Extracted details submitted for owner confirmation', severity: 'info' });
+                  } else {
+                    setSnackbar({ open: true, message: 'Profile updated from document', severity: 'success' });
+                    await fetchPersonDetails();
+                  }
+                } catch (err) {
+                  setSnackbar({ open: true, message: err.response?.data?.error || 'Failed to apply extracted details', severity: 'error' });
+                }
+              }}>
+              Apply to profile
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}
