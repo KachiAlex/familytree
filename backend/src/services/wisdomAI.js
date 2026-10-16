@@ -1,5 +1,5 @@
 const { pool } = require('../db/connection');
-const { getGeminiModel } = require('../utils/gemini');
+const { generateText } = require('../utils/groq');
 
 /**
  * Retrieve relevant stories for a person based on keyword matching.
@@ -127,44 +127,26 @@ Guidelines:
 }
 
 /**
- * Generate a wisdom response using Gemini.
+ * Generate a wisdom response using Groq (OpenAI-compatible chat).
  */
 async function generateWisdomResponse(person, stories, conversationHistory, userQuestion) {
-  const model = getGeminiModel({
-    systemInstruction: buildSystemPrompt(person, stories),
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    },
-  });
+  const messages = [
+    { role: 'system', content: buildSystemPrompt(person, stories) },
+    ...conversationHistory.map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.message,
+    })),
+    { role: 'user', content: userQuestion },
+  ];
 
-  // Build chat history for Gemini
-  const history = conversationHistory.map((msg) => ({
-    role: msg.role === 'user' ? 'user' : 'model',
-    parts: [{ text: msg.message }],
-  }));
+  const text = await generateText(messages, { temperature: 0.7, maxTokens: 1024 });
+  if (!text) throw new Error('AI provider unavailable');
 
-  const chat = model.startChat({
-    history,
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    },
-  });
-
-  const result = await chat.sendMessage(userQuestion);
-  const response = result.response;
-  const text = response.text();
-  const usageMetadata = response.usageMetadata();
-
-  return {
-    text,
-    tokensUsed: usageMetadata ? usageMetadata.totalTokenCount : null,
-  };
+  return { text, tokensUsed: null };
 }
 
 module.exports = {
   retrieveRelevantStories,
   generateWisdomResponse,
-  MODEL_NAME: require('../utils/gemini').MODEL_NAME,
+  MODEL_NAME: require('../utils/groq').TEXT_MODEL,
 };

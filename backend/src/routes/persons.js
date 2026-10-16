@@ -653,7 +653,8 @@ router.get('/:personId/kinship/:otherId', requireFamilyAccess, async (req, res) 
 router.post('/:personId/generate-bio', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
-    if (!process.env.GEMINI_API_KEY) {
+    const { generateText, isGroqConfigured } = require('../utils/groq');
+    if (!isGroqConfigured()) {
       return res.status(503).json({ error: 'Biography generation is not configured' });
     }
 
@@ -681,9 +682,6 @@ router.post('/:personId/generate-bio', requireFamilyAccess, async (req, res) => 
       [personId]
     );
 
-    const { getGeminiModel } = require('../utils/gemini');
-    const model = getGeminiModel();
-
     const facts = [
       `Name: ${person.full_name}`,
       person.gender && `Gender: ${person.gender}`,
@@ -697,11 +695,12 @@ router.post('/:personId/generate-bio', requireFamilyAccess, async (req, res) => 
       stories.length && `Recorded stories: ${stories.map((s) => `"${s.title || 'Untitled'}": ${String(s.story_text).slice(0, 300)}`).join(' | ')}`,
     ].filter(Boolean).join('\n');
 
-    const result = await model.generateContent(
-      `Write a respectful 2-3 paragraph narrative biography for this family member, honoring African oral-tradition storytelling. Use only the facts below; do not invent events. Where facts are sparse, lean on the recorded stories. Plain prose, no headings.\n\n${facts}`
-    );
+    const biography = await generateText([
+      { role: 'user', content: `Write a respectful 2-3 paragraph narrative biography for this family member, honoring African oral-tradition storytelling. Use only the facts below; do not invent events. Where facts are sparse, lean on the recorded stories. Plain prose, no headings.\n\n${facts}` },
+    ], { maxTokens: 900 });
+    if (!biography) return res.status(503).json({ error: 'Biography generation is not configured' });
 
-    res.json({ biography: result.response.text().trim(), sources: { relatives: rels.length, stories: stories.length } });
+    res.json({ biography, sources: { relatives: rels.length, stories: stories.length } });
   } catch (error) {
     console.error('Error generating biography:', error.message);
     res.status(500).json({ error: 'Failed to generate biography' });

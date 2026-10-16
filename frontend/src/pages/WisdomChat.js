@@ -260,7 +260,7 @@ const WisdomChat = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <AutoAwesomeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
             <Typography variant="caption" color="text.secondary">
-              Powered by Gemini AI · {availability.storyCount} stories
+              Powered by AI · {availability.storyCount} stories
             </Typography>
           </Box>
         </Box>
