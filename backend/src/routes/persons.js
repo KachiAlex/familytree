@@ -450,5 +450,202 @@ router.post('/:personId/profile-photo', upload.single('photo'), async (req, res)
   }
 });
 
+// Gendered kin term describing a path node relative to the previous node
+const edgeTerm = (kind, gender) => {
+  const g = (gender || '').toLowerCase();
+  const f = g === 'female' || g === 'f';
+  const m = g === 'male' || g === 'm';
+  switch (kind) {
+    case 'parent': return f ? 'mother' : m ? 'father' : 'parent';
+    case 'child': return f ? 'daughter' : m ? 'son' : 'child';
+    case 'spouse': return f ? 'wife' : m ? 'husband' : 'spouse';
+    case 'sibling': return f ? 'sister' : m ? 'brother' : 'sibling';
+    case 'cousin': return 'cousin';
+    case 'uncle_aunt': return f ? 'aunt' : m ? 'uncle' : 'uncle/aunt';
+    case 'niece_nephew': return f ? 'niece' : m ? 'nephew' : 'niece/nephew';
+    case 'in_law': return 'in-law';
+    default: return kind;
+  }
+};
+
+// Canonical kinship label for common path shapes, or null when the path is
+// best described by its steps (e.g. "your father's sister's son").
+const summarizeKinship = (kinds, targetGender) => {
+  const term = edgeTerm;
+  const g = targetGender;
+  const key = kinds.join(',');
+  const direct = {
+    'parent': term('parent', g),
+    'child': term('child', g),
+    'spouse': term('spouse', g),
+    'sibling': term('sibling', g),
+    'cousin': 'cousin',
+    'uncle_aunt': term('uncle_aunt', g),
+    'niece_nephew': term('niece_nephew', g),
+    'in_law': 'in-law',
+    'parent,parent': g === 'female' ? 'grandmother' : g === 'male' ? 'grandfather' : 'grandparent',
+    'child,child': g === 'female' ? 'granddaughter' : g === 'male' ? 'grandson' : 'grandchild',
+    'parent,sibling': g === 'female' ? 'aunt' : g === 'male' ? 'uncle' : 'aunt/uncle',
+    'sibling,child': g === 'female' ? 'niece' : g === 'male' ? 'nephew' : 'niece/nephew',
+    'parent,spouse': g === 'female' ? 'stepmother' : g === 'male' ? 'stepfather' : 'stepparent',
+    'spouse,parent': g === 'female' ? 'mother-in-law' : g === 'male' ? 'father-in-law' : 'parent-in-law',
+    'spouse,sibling': g === 'female' ? 'sister-in-law' : g === 'male' ? 'brother-in-law' : 'sibling-in-law',
+    'sibling,spouse': g === 'female' ? 'sister-in-law' : g === 'male' ? 'brother-in-law' : 'sibling-in-law',
+    'child,spouse': g === 'female' ? 'daughter-in-law' : g === 'male' ? 'son-in-law' : 'child-in-law',
+    'parent,sibling,child': 'first cousin',
+    'uncle_aunt,child': 'first cousin',
+    'parent,parent,sibling': g === 'female' ? 'grandaunt' : g === 'male' ? 'granduncle' : 'grandaunt/granduncle',
+    'sibling,child,child': g === 'female' ? 'grandniece' : g === 'male' ? 'grandnephew' : 'grandniece/grandnephew',
+  };
+  if (direct[key]) return direct[key];
+
+  // N generations straight up or straight down
+  if (kinds.every(k => k === 'parent') && kinds.length >= 3) {
+    const greats = 'great-'.repeat(kinds.length - 2);
+    return `${greats}grand${g === 'female' ? 'mother' : g === 'male' ? 'father' : 'parent'}`;
+  }
+  if (kinds.every(k => k === 'child') && kinds.length >= 3) {
+    const greats = 'great-'.repeat(kinds.length - 2);
+    return `${greats}grand${g === 'female' ? 'daughter' : g === 'male' ? 'son' : 'child'}`;
+  }
+
+  // Up through parents then down through children — kin via a shared
+  // ancestor (this is how sibling/cousin paths resolve in this model, since
+  // siblings are derived from shared parents rather than direct edges).
+  const firstChild = kinds.indexOf('child');
+  if (firstChild > 0 &&
+      kinds.slice(0, firstChild).every(k => k === 'parent') &&
+      kinds.slice(firstChild).every(k => k === 'child')) {
+    const a = firstChild;
+    const b = kinds.length - firstChild;
+    if (a === 1 && b === 1) return `${term('sibling', g)} (or half-sibling)`;
+    if (a === 2 && b === 1) return term('uncle_aunt', g);
+    if (a === 1 && b === 2) return term('niece_nephew', g);
+    const degree = Math.min(a, b) - 1;
+    const ordinals = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
+    const ord = ordinals[degree - 1] || `${degree}th`;
+    const removed = Math.abs(a - b);
+    return `${ord} cousin${removed ? ` ${removed}x removed` : ''}`;
+  }
+
+  // Cousin pattern: up through parents, across a sibling/uncle_aunt edge,
+  // back down through children.
+  const sibIdx = kinds.findIndex(k => k === 'sibling' || k === 'uncle_aunt');
+  if (sibIdx > 0 &&
+      kinds.slice(0, sibIdx).every(k => k === 'parent') &&
+      kinds.slice(sibIdx + 1).every(k => k === 'child')) {
+    const ups = sibIdx, downs = kinds.length - sibIdx - 1;
+    const degree = Math.min(ups, downs);
+    const ordinals = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
+    const ord = ordinals[degree - 1] || `${degree}th`;
+    const removed = Math.abs(ups - downs);
+    return `${ord} cousin${removed ? ` ${removed}x removed` : ''}`;
+  }
+
+  return null;
+};
+
+// "How are we related?" — shortest kinship path between two persons in the
+// same family tree (BFS over the relationships graph).
+router.get('/:personId/kinship/:otherId', requireFamilyAccess, async (req, res) => {
+  try {
+    const personId = parseInt(req.params.personId, 10);
+    const otherId = parseInt(req.params.otherId, 10);
+    if (personId === otherId) {
+      return res.status(400).json({ error: 'Choose a different person' });
+    }
+
+    const personsResult = await pool.query(
+      'SELECT person_id, family_id, full_name, gender FROM persons WHERE person_id = ANY($1)',
+      [[personId, otherId]]
+    );
+    const from = personsResult.rows.find((r) => r.person_id === personId);
+    const to = personsResult.rows.find((r) => r.person_id === otherId);
+    if (!from || !to) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+    if (from.family_id !== to.family_id) {
+      return res.status(400).json({ error: 'These persons are not in the same family tree' });
+    }
+
+    const rels = await pool.query(
+      `SELECT r.person1_id, r.person2_id, r.relationship_type
+       FROM relationships r
+       JOIN persons p ON p.person_id = r.person1_id
+       WHERE p.family_id = $1`,
+      [from.family_id]
+    );
+
+    // Adjacency: edge kind describes the neighbor relative to the node.
+    // Convention: parent edges have person1=parent, person2=child;
+    // uncle_aunt edges have person1=elder, person2=junior.
+    const adj = new Map();
+    const link = (a, b, kind) => {
+      if (!adj.has(a)) adj.set(a, []);
+      adj.get(a).push({ to: b, kind });
+    };
+    for (const r of rels.rows) {
+      switch (r.relationship_type) {
+        case 'parent':
+          link(r.person1_id, r.person2_id, 'child');
+          link(r.person2_id, r.person1_id, 'parent');
+          break;
+        case 'uncle_aunt':
+          link(r.person1_id, r.person2_id, 'niece_nephew');
+          link(r.person2_id, r.person1_id, 'uncle_aunt');
+          break;
+        default:
+          link(r.person1_id, r.person2_id, r.relationship_type);
+          link(r.person2_id, r.person1_id, r.relationship_type);
+      }
+    }
+
+    const prev = new Map([[personId, null]]);
+    const queue = [personId];
+    let found = false;
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      if (cur === otherId) { found = true; break; }
+      for (const e of adj.get(cur) || []) {
+        if (!prev.has(e.to)) {
+          prev.set(e.to, { fromId: cur, kind: e.kind });
+          queue.push(e.to);
+        }
+      }
+    }
+
+    if (!found) {
+      return res.json({ related: false, path: [], degree: null, summary: null });
+    }
+
+    const ids = [];
+    for (let n = otherId; n != null; n = prev.get(n) ? prev.get(n).fromId : null) {
+      ids.unshift(n);
+    }
+    const names = await pool.query(
+      'SELECT person_id, full_name, gender FROM persons WHERE person_id = ANY($1)',
+      [ids]
+    );
+    const byId = Object.fromEntries(names.rows.map((r) => [r.person_id, r]));
+    const path = ids.map((id, i) => ({
+      person_id: id,
+      full_name: byId[id] ? byId[id].full_name : null,
+      gender: byId[id] ? byId[id].gender : null,
+      via: i === 0 ? null : edgeTerm(prev.get(id).kind, byId[id] ? byId[id].gender : null),
+    }));
+    const kinds = ids.slice(1).map((id) => prev.get(id).kind);
+
+    res.json({
+      related: true,
+      degree: ids.length - 1,
+      path,
+      summary: summarizeKinship(kinds, to.gender),
+    });
+  } catch (error) {
+    console.error('Error computing kinship path:', error);
+    res.status(500).json({ error: 'Failed to compute relationship path' });
+  }
+});
+
 module.exports = router;
 

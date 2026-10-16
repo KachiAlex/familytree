@@ -270,6 +270,18 @@ async function createTables(pool) {
 
     await addColumnIfNotExists('edit_history', 'admin_override', 'BOOLEAN DEFAULT false');
 
+    // Anniversary email log — dedupes remembrance sends per person/recipient/day
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS anniversary_log (
+        person_id INTEGER REFERENCES persons(person_id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+        kind VARCHAR(20) NOT NULL,
+        sent_on DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (person_id, user_id, kind, sent_on)
+      )
+    `);
+
     // Password reset tokens (hashed; single-use; 1 hour expiry)
     await client.query(`
       CREATE TABLE IF NOT EXISTS password_resets (

@@ -179,6 +179,7 @@ initializeDatabase()
     app.listen(PORT, HOST, () => {
       console.log(`🚀 Server running on ${HOST}:${PORT}`);
       console.log(`📊 API available at http://localhost:${PORT}/api`);
+      require('./src/jobs/anniversaries').startAnniversaryJob();
     });
   })
   .catch((error) => {

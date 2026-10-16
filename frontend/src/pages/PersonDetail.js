@@ -102,6 +102,10 @@ const PersonDetail = () => {
   const [pendingChangesOpen, setPendingChangesOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
+  const [kinshipOpen, setKinshipOpen] = useState(false);
+  const [kinshipTarget, setKinshipTarget] = useState('');
+  const [kinshipResult, setKinshipResult] = useState(null);
+  const [kinshipLoading, setKinshipLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -687,6 +691,9 @@ const PersonDetail = () => {
           </Button>
           <Button size="small" startIcon={<HistoryIcon />} onClick={() => setEditHistoryOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             History
+          </Button>
+          <Button size="small" onClick={() => { setKinshipOpen(true); setKinshipResult(null); setKinshipTarget(''); }} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
+            How Related?
           </Button>
           <Button
             size="small"
@@ -2324,6 +2331,84 @@ const PersonDetail = () => {
           <Button onClick={() => setEditMaritalStatusOpen(false)}>Cancel</Button>
           <Button onClick={handleSaveMaritalStatus} variant="contained" color="primary">
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* How Related Dialog */}
+      <Dialog open={kinshipOpen} onClose={() => setKinshipOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>How is {person?.full_name} related to…</DialogTitle>
+        <DialogContent>
+          <TextField
+            select
+            fullWidth
+            margin="normal"
+            label="Choose a family member"
+            value={kinshipTarget}
+            onChange={(e) => setKinshipTarget(e.target.value)}
+          >
+            {allFamilyPersons.map((p) => (
+              <MenuItem key={p.person_id} value={p.person_id}>{p.full_name}</MenuItem>
+            ))}
+          </TextField>
+          {kinshipLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress /></Box>
+          )}
+          {kinshipResult && !kinshipLoading && (
+            <Box sx={{ mt: 2 }}>
+              {kinshipResult.related ? (
+                <>
+                  {kinshipResult.summary && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      {person.full_name} is their <strong>{kinshipResult.summary}</strong>
+                    </Alert>
+                  )}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {kinshipResult.path.map((step, i) => (
+                      <Box key={step.person_id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {i > 0 && (
+                          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 90, textAlign: 'right', fontStyle: 'italic' }}>
+                            {step.via} →
+                          </Typography>
+                        )}
+                        {i === 0 && (
+                          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 90, textAlign: 'right' }}>
+                            start →
+                          </Typography>
+                        )}
+                        <Typography variant="body2" fontWeight="medium">{step.full_name}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    {kinshipResult.degree} {kinshipResult.degree === 1 ? 'step' : 'steps'} apart in the family tree
+                  </Typography>
+                </>
+              ) : (
+                <Alert severity="info">No relationship path connects these two people in the tree yet.</Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setKinshipOpen(false)}>Close</Button>
+          <Button
+            variant="contained"
+            disabled={!kinshipTarget || kinshipLoading}
+            onClick={async () => {
+              setKinshipLoading(true);
+              setKinshipResult(null);
+              try {
+                const res = await api.get(`/persons/${person.person_id}/kinship/${kinshipTarget}`);
+                setKinshipResult(res.data);
+              } catch (error) {
+                setSnackbar({ open: true, message: error.response?.data?.error || 'Could not compute relationship', severity: 'error' });
+              } finally {
+                setKinshipLoading(false);
+              }
+            }}
+          >
+            Find
           </Button>
         </DialogActions>
       </Dialog>
