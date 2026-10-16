@@ -1,8 +1,9 @@
 const express = require('express');
 const { pool } = require('../db/connection');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
 const { checkResourceLimit, getFamilyUsageInfo } = require('../middleware/tierLimits');
 const { getTierLimits } = require('../config/tiers');
+const { isMailConfigured, sendInvitationEmail } = require('../utils/mailer');
 const crypto = require('crypto');
 
 const router = express.Router();
@@ -13,9 +14,13 @@ router.get('/invite/:token', async (req, res) => {
     const { token } = req.params;
 
     const inviteResult = await pool.query(
-      `SELECT i.*, f.family_name 
-       FROM invitations i 
-       JOIN families f ON i.family_id = f.family_id 
+      `SELECT i.*, f.family_name,
+              p.full_name AS person_full_name, p.date_of_birth AS person_date_of_birth,
+              p.place_of_birth AS person_place_of_birth, p.profile_photo_url AS person_profile_photo_url,
+              p.owner_user_id AS person_owner_user_id
+       FROM invitations i
+       JOIN families f ON i.family_id = f.family_id
+       LEFT JOIN persons p ON i.person_id = p.person_id
        WHERE i.token = $1`,
       [token]
     );
@@ -24,7 +29,17 @@ router.get('/invite/:token', async (req, res) => {
       return res.status(404).json({ error: 'Invalid invitation link' });
     }
 
-    const invitation = inviteResult.rows[0];
+    const row = inviteResult.rows[0];
+    const invitation = {
+      invitation_id: row.invitation_id,
+      family_id: row.family_id,
+      person_id: row.person_id,
+      email: row.email,
+      role: row.role,
+      status: row.status,
+      expires_at: row.expires_at,
+      family_name: row.family_name,
+    };
 
     if (invitation.status === 'accepted') {
       return res.status(400).json({ error: 'This invitation has already been claimed' });
@@ -34,7 +49,16 @@ router.get('/invite/:token', async (req, res) => {
       return res.status(400).json({ error: 'This invitation has expired' });
     }
 
-    res.json({ invitation });
+    const person = row.person_id ? {
+      person_id: row.person_id,
+      full_name: row.person_full_name,
+      date_of_birth: row.person_date_of_birth,
+      place_of_birth: row.person_place_of_birth,
+      profile_photo_url: row.person_profile_photo_url,
+      owner_user_id: row.person_owner_user_id,
+    } : null;
+
+    res.json({ invitation, person });
   } catch (error) {
     console.error('Error fetching invitation:', error);
     res.status(500).json({ error: 'Failed to fetch invitation' });
@@ -130,19 +154,9 @@ router.get('/my-families', async (req, res) => {
 });
 
 // Get family details with usage info
-router.get('/:familyId', getFamilyUsageInfo, async (req, res) => {
+router.get('/:familyId', requireFamilyAccess, getFamilyUsageInfo, async (req, res) => {
   try {
     const { familyId } = req.params;
-
-    // Check access
-    const memberCheck = await pool.query(
-      'SELECT role FROM family_members WHERE family_id = $1 AND user_id = $2',
-      [familyId, req.user.user_id]
-    );
-
-    if (memberCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
 
     // Get family info
     const familyResult = await pool.query(
@@ -163,7 +177,7 @@ router.get('/:familyId', getFamilyUsageInfo, async (req, res) => {
     res.json({
       family: familyResult.rows[0],
       members: membersResult.rows,
-      userRole: memberCheck.rows[0].role,
+      userRole: req.familyRole,
       usage: req.familyUsage
     });
   } catch (error) {
@@ -173,40 +187,57 @@ router.get('/:familyId', getFamilyUsageInfo, async (req, res) => {
 });
 
 // Invite member
-router.post('/:familyId/invite', checkResourceLimit('member'), async (req, res) => {
+router.post('/:familyId/invite', requireFamilyAccess, checkResourceLimit('member'), async (req, res) => {
   try {
     const { familyId } = req.params;
     const { email, phone, role = 'member', person_id } = req.body;
 
-    // Check if user is a member of this family
-    const memberCheck = await pool.query(
-      'SELECT role FROM family_members WHERE family_id = $1 AND user_id = $2',
-      [familyId, req.user.user_id]
-    );
-
-    if (memberCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
     // Only admins can invite with custom roles; members can invite for person claiming
-    const inviteRole = memberCheck.rows[0].role === 'admin' ? role : 'member';
+    const inviteRole = req.familyRole === 'admin' ? role : 'member';
 
     // Generate invitation token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-    await pool.query(
+    const inviteResult = await pool.query(
       `INSERT INTO invitations (family_id, person_id, email, phone, invited_by_user_id, token, role, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING invitation_id`,
       [familyId, person_id || null, email, phone || null, req.user.user_id, token, inviteRole, expiresAt]
     );
 
-    // TODO: Send invitation email/SMS
+    // Fetch context for the invitation email
+    const contextResult = await pool.query(
+      `SELECT f.family_name, p.full_name AS person_name
+       FROM families f
+       LEFT JOIN persons p ON p.person_id = $2
+       WHERE f.family_id = $1`,
+      [familyId, person_id || null]
+    );
+    const context = contextResult.rows[0] || {};
+
+    let emailSent = false;
+    if (isMailConfigured()) {
+      try {
+        const mailResult = await sendInvitationEmail({
+          email,
+          token,
+          personName: context.person_name,
+          familyName: context.family_name,
+        });
+        emailSent = mailResult.sent;
+      } catch (mailError) {
+        console.error('Failed to send invitation email:', mailError);
+      }
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     res.json({
-      message: 'Invitation sent successfully',
-      invitationToken: token // In production, send via email
+      message: emailSent ? 'Invitation sent successfully' : 'Invitation created successfully',
+      email_sent: emailSent,
+      invitationLink: `${frontendUrl}/claim/${token}`
     });
   } catch (error) {
     console.error('Error sending invitation:', error);
@@ -229,6 +260,11 @@ router.post('/invite/accept/:token', async (req, res) => {
     }
 
     const invitation = inviteResult.rows[0];
+
+    // The invitation is bound to a specific email; only that recipient may accept it
+    if (req.user.email.toLowerCase() !== invitation.email.toLowerCase()) {
+      return res.status(403).json({ error: `This invitation was sent to ${invitation.email}` });
+    }
 
     // Add user to family
     await pool.query(

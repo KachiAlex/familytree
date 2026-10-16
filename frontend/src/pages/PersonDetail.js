@@ -59,6 +59,7 @@ const PersonDetail = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [inviteResult, setInviteResult] = useState(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -1757,6 +1758,7 @@ const PersonDetail = () => {
         setInviteDialogOpen(false);
         setInviteSuccess(false);
         setInviteEmail('');
+        setInviteResult(null);
       }} fullWidth maxWidth="sm">
         <DialogTitle>Invite to Claim Account</DialogTitle>
         <DialogContent>
@@ -1774,22 +1776,50 @@ const PersonDetail = () => {
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="Enter their email address"
-                helperText="An automated email will be sent to this address with a claim link"
+                helperText="They'll get a claim link by email, or you can copy and share it yourself"
               />
             </>
           ) : (
             <>
-              <DialogContentText sx={{ mb: 2, textAlign: 'center' }}>
+              <DialogContentText sx={{ mb: 2, textAlign: 'center' }} component="div">
                 <CheckCircleIcon color="success" sx={{ fontSize: 48, mb: 2 }} />
                 <Typography variant="h6" gutterBottom>
-                  Invitation Email Sent!
+                  {inviteResult?.email_sent ? 'Invitation Email Sent!' : 'Invitation Created!'}
                 </Typography>
-                <Typography variant="body1">
-                  An invitation email has been automatically sent to <strong>{inviteEmail}</strong>.
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                  The recipient will receive an email with a link to claim their profile and sign up.
-                </Typography>
+                {inviteResult?.email_sent ? (
+                  <>
+                    <Typography variant="body1">
+                      An invitation email has been sent to <strong>{inviteEmail}</strong>.
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                      The recipient will receive an email with a link to claim their profile and sign up.
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Typography variant="body1">
+                      Share this link with <strong>{inviteEmail}</strong> so they can claim their profile:
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      margin="normal"
+                      value={inviteResult?.invitationLink || ''}
+                      InputProps={{ readOnly: true }}
+                      onFocus={(e) => e.target.select()}
+                    />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      sx={{ mt: 1 }}
+                      onClick={() => navigator.clipboard.writeText(inviteResult?.invitationLink || '')}
+                    >
+                      Copy Link
+                    </Button>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                      The link expires in 7 days.
+                    </Typography>
+                  </>
+                )}
               </DialogContentText>
             </>
           )}
@@ -1800,6 +1830,7 @@ const PersonDetail = () => {
               <Button onClick={() => {
                 setInviteDialogOpen(false);
                 setInviteEmail('');
+                setInviteResult(null);
               }} disabled={inviteSending}>
                 Cancel
               </Button>
@@ -1815,12 +1846,13 @@ const PersonDetail = () => {
 
                   setInviteSending(true);
                   try {
-                    await api.post(`/families/${person.family_id}/invite`, {
+                    const res = await api.post(`/families/${person.family_id}/invite`, {
                       email: inviteEmail.trim().toLowerCase(),
                       person_id: person.person_id,
                       person_name: person.full_name,
                     });
 
+                    setInviteResult(res.data);
                     setInviteSuccess(true);
                   } catch (error) {
                     console.error('Failed to create invitation:', error);
@@ -1842,6 +1874,7 @@ const PersonDetail = () => {
                 setInviteDialogOpen(false);
                 setInviteSuccess(false);
                 setInviteEmail('');
+                setInviteResult(null);
               }}
               variant="contained"
             >

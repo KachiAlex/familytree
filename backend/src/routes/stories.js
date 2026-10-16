@@ -8,13 +8,25 @@ const { uploadToR2, deleteFromR2 } = require('../utils/s3');
 const router = express.Router();
 router.use(authenticateToken);
 
+const AUDIO_MIME_TYPES = new Set([
+  'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4',
+  'audio/aac', 'audio/x-m4a', 'audio/webm', 'audio/flac'
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB for audio
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB for audio
+  fileFilter: (req, file, cb) => {
+    if (AUDIO_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only audio files are allowed'), false);
+    }
+  }
 });
 
 // Get stories for a person
-router.get('/person/:personId', async (req, res) => {
+router.get('/person/:personId', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 
@@ -108,7 +120,7 @@ router.post('/', upload.single('audio'), requireFamilyAccess, checkResourceLimit
 });
 
 // Update story
-router.put('/:storyId', async (req, res) => {
+router.put('/:storyId', requireFamilyAccess, async (req, res) => {
   try {
     const { storyId } = req.params;
     const updates = req.body;
@@ -164,7 +176,7 @@ router.put('/:storyId', async (req, res) => {
 });
 
 // Delete story
-router.delete('/:storyId', async (req, res) => {
+router.delete('/:storyId', requireFamilyAccess, async (req, res) => {
   try {
     const { storyId } = req.params;
 

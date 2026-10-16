@@ -2,13 +2,25 @@ const express = require('express');
 const { pool } = require('../db/connection');
 const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
 const { checkResourceLimit } = require('../middleware/tierLimits');
+const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const { uploadToR2 } = require('../utils/s3');
 const router = express.Router();
 
+const IMAGE_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (IMAGE_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
 });
 
 // All routes require authentication
@@ -34,7 +46,7 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
 });
 
 // Get single person with relationships
-router.get('/:personId', async (req, res) => {
+router.get('/:personId', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 
@@ -221,8 +233,9 @@ router.delete('/:personId', requireFamilyAccess, async (req, res) => {
   }
 });
 
-// Claim a person profile (set owner_user_id)
-router.post('/:personId/claim', async (req, res) => {
+// Claim a person profile (set owner_user_id). Requires family membership,
+// which is granted by accepting an invitation first.
+router.post('/:personId/claim', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 
@@ -253,7 +266,7 @@ router.post('/:personId/claim', async (req, res) => {
 });
 
 // Upload profile photo
-router.post('/:personId/profile-photo', authenticateToken, upload.single('photo'), async (req, res) => {
+router.post('/:personId/profile-photo', upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

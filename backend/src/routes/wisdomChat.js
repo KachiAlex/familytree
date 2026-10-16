@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Check if a person has stories available for wisdom chat
-router.get('/person/:personId/availability', async (req, res) => {
+router.get('/person/:personId/availability', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 
@@ -43,7 +43,7 @@ router.get('/person/:personId/availability', async (req, res) => {
 });
 
 // Get chat history for a person
-router.get('/person/:personId/history', async (req, res) => {
+router.get('/person/:personId/history', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
     const limit = parseInt(req.query.limit) || 50;
@@ -65,7 +65,7 @@ router.get('/person/:personId/history', async (req, res) => {
 });
 
 // Send a message and get a wisdom response
-router.post('/person/:personId/message', async (req, res) => {
+router.post('/person/:personId/message', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
     const { message } = req.body;
@@ -166,7 +166,7 @@ router.post('/person/:personId/message', async (req, res) => {
 });
 
 // Clear chat history for a person
-router.delete('/person/:personId/history', async (req, res) => {
+router.delete('/person/:personId/history', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 

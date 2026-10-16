@@ -231,6 +231,18 @@ async function createTables(pool) {
       )
     `);
 
+    // Password reset tokens (hashed; single-use; 1 hour expiry)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        reset_id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+        token_hash VARCHAR(64) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Wisdom chats table (Elder Wisdom AI - conversational ancestor)
     await client.query(`
       CREATE TABLE IF NOT EXISTS wisdom_chats (
@@ -262,6 +274,8 @@ async function createTables(pool) {
       CREATE INDEX IF NOT EXISTS idx_edit_history_family_id ON edit_history(family_id);
       CREATE INDEX IF NOT EXISTS idx_wisdom_chats_person_id ON wisdom_chats(person_id);
       CREATE INDEX IF NOT EXISTS idx_wisdom_chats_family_id ON wisdom_chats(family_id);
+      CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash);
+      CREATE INDEX IF NOT EXISTS idx_password_resets_user_id ON password_resets(user_id);
     `);
 
     await client.query('COMMIT');

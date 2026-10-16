@@ -13,6 +13,10 @@ const { AppError } = require('./src/utils/errors');
 
 const app = express();
 
+// Behind nginx: trust the first proxy hop so req.ip reflects the real client
+// (required for correct per-IP rate limiting and logging)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 
@@ -22,6 +26,7 @@ const corsOptions = {
     const allowedOrigins = [
       process.env.FRONTEND_URL,
       'https://familytreebio.vercel.app',
+      'https://familytree.67-211-210-8.sslip.io',
       'http://localhost:3000',
       'http://localhost:3001'
     ];
@@ -164,12 +169,15 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+// In production the API sits behind nginx, so only bind to localhost.
+// Set HOST=0.0.0.0 explicitly if direct external access is ever required.
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
 
 // Initialize database and start server
 initializeDatabase()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+    app.listen(PORT, HOST, () => {
+      console.log(`🚀 Server running on ${HOST}:${PORT}`);
       console.log(`📊 API available at http://localhost:${PORT}/api`);
     });
   })

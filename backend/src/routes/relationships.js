@@ -48,7 +48,8 @@ router.post('/', [
       return res.status(400).json({ error: 'A person cannot have a relationship with themselves' });
     }
 
-    // Verify both persons exist and user has access
+    // Verify both persons exist, belong to the same family, and the
+    // requesting user is a member of that family
     const personsResult = await pool.query(
       `SELECT p1.family_id as family1, p2.family_id as family2
        FROM persons p1, persons p2
@@ -58,6 +59,19 @@ router.post('/', [
 
     if (personsResult.rows.length === 0) {
       return res.status(404).json({ error: 'One or both persons not found' });
+    }
+
+    const { family1, family2 } = personsResult.rows[0];
+    if (family1 !== family2) {
+      return res.status(400).json({ error: 'Cannot create a relationship between persons in different families' });
+    }
+
+    const memberCheck = await pool.query(
+      'SELECT role FROM family_members WHERE family_id = $1 AND user_id = $2',
+      [family1, req.user.user_id]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied to this family tree' });
     }
 
     // Check if relationship already exists
@@ -95,7 +109,7 @@ router.post('/', [
 });
 
 // Update relationship
-router.put('/:relationshipId', async (req, res) => {
+router.put('/:relationshipId', requireFamilyAccess, async (req, res) => {
   try {
     const { relationshipId } = req.params;
     const { verified, notes } = req.body;
@@ -125,7 +139,7 @@ router.put('/:relationshipId', async (req, res) => {
 });
 
 // Delete relationship
-router.delete('/:relationshipId', async (req, res) => {
+router.delete('/:relationshipId', requireFamilyAccess, async (req, res) => {
   try {
     const { relationshipId } = req.params;
 

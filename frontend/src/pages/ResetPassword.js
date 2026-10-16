@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -12,6 +12,9 @@ import {
 import api from '../services/api';
 
 const ResetPassword = () => {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,7 +22,24 @@ const ResetPassword = () => {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleRequestReset = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const res = await api.post('/auth/forgot-password', { email });
+      setSuccess(res.data.message || 'If an account exists for this email, a password reset link has been sent.');
+      setEmail('');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to request password reset.');
+    }
+
+    setLoading(false);
+  };
+
+  const handleReset = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -37,9 +57,8 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/reset-password', { email, password });
+      const res = await api.post('/auth/reset-password', { token, password });
       setSuccess(res.data.message || 'Password updated. You can now log in.');
-      setEmail('');
       setPassword('');
       setConfirmPassword('');
     } catch (err) {
@@ -63,9 +82,6 @@ const ResetPassword = () => {
           <Typography variant="h4" component="h1" gutterBottom align="center">
             Reset Password
           </Typography>
-          <Typography variant="subtitle1" align="center" color="text.secondary" gutterBottom>
-            Set a new password for your account
-          </Typography>
 
           {error && (
             <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
@@ -79,47 +95,70 @@ const ResetPassword = () => {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-            <TextField
-              fullWidth
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="New Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Confirm New Password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              margin="normal"
-            />
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
-            >
-              {loading ? 'Resetting...' : 'Reset Password'}
-            </Button>
-            <Typography align="center">
-              <Link to="/login">Back to Login</Link>
-            </Typography>
-          </Box>
+          {token ? (
+            <Box component="form" onSubmit={handleReset} sx={{ mt: 3 }}>
+              <Typography variant="subtitle1" align="center" color="text.secondary" gutterBottom>
+                Choose a new password for your account
+              </Typography>
+              <TextField
+                fullWidth
+                label="New Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                margin="normal"
+              />
+              <TextField
+                fullWidth
+                label="Confirm New Password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                margin="normal"
+              />
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                sx={{ mt: 3, mb: 2 }}
+                disabled={loading}
+              >
+                {loading ? 'Resetting...' : 'Reset Password'}
+              </Button>
+              <Typography align="center">
+                <Link to="/login">Back to Login</Link>
+              </Typography>
+            </Box>
+          ) : (
+            <Box component="form" onSubmit={handleRequestReset} sx={{ mt: 3 }}>
+              <Typography variant="subtitle1" align="center" color="text.secondary" gutterBottom>
+                Enter your email and we'll send you a reset link
+              </Typography>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                margin="normal"
+              />
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                sx={{ mt: 3, mb: 2 }}
+                disabled={loading}
+              >
+                {loading ? 'Sending...' : 'Send Reset Link'}
+              </Button>
+              <Typography align="center">
+                <Link to="/login">Back to Login</Link>
+              </Typography>
+            </Box>
+          )}
         </Paper>
       </Box>
     </Container>

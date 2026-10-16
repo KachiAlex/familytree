@@ -10,9 +10,26 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Configure multer for file uploads
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
+  'application/pdf',
+  'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/x-m4a',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not allowed: ${file.mimetype}`), false);
+    }
+  }
 });
 
 // Upload document
@@ -76,7 +93,7 @@ router.post('/upload', uploadLimiter, upload.single('file'), requireFamilyAccess
 });
 
 // Get documents for a person
-router.get('/person/:personId', async (req, res) => {
+router.get('/person/:personId', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 
@@ -110,7 +127,7 @@ router.get('/family/:familyId', requireFamilyAccess, async (req, res) => {
 });
 
 // Delete document
-router.delete('/:documentId', async (req, res) => {
+router.delete('/:documentId', requireFamilyAccess, async (req, res) => {
   try {
     const { documentId } = req.params;
 

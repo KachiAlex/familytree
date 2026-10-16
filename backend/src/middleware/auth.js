@@ -35,24 +35,47 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
+// Resolve the owning family_id from whatever resource id is present in the
+// request (params take precedence over body). Used by requireFamilyAccess so
+// person/document/story/relationship scoped routes get the same check.
+const resolveFamilyId = async (req) => {
+  if (req.params.familyId || req.body.family_id) {
+    return req.params.familyId || req.body.family_id;
+  }
+  if (req.params.personId) {
+    const r = await pool.query('SELECT family_id FROM persons WHERE person_id = $1', [req.params.personId]);
+    return r.rows.length ? r.rows[0].family_id : null;
+  }
+  if (req.params.documentId) {
+    const r = await pool.query('SELECT family_id FROM documents WHERE document_id = $1', [req.params.documentId]);
+    return r.rows.length ? r.rows[0].family_id : null;
+  }
+  if (req.params.storyId) {
+    const r = await pool.query('SELECT family_id FROM stories WHERE story_id = $1', [req.params.storyId]);
+    return r.rows.length ? r.rows[0].family_id : null;
+  }
+  if (req.params.relationshipId) {
+    const r = await pool.query(
+      `SELECT p.family_id FROM relationships r
+       JOIN persons p ON p.person_id = r.person1_id
+       WHERE r.relationship_id = $1`,
+      [req.params.relationshipId]
+    );
+    return r.rows.length ? r.rows[0].family_id : null;
+  }
+  if (req.params.pendingChangeId) {
+    const r = await pool.query('SELECT family_id FROM pending_changes WHERE pending_change_id = $1', [req.params.pendingChangeId]);
+    return r.rows.length ? r.rows[0].family_id : null;
+  }
+  return null;
+};
+
 const requireFamilyAccess = async (req, res, next) => {
   try {
-    let familyId = req.params.familyId || req.body.family_id;
-
-    // If no familyId but personId is in params, look up family_id from persons table
-    if (!familyId && req.params.personId) {
-      const personResult = await pool.query(
-        'SELECT family_id FROM persons WHERE person_id = $1',
-        [req.params.personId]
-      );
-      if (personResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Person not found' });
-      }
-      familyId = personResult.rows[0].family_id;
-    }
+    const familyId = await resolveFamilyId(req);
 
     if (!familyId) {
-      return res.status(400).json({ error: 'Family ID required' });
+      return res.status(404).json({ error: 'Resource not found' });
     }
 
     const result = await pool.query(

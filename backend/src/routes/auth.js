@@ -1,10 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { pool } = require('../db/connection');
 const { body, validationResult } = require('express-validator');
 const { getTierLimits } = require('../config/tiers');
 const { authLimiter } = require('../middleware/rateLimiter');
+const { sendPasswordResetEmail } = require('../utils/mailer');
 
 const router = express.Router();
 
@@ -367,9 +369,59 @@ router.put('/me', async (req, res) => {
   }
 });
 
-// On-screen reset password (no email, for use before domain email is configured)
+// Request a password reset. Always responds generically so the endpoint
+// cannot be used to enumerate registered emails.
+router.post('/forgot-password', authLimiter, [
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email } = req.body;
+    const genericResponse = {
+      success: true,
+      message: 'If an account exists for this email, a password reset link has been sent.'
+    };
+
+    const userResult = await pool.query(
+      'SELECT user_id FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.json(genericResponse);
+    }
+
+    const userId = userResult.rows[0].user_id;
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      `INSERT INTO password_resets (user_id, token_hash, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, tokenHash, expiresAt]
+    );
+
+    try {
+      await sendPasswordResetEmail({ email, token });
+    } catch (mailError) {
+      console.error('Failed to send password reset email:', mailError);
+    }
+
+    res.json(genericResponse);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+// Reset password with a token issued by /forgot-password
 router.post('/reset-password', authLimiter, [
-  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
+  body('token').notEmpty().trim(),
   body('password').isLength({ min: 6 })
 ], async (req, res) => {
   const client = await pool.connect();
@@ -383,23 +435,32 @@ router.post('/reset-password', authLimiter, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password } = req.body;
+    const { token, password } = req.body;
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    const userResult = await client.query(
-      'SELECT user_id FROM users WHERE email = $1',
-      [email]
+    const resetResult = await client.query(
+      `SELECT pr.reset_id, pr.user_id FROM password_resets pr
+       WHERE pr.token_hash = $1 AND pr.used_at IS NULL AND pr.expires_at > NOW()
+       ORDER BY pr.created_at DESC LIMIT 1`,
+      [tokenHash]
     );
 
-    if (userResult.rows.length === 0) {
+    if (resetResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'No account found with this email.' });
+      return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
     }
 
+    const reset = resetResult.rows[0];
     const passwordHash = await bcrypt.hash(password, 10);
 
     await client.query(
-      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
-      [passwordHash, email]
+      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+      [passwordHash, reset.user_id]
+    );
+
+    await client.query(
+      'UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE reset_id = $1',
+      [reset.reset_id]
     );
 
     await client.query('COMMIT');

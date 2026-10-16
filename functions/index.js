@@ -18,8 +18,20 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// JWT secret (for dev you can override via functions config or env)
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-this-in-firebase-config';
+// JWT secret must be provided via Firebase secrets/env. No fallback: if it is
+// missing, auth endpoints fail closed instead of signing with a known secret.
+const JWT_SECRET = process.env.JWT_SECRET || null;
+if (!JWT_SECRET) {
+  console.error('JWT_SECRET is not set - auth endpoints will return 503');
+}
+
+const requireJwtSecret = (res) => {
+  if (!JWT_SECRET) {
+    res.status(503).json({ error: 'Authentication is not configured' });
+    return false;
+  }
+  return true;
+};
 
 // Helper: create error response from validation
 const handleValidation = (req, res) => {
@@ -33,6 +45,7 @@ const handleValidation = (req, res) => {
 
 // Auth middleware (JWT)
 const authenticateToken = async (req, res, next) => {
+  if (!requireJwtSecret(res)) return;
   try {
     const authHeader = req.headers['authorization'] || req.headers['Authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -174,6 +187,7 @@ app.post(
       });
 
       // Generate JWT
+      if (!requireJwtSecret(res)) return;
       const token = jwt.sign(
         { userId, email },
         JWT_SECRET,
@@ -238,6 +252,7 @@ app.post(
       }
 
       // Generate token
+      if (!requireJwtSecret(res)) return;
       const token = jwt.sign(
         { userId: userDoc.id, email: user.email },
         JWT_SECRET,

@@ -17,6 +17,13 @@ const envSchema = Joi.object({
   R2_BUCKET_NAME: Joi.string().optional().allow(''),
   R2_PUBLIC_URL: Joi.string().optional().allow(''),
   FRONTEND_URL: Joi.string().optional().default('http://localhost:3000'),
+  SMTP_HOST: Joi.string().optional().allow(''),
+  SMTP_PORT: Joi.alternatives().try(Joi.number(), Joi.string().allow('')).optional(),
+  SMTP_USER: Joi.string().optional().allow(''),
+  SMTP_PASS: Joi.string().optional().allow(''),
+  MAIL_FROM: Joi.string().optional().allow(''),
+  GMAIL_USER: Joi.string().optional().allow(''),
+  GMAIL_APP_PASSWORD: Joi.string().optional().allow(''),
   GEMINI_API_KEY: Joi.string().optional(),
   GEMINI_MODEL: Joi.string().default('gemini-1.5-flash'),
 }).unknown();

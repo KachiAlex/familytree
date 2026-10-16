@@ -71,18 +71,9 @@ const ClaimPerson = () => {
 
       setInvitation(invitationData);
 
-      // Fetch person details
-      let personRes;
-      try {
-        personRes = await api.get(`/persons/${invitationData.person_id}`);
-      } catch (personError) {
-        console.error('Error fetching person:', personError);
-        setError('Failed to load person information. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      const personData = personRes.data.person;
+      // Person details are included in the invitation response (the
+      // authenticated /persons/:id endpoint requires family membership).
+      const personData = inviteRes.data.person;
       if (!personData) {
         setError('Person profile not found. The profile may have been deleted.');
         setLoading(false);

@@ -111,7 +111,7 @@ router.get('/family/:familyId/timeline', requireFamilyAccess, async (req, res) =
 });
 
 // Get person's ancestors (for radial view)
-router.get('/person/:personId/ancestors', async (req, res) => {
+router.get('/person/:personId/ancestors', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
     const maxDepth = parseInt(req.query.depth) || 5;
@@ -145,7 +145,7 @@ router.get('/person/:personId/ancestors', async (req, res) => {
 });
 
 // Get person's descendants
-router.get('/person/:personId/descendants', async (req, res) => {
+router.get('/person/:personId/descendants', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
     const maxDepth = parseInt(req.query.depth) || 5;

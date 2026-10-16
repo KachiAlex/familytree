@@ -4,7 +4,7 @@ const api = axios.create({
   baseURL:
     process.env.NODE_ENV === 'production'
       ? '/api'
-      : (process.env.REACT_APP_API_URL || 'http://67.211.210.8:5000/api'),
+      : (process.env.REACT_APP_API_URL || 'http://localhost:5000/api'),
   headers: {
     'Content-Type': 'application/json',
   },

@@ -6,7 +6,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Create a pending change
-router.post('/pending', async (req, res) => {
+router.post('/pending', requireFamilyAccess, async (req, res) => {
   try {
     const { person_id, family_id, changes, changed_fields, reason } = req.body;
 
@@ -48,7 +48,7 @@ router.post('/pending', async (req, res) => {
 });
 
 // Get pending changes for a person
-router.get('/pending/person/:personId', async (req, res) => {
+router.get('/pending/person/:personId', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
 
@@ -91,7 +91,7 @@ router.get('/pending/family/:familyId', requireFamilyAccess, async (req, res) =>
 });
 
 // Approve a pending change
-router.post('/pending/:pendingChangeId/approve', async (req, res) => {
+router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req, res) => {
   const client = await pool.connect();
   try {
     const { pendingChangeId } = req.params;
@@ -195,7 +195,7 @@ router.post('/pending/:pendingChangeId/approve', async (req, res) => {
 });
 
 // Reject a pending change
-router.post('/pending/:pendingChangeId/reject', async (req, res) => {
+router.post('/pending/:pendingChangeId/reject', requireFamilyAccess, async (req, res) => {
   try {
     const { pendingChangeId } = req.params;
     const { rejection_reason } = req.body;
@@ -220,7 +220,7 @@ router.post('/pending/:pendingChangeId/reject', async (req, res) => {
 });
 
 // Get edit history for a person
-router.get('/person/:personId', async (req, res) => {
+router.get('/person/:personId', requireFamilyAccess, async (req, res) => {
   try {
     const { personId } = req.params;
     const limit = parseInt(req.query.limit) || 50;

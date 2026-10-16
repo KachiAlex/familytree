@@ -41,6 +41,9 @@ coverage/
 # Misc
 *.pem
 *.key
+*-deploy-key
+*-deploy-key.pub
+*.tar.gz
 
 .vercel
 .env*
