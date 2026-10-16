@@ -29,6 +29,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
 import PendingChangesDialog from '../components/PendingChangesDialog';
 import EditHistoryDialog from '../components/EditHistoryDialog';
+import ElderInterviewDialog from '../components/ElderInterviewDialog';
 import { getPendingChanges } from '../utils/editHistory';
 
 const PersonDetail = () => {
@@ -103,6 +104,7 @@ const PersonDetail = () => {
   const [pendingCount, setPendingCount] = useState(0);
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
   const [kinshipOpen, setKinshipOpen] = useState(false);
+  const [interviewOpen, setInterviewOpen] = useState(false);
   const [kinshipTarget, setKinshipTarget] = useState('');
   const [kinshipResult, setKinshipResult] = useState(null);
   const [kinshipLoading, setKinshipLoading] = useState(false);
@@ -694,6 +696,9 @@ const PersonDetail = () => {
           </Button>
           <Button size="small" onClick={() => { setKinshipOpen(true); setKinshipResult(null); setKinshipTarget(''); }} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
             How Related?
+          </Button>
+          <Button size="small" onClick={() => setInterviewOpen(true)} sx={{ borderColor: '#EAEEF6', color: '#22345E', textTransform: 'none' }} variant="outlined">
+            Interview
           </Button>
           <Button
             size="small"
@@ -2412,6 +2417,15 @@ const PersonDetail = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Elder Interview Dialog */}
+      <ElderInterviewDialog
+        person={person}
+        open={interviewOpen}
+        onClose={() => setInterviewOpen(false)}
+        narratorName={person?.full_name}
+        onSaved={() => fetchStories(person.person_id, person.family_id)}
+      />
 
       {/* Pending Changes Dialog */}
       <PendingChangesDialog

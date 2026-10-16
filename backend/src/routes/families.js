@@ -186,6 +186,68 @@ router.get('/:familyId', requireFamilyAccess, getFamilyUsageInfo, async (req, re
   }
 });
 
+// Activity feed — unified recent-events stream for the family
+router.get('/:familyId/activity', requireFamilyAccess, async (req, res) => {
+  try {
+    const { familyId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+    const result = await pool.query(
+      `SELECT * FROM (
+         SELECT 'person_added' AS type, p.created_at AS at,
+                u.full_name AS actor, p.full_name AS subject, p.person_id,
+                NULL::text AS detail
+         FROM persons p
+         LEFT JOIN users u ON u.user_id = p.created_by_user_id
+         WHERE p.family_id = $1
+         UNION ALL
+         SELECT 'story_added', s.created_at, u.full_name, s.title, s.person_id,
+                p.full_name
+         FROM stories s
+         LEFT JOIN users u ON u.user_id = s.created_by_user_id
+         LEFT JOIN persons p ON p.person_id = s.person_id
+         WHERE s.family_id = $1
+         UNION ALL
+         SELECT 'document_added', d.created_at, u.full_name, d.title, d.person_id,
+                p.full_name
+         FROM documents d
+         LEFT JOIN users u ON u.user_id = d.uploaded_by_user_id
+         LEFT JOIN persons p ON p.person_id = d.person_id
+         WHERE d.family_id = $1
+         UNION ALL
+         SELECT 'profile_updated', eh.created_at, u.full_name, p.full_name, eh.person_id,
+                (SELECT string_agg(key, ', ') FROM jsonb_object_keys(eh.changes) AS key)
+         FROM edit_history eh
+         LEFT JOIN users u ON u.user_id = eh.changed_by_user_id
+         LEFT JOIN persons p ON p.person_id = eh.person_id
+         WHERE eh.family_id = $1
+         UNION ALL
+         SELECT 'change_proposed', pc.created_at, u.full_name, p.full_name, pc.person_id,
+                pc.change_type
+         FROM pending_changes pc
+         LEFT JOIN users u ON u.user_id = pc.changed_by_user_id
+         LEFT JOIN persons p ON p.person_id = pc.person_id
+         WHERE pc.family_id = $1
+         UNION ALL
+         SELECT 'relationship_added', r.created_at, NULL, p1.full_name, r.person1_id,
+                r.relationship_type || '|' || p2.full_name
+         FROM relationships r
+         JOIN persons p1 ON p1.person_id = r.person1_id
+         JOIN persons p2 ON p2.person_id = r.person2_id
+         WHERE p1.family_id = $1
+       ) feed
+       ORDER BY at DESC
+       LIMIT $2`,
+      [familyId, limit]
+    );
+
+    res.json({ activity: result.rows });
+  } catch (error) {
+    console.error('Error fetching activity feed:', error);
+    res.status(500).json({ error: 'Failed to fetch activity' });
+  }
+});
+
 // Invite member
 router.post('/:familyId/invite', requireFamilyAccess, checkResourceLimit('member'), async (req, res) => {
   try {

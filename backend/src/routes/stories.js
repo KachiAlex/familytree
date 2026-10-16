@@ -4,6 +4,7 @@ const { authenticateToken, requireFamilyAccess } = require('../middleware/auth')
 const { checkResourceLimit } = require('../middleware/tierLimits');
 const multer = require('multer');
 const { uploadToR2, deleteFromR2 } = require('../utils/s3');
+const { transcribeAudio } = require('../services/transcription');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -79,12 +80,25 @@ router.post('/', upload.single('audio'), requireFamilyAccess, checkResourceLimit
     } = req.body;
 
     let audioUrl = null;
+    let transcribed = false;
+    let storyText = story_text || null;
 
     // Upload audio if provided
     if (req.file) {
       const fileKey = `stories/${family_id}/${Date.now()}-${req.file.originalname}`;
       const s3Result = await uploadToR2(req.file, fileKey);
       audioUrl = s3Result.Location;
+
+      // Auto-transcribe when no text was provided — transcripts make the
+      // story searchable and feed Wisdom Chat.
+      if (!storyText) {
+        try {
+          storyText = await transcribeAudio(req.file.buffer, req.file.mimetype);
+          transcribed = !!storyText;
+        } catch (err) {
+          console.error('Audio transcription failed:', err.message);
+        }
+      }
     }
 
     const result = await pool.query(
@@ -98,7 +112,7 @@ router.post('/', upload.single('audio'), requireFamilyAccess, checkResourceLimit
         person_id || null,
         family_id,
         title,
-        story_text || null,
+        storyText,
         audioUrl,
         narrator_name || null,
         narrator_relationship || null,
@@ -111,7 +125,8 @@ router.post('/', upload.single('audio'), requireFamilyAccess, checkResourceLimit
 
     res.status(201).json({
       message: 'Story created successfully',
-      story: result.rows[0]
+      story: result.rows[0],
+      transcribed
     });
   } catch (error) {
     console.error('Error creating story:', error);

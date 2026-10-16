@@ -34,6 +34,7 @@ import {
   FileDownload as FileDownloadIcon,
   PictureAsPdf as PdfIcon,
   Upload as UploadIcon,
+  History as HistoryIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
@@ -50,6 +51,7 @@ import TimelineView from '../components/TreeViews/TimelineView';
 import MigrationMapView from '../components/TreeViews/MigrationMapView';
 import { FamilyTreeSkeleton } from '../components/SkeletonLoaders';
 import GedcomImportPreview from '../components/GedcomImportPreview';
+import ActivityFeedDialog from '../components/ActivityFeedDialog';
 
 const FamilyTree = () => {
   const { familyId } = useParams();
@@ -58,6 +60,7 @@ const FamilyTree = () => {
   const [treeData, setTreeData] = useState(null);
   const [viewType, setViewType] = useState('vertical');
   const [loading, setLoading] = useState(true);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [clanFilter, setClanFilter] = useState('');
@@ -731,6 +734,12 @@ const FamilyTree = () => {
             }}>
               <FileDownloadIcon sx={{ fontSize: 16 }} />
             </IconButton>
+            <IconButton onClick={() => setActivityOpen(true)} title="Family activity" sx={{
+              width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
+              bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
+            }}>
+              <HistoryIcon sx={{ fontSize: 16 }} />
+            </IconButton>
             <IconButton onClick={() => navigate(`/family/${familyId}/settings`)} sx={{
               width: 36, height: 36, borderRadius: '10px', border: '1px solid #E7DCC8',
               bgcolor: '#fff', color: '#5C5346', '&:hover': { borderColor: '#3A4F82', color: '#22345E' },
@@ -1013,6 +1022,13 @@ const FamilyTree = () => {
         parsedData={parsedGedcomData}
         existingPersons={existingPersons}
         importing={importingGedcom}
+      />
+
+      {/* Activity Feed Dialog */}
+      <ActivityFeedDialog
+        familyId={familyId}
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
       />
 
       {/* Profile Completion Dialog */}
