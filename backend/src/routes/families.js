@@ -73,16 +73,6 @@ router.post('/', async (req, res) => {
   try {
     const { family_name, clan_name, village_origin } = req.body;
 
-    // Check if family name is already taken
-    const existingFamily = await pool.query(
-      'SELECT family_id FROM families WHERE LOWER(family_name) = LOWER($1)',
-      [family_name]
-    );
-
-    if (existingFamily.rows.length > 0) {
-      return res.status(400).json({ error: 'Family name already taken. Please choose a different name.' });
-    }
-
     // Get free tier limits
     const freeTierLimits = getTierLimits('free');
 
