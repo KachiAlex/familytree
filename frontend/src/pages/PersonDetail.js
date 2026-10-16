@@ -17,6 +17,9 @@ import {
   Snackbar,
   Alert,
   CircularProgress,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import { Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
 import api from '../services/api';
@@ -42,8 +45,9 @@ const PersonDetail = () => {
   const [loading, setLoading] = useState(true);
   const [allFamilyPersons, setAllFamilyPersons] = useState([]);
   const [addFamilyOpen, setAddFamilyOpen] = useState(false);
-  const [familyRelType, setFamilyRelType] = useState('parent'); // 'parent' | 'child' | 'spouse'
+  const [familyRelType, setFamilyRelType] = useState('parent'); // 'parent' | 'child' | 'spouse' | 'sibling'
   const [selectedFamilyPersonId, setSelectedFamilyPersonId] = useState('');
+  const [siblingParentIds, setSiblingParentIds] = useState([]);
   const [maritalStatus, setMaritalStatus] = useState('married'); // 'married' | 'divorced' | 'widowed' | 'separated'
   const [selfRelation, setSelfRelation] = useState(null);
   const [relationSaving, setRelationSaving] = useState(false);
@@ -475,6 +479,7 @@ const PersonDetail = () => {
       });
       setAddNewPersonOpen(false);
       setAddFamilyOpen(false);
+      setSiblingParentIds([]);
       setSnackbar({ open: true, message: 'New family member added and linked successfully', severity: 'success' });
     } catch (error) {
       console.error('Failed to create new person:', error);
@@ -492,6 +497,16 @@ const PersonDetail = () => {
           relationship_type: 'spouse',
           marital_status: maritalStatus,
         });
+      } else if (familyRelType === 'sibling') {
+        // Siblings are derived from shared parents: link the new person
+        // as a child of each selected shared parent.
+        for (const parentId of siblingParentIds) {
+          await api.post('/relationships', {
+            person1_id: parentId,
+            person2_id: targetPersonId,
+            relationship_type: 'parent',
+          });
+        }
       } else {
         // parent-child relationship
         const parentId = familyRelType === 'parent' ? targetPersonId : person.person_id;
@@ -1492,12 +1507,48 @@ const PersonDetail = () => {
               setFamilyRelType(e.target.value);
               setSelectedFamilyPersonId(''); // Reset selection when type changes
               setMaritalStatus('married'); // Reset marital status when type changes
+              setSiblingParentIds([]);
             }}
           >
             <MenuItem value="parent">Parent of this person</MenuItem>
             <MenuItem value="child">Child of this person</MenuItem>
+            <MenuItem value="sibling">Sibling of this person</MenuItem>
             <MenuItem value="spouse">Spouse of this person</MenuItem>
           </TextField>
+          {familyRelType === 'sibling' && (
+            parents.length > 0 ? (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  Shared parent(s) — select both for a full sibling, one for a half-sibling:
+                </Typography>
+                <FormGroup>
+                  {parents.filter(p => p && p.person_id).map((p) => (
+                    <FormControlLabel
+                      key={p.person_id}
+                      control={
+                        <Checkbox
+                          checked={siblingParentIds.includes(p.person_id)}
+                          onChange={(e) => {
+                            setSiblingParentIds((prev) =>
+                              e.target.checked
+                                ? [...prev, p.person_id]
+                                : prev.filter((id) => id !== p.person_id)
+                            );
+                          }}
+                        />
+                      }
+                      label={p.full_name}
+                    />
+                  ))}
+                </FormGroup>
+              </Box>
+            ) : (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                No parents are linked to {person.full_name} yet. Siblings are linked through
+                a shared parent — add a parent first, then add the sibling.
+              </Alert>
+            )
+          )}
           {familyRelType === 'spouse' && (
             <TextField
               select
@@ -1550,13 +1601,14 @@ const PersonDetail = () => {
                 setAddFamilyOpen(false);
                 setSelectedFamilyPersonId('');
                 setMaritalStatus('married'); // Reset marital status
+                setSiblingParentIds([]);
                 setSnackbar({ open: true, message: 'Family relationship added successfully', severity: 'success' });
               } catch (error) {
                 console.error('Failed to add family relationship:', error);
                 setSnackbar({ open: true, message: 'Failed to add family relationship. Please try again.', severity: 'error' });
               }
             }}
-            disabled={!selectedFamilyPersonId}
+            disabled={!selectedFamilyPersonId || (familyRelType === 'sibling' && siblingParentIds.length === 0)}
             variant="contained"
           >
             Add
@@ -1577,7 +1629,7 @@ const PersonDetail = () => {
         <DialogTitle>Add New Family Member</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            Create a new family member and link them as {familyRelType === 'parent' ? 'a parent' : familyRelType === 'child' ? 'a child' : 'a spouse'} of {person.full_name}.
+            Create a new family member and link them as {familyRelType === 'parent' ? 'a parent' : familyRelType === 'child' ? 'a child' : familyRelType === 'sibling' ? 'a sibling' : 'a spouse'} of {person.full_name}.
           </Typography>
           <Box component="form" sx={{ mt: 2 }}>
             <TextField
