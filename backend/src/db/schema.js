@@ -270,6 +270,21 @@ async function createTables(pool) {
 
     await addColumnIfNotExists('edit_history', 'admin_override', 'BOOLEAN DEFAULT false');
 
+    // Face tags — person identities on photo documents (normalized 0-1 box)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_faces (
+        face_id SERIAL PRIMARY KEY,
+        document_id INTEGER REFERENCES documents(document_id) ON DELETE CASCADE,
+        person_id INTEGER REFERENCES persons(person_id) ON DELETE SET NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        width REAL NOT NULL,
+        height REAL NOT NULL,
+        created_by_user_id INTEGER REFERENCES users(user_id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Anniversary email log — dedupes remembrance sends per person/recipient/day
     await client.query(`
       CREATE TABLE IF NOT EXISTS anniversary_log (

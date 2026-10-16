@@ -20,6 +20,7 @@ import {
   FormGroup,
   FormControlLabel,
   Checkbox,
+  Chip,
 } from '@mui/material';
 import { Delete as DeleteIcon, Warning as WarningIcon, Email as EmailIcon, CheckCircle as CheckCircleIcon, PhotoCamera as PhotoCameraIcon, Upload as UploadIcon, Close as CloseIcon, Book as BookIcon, VolumeUp as VolumeUpIcon, Edit as EditIcon, PictureAsPdf as PdfIcon, History as HistoryIcon, PendingActions as PendingActionsIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
 import api from '../services/api';
@@ -30,6 +31,7 @@ import { PersonDetailSkeleton } from '../components/SkeletonLoaders';
 import PendingChangesDialog from '../components/PendingChangesDialog';
 import EditHistoryDialog from '../components/EditHistoryDialog';
 import ElderInterviewDialog from '../components/ElderInterviewDialog';
+import FaceTagDialog from '../components/FaceTagDialog';
 import { getPendingChanges } from '../utils/editHistory';
 
 const PersonDetail = () => {
@@ -105,6 +107,7 @@ const PersonDetail = () => {
   const [editHistoryOpen, setEditHistoryOpen] = useState(false);
   const [kinshipOpen, setKinshipOpen] = useState(false);
   const [interviewOpen, setInterviewOpen] = useState(false);
+  const [faceTagDoc, setFaceTagDoc] = useState(null);
   const [kinshipTarget, setKinshipTarget] = useState('');
   const [kinshipResult, setKinshipResult] = useState(null);
   const [kinshipLoading, setKinshipLoading] = useState(false);
@@ -1161,9 +1164,20 @@ const PersonDetail = () => {
                               {doc.document_type}
                             </Typography>
                           </Box>
+                          {canEdit && doc.document_type === 'photo' && (
+                            <IconButton size="small" sx={{ position: 'absolute', top: 6, left: 6, bgcolor: 'rgba(255,255,255,0.9)', color: '#2e7d32' }}
+                              onClick={(e) => { e.stopPropagation(); setFaceTagDoc(doc); }}
+                            >
+                              <PhotoCameraIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          )}
+                          {doc.tagged_in_photo && (
+                            <Chip label="Tagged" size="small" sx={{ position: 'absolute', bottom: 42, left: 6, height: 18, fontSize: '10px', bgcolor: '#2e7d32', color: '#fff' }} />
+                          )}
                           {canEdit && (
                             <IconButton size="small" color="error" sx={{ position: 'absolute', top: 6, right: 6, bgcolor: 'rgba(255,255,255,0.9)' }}
-                              onClick={async () => {
+                              onClick={async (e) => {
+                                e.stopPropagation();
                                 if (window.confirm('Delete this document?')) {
                                   try {
                                     await api.delete(`/documents/${doc.document_id}`);
@@ -2417,6 +2431,17 @@ const PersonDetail = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Face Tagging Dialog */}
+      {faceTagDoc && (
+        <FaceTagDialog
+          doc={faceTagDoc}
+          persons={[person, ...allFamilyPersons].filter(Boolean)}
+          open={!!faceTagDoc}
+          onClose={() => setFaceTagDoc(null)}
+          onChanged={() => fetchDocuments(person.person_id, person.family_id)}
+        />
+      )}
 
       {/* Elder Interview Dialog */}
       <ElderInterviewDialog
