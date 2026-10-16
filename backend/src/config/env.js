@@ -24,6 +24,9 @@ const envSchema = Joi.object({
   MAIL_FROM: Joi.string().optional().allow(''),
   GMAIL_USER: Joi.string().optional().allow(''),
   GMAIL_APP_PASSWORD: Joi.string().optional().allow(''),
+  BREVO_API_KEY: Joi.string().optional().allow(''),
+  BREVO_SENDER_EMAIL: Joi.string().optional().allow(''),
+  BREVO_SENDER_NAME: Joi.string().optional().allow(''),
   GEMINI_API_KEY: Joi.string().optional(),
   GEMINI_MODEL: Joi.string().default('gemini-1.5-flash'),
 }).unknown();

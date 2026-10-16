@@ -1,16 +1,43 @@
 const nodemailer = require('nodemailer');
 
-// Email sending via generic SMTP (Brevo recommended), with Gmail as fallback.
-// Configure with either:
+// Email sending — first configured provider wins:
+//   BREVO_API_KEY                                 - Brevo HTTP API (sender: BREVO_SENDER_EMAIL/BREVO_SENDER_NAME or MAIL_FROM)
 //   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS - generic SMTP (Brevo: smtp-relay.brevo.com:587)
 //   GMAIL_USER / GMAIL_APP_PASSWORD               - Gmail SMTP (requires 2FA + App Password)
-//   MAIL_FROM                                     - optional sender address (defaults to SMTP_USER/GMAIL_USER)
+//   MAIL_FROM                                     - optional sender address (defaults to provider user)
 //   FRONTEND_URL                                  - base URL used for links in emails
 const isMailConfigured = () =>
   Boolean(
+    process.env.BREVO_API_KEY ||
     (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) ||
     (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
   );
+
+const sendViaBrevoApi = async ({ to, subject, html, text }) => {
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.MAIL_FROM || 'noreply@kreatixtech.com';
+  const senderName = process.env.BREVO_SENDER_NAME || 'African Family Tree';
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': process.env.BREVO_API_KEY,
+      'Content-Type': 'application/json',
+      'accept': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: senderName, email: senderEmail },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Brevo API ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  return { sent: true, messageId: data.messageId };
+};
 
 let transporter = null;
 const getTransporter = () => {
@@ -40,9 +67,12 @@ const getTransporter = () => {
 const senderAddress = () => process.env.MAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER;
 
 const sendMail = async ({ to, subject, html, text }) => {
+  if (process.env.BREVO_API_KEY) {
+    return sendViaBrevoApi({ to, subject, html, text });
+  }
   const t = getTransporter();
   if (!t) {
-    console.warn('Mail not configured (SMTP_* or GMAIL_* missing); skipping email to', to);
+    console.warn('Mail not configured (BREVO_API_KEY, SMTP_* or GMAIL_* missing); skipping email to', to);
     return { sent: false };
   }
   const from = `"African Family Tree" <${senderAddress()}>`;
