@@ -6,7 +6,7 @@
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/((?!gemini).*)",
       "destination": "https://familytree.67-211-210-8.sslip.io/api/$1"
     },
     {
