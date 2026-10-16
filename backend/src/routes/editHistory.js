@@ -1,7 +1,12 @@
 const express = require('express');
 const { pool } = require('../db/connection');
 const { authenticateToken, requireFamilyAccess } = require('../middleware/auth');
-const { notifyProfileOwnerOfPendingChange } = require('../utils/pendingNotify');
+const { notifyProfileOwnerOfPendingChange, notifySubmitterOfResolution, notifyOwnerOfAdminOverride } = require('../utils/pendingNotify');
+const { deleteFromR2 } = require('../utils/s3');
+
+// Pending changes on claimed profiles are owner-only — unless they have
+// been waiting past this window, in which case the family admin may step in.
+const ADMIN_ESCALATION_DAYS = 14;
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -16,7 +21,7 @@ router.post('/pending', requireFamilyAccess, async (req, res) => {
     }
 
     const changeType = change_type || 'fields';
-    if (!['fields', 'relationship', 'delete'].includes(changeType)) {
+    if (!['fields', 'relationship', 'delete', 'photo', 'document'].includes(changeType)) {
       return res.status(400).json({ error: 'Invalid change_type' });
     }
 
@@ -134,15 +139,29 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
 
     const pendingChange = pcResult.rows[0];
 
-    // Claimed profiles: only the owning account may confirm changes
+    // Claimed profiles: only the owning account may confirm changes. A
+    // change stale past the escalation window can be confirmed by the
+    // family admin so an inactive owner can't freeze the profile.
     const ownerResult = await client.query(
-      'SELECT owner_user_id FROM persons WHERE person_id = $1',
+      'SELECT owner_user_id, full_name FROM persons WHERE person_id = $1',
       [pendingChange.person_id]
     );
     const ownerUserId = ownerResult.rows[0]?.owner_user_id;
+    const personName = ownerResult.rows[0]?.full_name;
+    let adminOverride = false;
     if (ownerUserId && ownerUserId !== req.user.user_id) {
-      await client.query('ROLLBACK');
-      return res.status(403).json({ error: 'Only the account owner can confirm changes to this claimed profile' });
+      const stale = new Date(pendingChange.created_at).getTime() < Date.now() - ADMIN_ESCALATION_DAYS * 24 * 60 * 60 * 1000;
+      if (stale) {
+        const fam = await client.query(
+          'SELECT created_by_user_id FROM families WHERE family_id = $1',
+          [pendingChange.family_id]
+        );
+        if (fam.rows[0]?.created_by_user_id === req.user.user_id) adminOverride = true;
+      }
+      if (!adminOverride) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Only the account owner can confirm changes to this claimed profile' });
+      }
     }
 
     const changes = pendingChange.changes;
@@ -176,6 +195,31 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
     } else if (changeType === 'delete') {
       // Deletion is applied at the end — after the audit rows are written
       // (see below), so they still reference the person while it exists.
+    } else if (changeType === 'photo') {
+      const photo = pendingChange.payload || {};
+      if (!photo.photo_url) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Malformed photo payload in pending change' });
+      }
+      await client.query(
+        'UPDATE persons SET profile_photo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE person_id = $2',
+        [photo.photo_url, pendingChange.person_id]
+      );
+    } else if (changeType === 'document') {
+      const doc = pendingChange.payload || {};
+      if (!doc.file_url) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Malformed document payload in pending change' });
+      }
+      await client.query(
+        `INSERT INTO documents (person_id, family_id, document_type, file_url, file_name,
+          file_size, mime_type, title, description, uploaded_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [pendingChange.person_id, pendingChange.family_id, doc.document_type || 'other',
+         doc.file_url, doc.file_name || null, doc.file_size || null, doc.mime_type || null,
+         doc.title || doc.file_name || 'Document', doc.description || null,
+         pendingChange.changed_by_user_id]
+      );
     } else {
       // Validate field names before applying to prevent SQL injection
       const allowedFields = [
@@ -227,8 +271,8 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
 
     // Record in edit history
     await client.query(
-      `INSERT INTO edit_history (person_id, family_id, changed_by_user_id, approved_by_user_id, changes, reason, approval_notes, status, approved_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', CURRENT_TIMESTAMP)`,
+      `INSERT INTO edit_history (person_id, family_id, changed_by_user_id, approved_by_user_id, changes, reason, approval_notes, admin_override, status, approved_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'approved', CURRENT_TIMESTAMP)`,
       [
         pendingChange.person_id,
         pendingChange.family_id,
@@ -236,7 +280,8 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
         req.user.user_id,
         JSON.stringify(changes),
         pendingChange.reason,
-        approval_notes || null
+        approval_notes || null,
+        adminOverride
       ]
     );
 
@@ -265,6 +310,29 @@ router.post('/pending/:pendingChangeId/approve', requireFamilyAccess, async (req
 
     await client.query('COMMIT');
     res.json({ message: 'Pending change approved successfully' });
+
+    // Fire-and-forget notifications after the transaction completes.
+    const resolverName = req.user.full_name || req.user.email;
+    if (pendingChange.changed_by_user_id !== req.user.user_id) {
+      notifySubmitterOfResolution({
+        submitterUserId: pendingChange.changed_by_user_id,
+        personId: pendingChange.person_id,
+        personName,
+        outcome: 'approved',
+        resolverName,
+        summary: pendingChange.reason,
+        note: approval_notes,
+      });
+    }
+    if (adminOverride && ownerUserId) {
+      notifyOwnerOfAdminOverride({
+        ownerUserId,
+        personId: pendingChange.person_id,
+        personName,
+        adminName: resolverName,
+        summary: pendingChange.reason,
+      });
+    }
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error approving pending change:', error);
@@ -281,27 +349,36 @@ router.post('/pending/:pendingChangeId/reject', requireFamilyAccess, async (req,
     const { rejection_reason } = req.body;
 
     const pcResult = await pool.query(
-      `SELECT person_id, changed_by_user_id FROM pending_changes
+      `SELECT person_id, family_id, changed_by_user_id, change_type, payload, created_at
+       FROM pending_changes
        WHERE pending_change_id = $1 AND status = 'pending'`,
       [pendingChangeId]
     );
     if (pcResult.rows.length === 0) {
       return res.status(404).json({ error: 'Pending change not found or already resolved' });
     }
+    const pc = pcResult.rows[0];
 
     // Claimed profiles: only the owning account (or the submitter withdrawing
-    // their own proposal) may reject
+    // their own proposal) may reject — plus the same stale-change escalation
+    // for the family admin as on approve.
     const ownerResult = await pool.query(
-      'SELECT owner_user_id FROM persons WHERE person_id = $1',
-      [pcResult.rows[0].person_id]
+      'SELECT owner_user_id, full_name FROM persons WHERE person_id = $1',
+      [pc.person_id]
     );
     const ownerUserId = ownerResult.rows[0]?.owner_user_id;
     if (
       ownerUserId &&
       ownerUserId !== req.user.user_id &&
-      req.user.user_id !== pcResult.rows[0].changed_by_user_id
+      req.user.user_id !== pc.changed_by_user_id
     ) {
-      return res.status(403).json({ error: 'Only the account owner can reject changes to this claimed profile' });
+      const stale = new Date(pc.created_at).getTime() < Date.now() - ADMIN_ESCALATION_DAYS * 24 * 60 * 60 * 1000;
+      const fam = stale
+        ? await pool.query('SELECT created_by_user_id FROM families WHERE family_id = $1', [pc.family_id])
+        : { rows: [] };
+      if (fam.rows[0]?.created_by_user_id !== req.user.user_id) {
+        return res.status(403).json({ error: 'Only the account owner can reject changes to this claimed profile' });
+      }
     }
 
     const result = await pool.query(
@@ -317,6 +394,29 @@ router.post('/pending/:pendingChangeId/reject', requireFamilyAccess, async (req,
     }
 
     res.json({ message: 'Pending change rejected successfully' });
+
+    // Best-effort cleanup: rejected photo/document proposals uploaded a file
+    // to R2 that will never be applied — remove it.
+    const fileKey = pc.payload && pc.payload.file_key;
+    if ((pc.change_type === 'photo' || pc.change_type === 'document') && fileKey) {
+      try {
+        await deleteFromR2(fileKey);
+      } catch (e) {
+        console.error('Failed to clean up rejected upload:', e.message);
+      }
+    }
+
+    if (pc.changed_by_user_id !== req.user.user_id) {
+      notifySubmitterOfResolution({
+        submitterUserId: pc.changed_by_user_id,
+        personId: pc.person_id,
+        personName: ownerResult.rows[0]?.full_name,
+        outcome: 'rejected',
+        resolverName: req.user.full_name || req.user.email,
+        summary: result.rows[0].reason,
+        note: rejection_reason,
+      });
+    }
   } catch (error) {
     console.error('Error rejecting pending change:', error);
     res.status(500).json({ error: 'Failed to reject pending change' });

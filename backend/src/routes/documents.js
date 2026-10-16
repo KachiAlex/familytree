@@ -5,6 +5,7 @@ const { checkResourceLimit, getFamilyUsageInfo } = require('../middleware/tierLi
 const { uploadLimiter } = require('../middleware/rateLimiter');
 const multer = require('multer');
 const { uploadToR2, deleteFromR2 } = require('../utils/s3');
+const { notifyProfileOwnerOfPendingChange } = require('../utils/pendingNotify');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -60,6 +61,50 @@ router.post('/upload', uploadLimiter, upload.single('file'), requireFamilyAccess
     // Upload to R2
     const fileKey = `documents/${family_id}/${Date.now()}-${req.file.originalname}`;
     const s3Result = await uploadToR2(req.file, fileKey);
+
+    // Documents attached to a claimed profile are published only after the
+    // profile's owning account confirms them.
+    if (person_id) {
+      const ownerResult = await pool.query(
+        'SELECT owner_user_id, full_name FROM persons WHERE person_id = $1',
+        [person_id]
+      );
+      const owner = ownerResult.rows[0];
+      if (owner && owner.owner_user_id && owner.owner_user_id !== req.user.user_id) {
+        const pendingResult = await pool.query(
+          `INSERT INTO pending_changes (person_id, family_id, changed_by_user_id, changes, changed_fields, reason, change_type, payload)
+           VALUES ($1, $2, $3, $4, $5, $6, 'document', $7)
+           RETURNING *`,
+          [person_id, family_id, req.user.user_id,
+           JSON.stringify({ document: { old: null, new: title || req.file.originalname } }),
+           ['document'], description || null,
+           JSON.stringify({
+             document_type: document_type || 'other',
+             file_url: s3Result.Location,
+             file_key: fileKey,
+             file_name: req.file.originalname,
+             file_size: req.file.size,
+             mime_type: req.file.mimetype,
+             title: title || req.file.originalname,
+             description: description || null
+           })]
+        );
+
+        await notifyProfileOwnerOfPendingChange({
+          ownerUserId: owner.owner_user_id,
+          personId: person_id,
+          personName: owner.full_name,
+          changerName: req.user.full_name || req.user.email,
+          summary: `Proposed a document: ${title || req.file.originalname}`,
+        });
+
+        return res.status(202).json({
+          pending: true,
+          message: `This profile is managed by its account owner. The document was submitted for their confirmation.`,
+          pendingChange: pendingResult.rows[0]
+        });
+      }
+    }
 
     // Save to database
     const result = await pool.query(

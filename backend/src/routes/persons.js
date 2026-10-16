@@ -374,7 +374,8 @@ router.post('/:personId/profile-photo', upload.single('photo'), async (req, res)
 
     // Get person's info and family admin info
     const personResult = await pool.query(
-      `SELECT p.family_id, p.owner_user_id, p.created_by_user_id, f.created_by_user_id as family_creator_id
+      `SELECT p.family_id, p.owner_user_id, p.created_by_user_id, p.full_name,
+              p.profile_photo_url, f.created_by_user_id as family_creator_id
        FROM persons p
        JOIN families f ON p.family_id = f.family_id
        WHERE p.person_id = $1`, 
@@ -404,6 +405,34 @@ router.post('/:personId/profile-photo', upload.single('photo'), async (req, res)
     // Upload to R2
     const fileKey = `avatars/${personId}-${Date.now()}-${req.file.originalname}`;
     const s3Result = await uploadToR2(req.file, fileKey);
+
+    // Claimed profiles: a photo proposed by anyone other than the owning
+    // account is published only after the owner confirms it.
+    if (person.owner_user_id && person.owner_user_id !== userId) {
+      const pendingResult = await pool.query(
+        `INSERT INTO pending_changes (person_id, family_id, changed_by_user_id, changes, changed_fields, reason, change_type, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, 'photo', $7)
+         RETURNING *`,
+        [personId, familyId, userId,
+         JSON.stringify({ profile_photo_url: { old: person.profile_photo_url || null, new: s3Result.Location } }),
+         ['profile_photo_url'], req.body?.reason || null,
+         JSON.stringify({ photo_url: s3Result.Location, file_key: fileKey })]
+      );
+
+      await notifyProfileOwnerOfPendingChange({
+        ownerUserId: person.owner_user_id,
+        personId,
+        personName: person.full_name,
+        changerName: req.user.full_name || req.user.email,
+        summary: 'Proposed a new profile photo',
+      });
+
+      return res.status(202).json({
+        pending: true,
+        message: 'This profile is managed by its account owner. The new photo was submitted for their confirmation.',
+        pendingChange: pendingResult.rows[0]
+      });
+    }
 
     // Update person's profile_photo_url
     const result = await pool.query(

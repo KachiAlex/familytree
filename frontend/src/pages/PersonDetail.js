@@ -761,9 +761,14 @@ const PersonDetail = () => {
                             const res = await api.post(`/persons/${person.person_id}/profile-photo`, formData, {
                               headers: { 'Content-Type': 'multipart/form-data' },
                             });
-                            const photoUrl = res.data.person.profile_photo_url;
-                            setPerson({ ...person, profile_photo_url: photoUrl });
-                            setSnackbar({ open: true, message: 'Profile picture updated successfully', severity: 'success' });
+                            if (res.data?.pending) {
+                              setPendingCount((c) => c + 1);
+                              setSnackbar({ open: true, message: res.data.message || 'Photo submitted for owner confirmation', severity: 'info' });
+                            } else {
+                              const photoUrl = res.data.person.profile_photo_url;
+                              setPerson({ ...person, profile_photo_url: photoUrl });
+                              setSnackbar({ open: true, message: 'Profile picture updated successfully', severity: 'success' });
+                            }
                           } catch (error) {
                             console.error('Failed to upload profile picture:', error);
                             setSnackbar({ open: true, message: 'Failed to upload profile picture', severity: 'error' });
@@ -2078,12 +2083,17 @@ const PersonDetail = () => {
                 }
                 formData.append('file', fileToUpload);
 
-                await api.post('/documents/upload', formData, {
+                const res = await api.post('/documents/upload', formData, {
                   headers: { 'Content-Type': 'multipart/form-data' },
                 });
 
-                // Refresh documents
-                await fetchDocuments(person.person_id, person.family_id);
+                if (res.data?.pending) {
+                  setPendingCount((c) => c + 1);
+                  setSnackbar({ open: true, message: res.data.message || 'Document submitted for owner confirmation', severity: 'info' });
+                } else {
+                  // Refresh documents
+                  await fetchDocuments(person.person_id, person.family_id);
+                }
 
                 // Close dialog and reset
                 setUploadDialogOpen(false);

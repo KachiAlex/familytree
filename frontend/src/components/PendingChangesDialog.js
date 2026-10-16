@@ -112,6 +112,14 @@ const PendingChangesDialog = ({ person, open, onClose, currentUser, onChangesRes
       biography: 'Biography',
       clan_name: 'Clan Name',
       village_origin: 'Village Origin',
+      alive_status: 'Status',
+      profile_photo_url: 'Profile Photo',
+      migration_history: 'Migration History',
+      verified_by_elder: 'Elder Verified',
+      relationship: 'Relationship',
+      document: 'Document',
+      delete: 'Delete Profile',
+      profile: 'Profile',
     };
     return fieldNames[field] || field;
   };

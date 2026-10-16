@@ -261,11 +261,14 @@ async function createTables(pool) {
         changes JSONB NOT NULL,
         reason TEXT,
         approval_notes TEXT,
+        admin_override BOOLEAN DEFAULT false,
         status VARCHAR(50) DEFAULT 'approved',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    await addColumnIfNotExists('edit_history', 'admin_override', 'BOOLEAN DEFAULT false');
 
     // Password reset tokens (hashed; single-use; 1 hour expiry)
     await client.query(`
