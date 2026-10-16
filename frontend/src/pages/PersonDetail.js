@@ -483,7 +483,8 @@ const PersonDetail = () => {
       setSnackbar({ open: true, message: 'New family member added and linked successfully', severity: 'success' });
     } catch (error) {
       console.error('Failed to create new person:', error);
-      setSnackbar({ open: true, message: 'Failed to create new family member. Please try again.', severity: 'error' });
+      const apiMsg = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg;
+      setSnackbar({ open: true, message: apiMsg || 'Failed to create new family member. Please try again.', severity: 'error' });
     }
   };
 
@@ -499,14 +500,24 @@ const PersonDetail = () => {
         });
       } else if (familyRelType === 'sibling') {
         // Siblings are derived from shared parents: link the new person
-        // as a child of each selected shared parent.
+        // as a child of each selected shared parent. A link that already
+        // exists is skipped so partial states still complete.
+        let lastError = null;
+        let linked = 0;
         for (const parentId of siblingParentIds) {
-          await api.post('/relationships', {
-            person1_id: parentId,
-            person2_id: targetPersonId,
-            relationship_type: 'parent',
-          });
+          try {
+            await api.post('/relationships', {
+              person1_id: parentId,
+              person2_id: targetPersonId,
+              relationship_type: 'parent',
+            });
+            linked++;
+          } catch (err) {
+            lastError = err;
+            if (err.response?.status !== 400) throw err;
+          }
         }
+        if (linked === 0 && lastError) throw lastError;
       } else {
         // parent-child relationship
         const parentId = familyRelType === 'parent' ? targetPersonId : person.person_id;
@@ -1581,7 +1592,7 @@ const PersonDetail = () => {
             }}
             helperText="Select an existing member or add a new one"
           >
-            {allFamilyPersons.filter(p => p && p.person_id).map((p) => (
+            {allFamilyPersons.filter(p => p && p.person_id && parseInt(p.person_id) !== parseInt(person?.person_id)).map((p) => (
               <MenuItem key={p.person_id} value={p.person_id}>
                 {p.full_name}
               </MenuItem>
@@ -1605,7 +1616,8 @@ const PersonDetail = () => {
                 setSnackbar({ open: true, message: 'Family relationship added successfully', severity: 'success' });
               } catch (error) {
                 console.error('Failed to add family relationship:', error);
-                setSnackbar({ open: true, message: 'Failed to add family relationship. Please try again.', severity: 'error' });
+                const apiMsg = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg;
+                setSnackbar({ open: true, message: apiMsg || 'Failed to add family relationship. Please try again.', severity: 'error' });
               }
             }}
             disabled={!selectedFamilyPersonId || (familyRelType === 'sibling' && siblingParentIds.length === 0)}
